@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root { --fg:#D1D4DC; --mut:#8A97AB; --line:#22314A; --up:#26A69A; --down:#EF5350; --tip:rgba(19,29,47,.85); }
+  :root.light { --fg:#131722; --mut:#5B6B82; --line:#D9E1EC; --tip:rgba(255,255,255,.85); }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; overflow:hidden; background:transparent; color:var(--fg);
+               font-family:Sora, "Segoe UI", system-ui, sans-serif; font-size:12px; }
+  #wrap { position:relative; width:100%; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  #chart { width:100%; height:100%; }
+  .legend { position:absolute; left:10px; z-index:3; pointer-events:none; line-height:1.55;
+            font-variant-numeric:tabular-nums; max-width:calc(100% - 100px); }
+  .legend span { white-space:nowrap; display:inline-block; }
+  .legend .t { font-size:13px; font-weight:600; margin-right:.6rem; }
+  .legend .k { color:var(--mut); margin-right:.2rem; }
+  .legend .v { margin-right:.65rem; }
+  .legend .row span.sw { display:inline-block; width:8px; height:2px; vertical-align:middle; margin-right:.3rem; }
+  .up { color:var(--up); } .down { color:var(--down); }
+  #err { position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:var(--mut); }
+</style>
+</head>
+<body>
+<div id="wrap"><div id="chart"></div><div id="err">Could not load TradingView charts (no internet?).</div></div>
+<script>
+const send = (type, data) => window.parent.postMessage(Object.assign({isStreamlitMessage: true, type}, data), "*");
+const wrap = document.getElementById("wrap"), box = document.getElementById("chart");
+const LW = window.LightweightCharts;
+let chart = null, lastRev = null, lastSig = null, legends = [], main = null, args = null, light = false;
+
+const fmt = (v, p) => v == null || isNaN(v) ? "—" : Number(v).toLocaleString("en-IN", {minimumFractionDigits: p, maximumFractionDigits: p});
+const fmtVol = (v) => v == null ? "—" : v >= 1e7 ? (v / 1e7).toFixed(2) + " Cr" : v >= 1e5 ? (v / 1e5).toFixed(2) + " L" :
+                      v >= 1e3 ? (v / 1e3).toFixed(1) + " K" : String(Math.round(v));
+const pts = (arr) => arr.map(([t, v]) => v == null ? {time: t} : {time: t, value: v});
+
+function colors() {
+  return light
+    ? {text: "#131722", grid: "rgba(30,50,80,0.07)", border: "#D9E1EC", cross: "#9598A1"}
+    : {text: "#D1D4DC", grid: "rgba(140,160,190,0.08)", border: "#22314A", cross: "#758696"};
+}
+
+function legendBox(top) {
+  const d = document.createElement("div");
+  d.className = "legend"; d.style.top = top + "px";
+  wrap.appendChild(d); legends.push(d); return d;
+}
+
+function placeLegends() {
+  // pane legends sit at the top of each pane
+  let top = 0;
+  chart.panes().forEach((p, i) => { if (legends[i]) legends[i].style.top = (top + 6) + "px"; top += p.getHeight() + 1; });
+}
+
+function build(a) {
+  const c = colors(), P = a.precision;
+  const keepRange = chart && lastRev === a.rev ? chart.timeScale().getVisibleLogicalRange() : null;
+  if (chart) { chart.remove(); chart = null; }
+  legends.forEach(l => l.remove()); legends = [];
+  wrap.style.height = a.height + "px";
+
+  chart = LW.createChart(box, {
+    autoSize: true,
+    layout: {background: {type: "solid", color: "transparent"}, textColor: c.text, fontSize: 11,
+             fontFamily: "Sora, 'Segoe UI', system-ui, sans-serif", attributionLogo: true,
+             panes: {separatorColor: c.border, separatorHoverColor: "rgba(46,230,246,.25)", enableResize: true}},
+    grid: {vertLines: {color: c.grid}, horzLines: {color: c.grid}},
+    crosshair: {mode: LW.CrosshairMode.Normal,
+                vertLine: {color: c.cross, labelBackgroundColor: light ? "#5B6B82" : "#2A3A55"},
+                horzLine: {color: c.cross, labelBackgroundColor: light ? "#5B6B82" : "#2A3A55"}},
+    rightPriceScale: {borderColor: c.border, scaleMargins: {top: 0.08, bottom: a.vol ? 0.22 : 0.06}},
+    timeScale: {borderColor: c.border, timeVisible: a.intraday, secondsVisible: false, rightOffset: 6,
+                barSpacing: a.mobile ? 5 : 7, minBarSpacing: 0.5},
+    localization: {priceFormatter: (v) => fmt(v, P)},
+  });
+
+  const pf = {type: "price", precision: P, minMove: Math.pow(10, -P)};
+  main = chart.addSeries(LW.CandlestickSeries, {
+    upColor: "#26A69A", downColor: "#EF5350", borderUpColor: "#26A69A", borderDownColor: "#EF5350",
+    wickUpColor: "#26A69A", wickDownColor: "#EF5350", priceFormat: pf});
+  main.setData(a.bars.map(([t, o, h, l, cl]) => ({time: t, open: o, high: h, low: l, close: cl})));
+
+  let vol = null;
+  if (a.vol) {
+    vol = chart.addSeries(LW.HistogramSeries, {priceScaleId: "vol", priceFormat: {type: "volume"},
+                                               lastValueVisible: false, priceLineVisible: false});
+    vol.priceScale().applyOptions({scaleMargins: {top: 0.82, bottom: 0}});
+    vol.setData(a.bars.map(([t, o, h, l, cl, v]) => ({time: t, value: v || 0,
+      color: cl >= o ? "rgba(38,166,154,.45)" : "rgba(239,83,80,.45)"})));
+  }
+
+  const lineOpts = (l) => ({color: l.color, lineWidth: l.width || 1, lineStyle: l.style || 0, priceFormat: pf,
+                            lastValueVisible: !!l.label, priceLineVisible: false, crosshairMarkerVisible: !!l.label,
+                            title: ""});
+  const overlays = a.lines.map(l => { const s = chart.addSeries(LW.LineSeries, lineOpts(l), 0); s.setData(pts(l.data)); return [l, s]; });
+
+  for (const lv of a.levels) {
+    main.createPriceLine({price: lv.price, color: lv.color, lineWidth: 1, lineStyle: LW.LineStyle.Dashed,
+                          axisLabelVisible: true, title: lv.name});
+  }
+
+  // RSI pane
+  const rsi = chart.addSeries(LW.LineSeries, {color: "#B39DDB", lineWidth: 1, priceLineVisible: false,
+                                              priceFormat: {type: "price", precision: 2, minMove: 0.01}}, 1);
+  rsi.setData(pts(a.rsi));
+  for (const lvl of [70, 30]) rsi.createPriceLine({price: lvl, color: "rgba(150,150,150,.6)", lineWidth: 1,
+                                                    lineStyle: LW.LineStyle.Dotted, axisLabelVisible: false});
+  rsi.priceScale().applyOptions({autoScale: false, scaleMargins: {top: 0.1, bottom: 0.1}});
+  rsi.applyOptions({autoscaleInfoProvider: () => ({priceRange: {minValue: 0, maxValue: 100}})});
+
+  // MACD pane
+  const mp = {type: "price", precision: Math.max(2, P), minMove: Math.pow(10, -Math.max(2, P))};
+  const hist = chart.addSeries(LW.HistogramSeries, {priceLineVisible: false, lastValueVisible: false, priceFormat: mp}, 2);
+  hist.setData(a.macd.hist.map(([t, v]) => v == null ? {time: t} :
+    {time: t, value: v, color: v >= 0 ? "rgba(38,166,154,.6)" : "rgba(239,83,80,.6)"}));
+  const ml = chart.addSeries(LW.LineSeries, {color: "#5C9DFF", lineWidth: 1, priceLineVisible: false, priceFormat: mp}, 2);
+  ml.setData(pts(a.macd.line));
+  const ms = chart.addSeries(LW.LineSeries, {color: "#FF9F43", lineWidth: 1, priceLineVisible: false, priceFormat: mp}, 2);
+  ms.setData(pts(a.macd.signal));
+
+  // pane heights: price gets most of the room
+  const H = a.height, panes = chart.panes();
+  const sub = Math.round(H * (a.mobile ? 0.17 : 0.15));
+  try { panes[1].setHeight(sub); panes[2].setHeight(sub); panes[0].setHeight(H - 2 * sub - 30); } catch (e) {}
+
+  // TradingView-style legends
+  const lg0 = legendBox(6), lg1 = legendBox(0), lg2 = legendBox(0);
+  const byTime = new Map(a.bars.map((b, i) => [b[0], i]));
+  const last = a.bars.length - 1;
+  const valAt = (arr, i) => (arr[i] ? arr[i][1] : null);
+
+  function draw(i) {
+    if (i == null || i < 0) i = last;
+    const [t, o, h, l, cl, v] = a.bars[i];
+    const prev = i > 0 ? a.bars[i - 1][4] : o;
+    const ch = cl - prev, cp = prev ? ch / prev * 100 : 0, cls = ch >= 0 ? "up" : "down";
+    let html = `<div class="row"><span class="t">${a.title}</span>` +
+      `<span class="k">O</span><span class="v ${cls}">${fmt(o, P)}</span>` +
+      `<span class="k">H</span><span class="v ${cls}">${fmt(h, P)}</span>` +
+      `<span class="k">L</span><span class="v ${cls}">${fmt(l, P)}</span>` +
+      `<span class="k">C</span><span class="v ${cls}">${fmt(cl, P)}</span>` +
+      `<span class="v ${cls}">${ch >= 0 ? "+" : ""}${fmt(ch, P)} (${cp >= 0 ? "+" : ""}${cp.toFixed(2)}%)</span>` +
+      (a.vol ? `<span class="k">Vol</span><span class="v">${fmtVol(v)}</span>` : "") + `</div>`;
+    const shown = a.lines.filter(x => x.label);
+    if (shown.length && !a.mobile) {
+      html += `<div class="row">` + shown.map(x => `<span class="sw" style="background:${x.color}"></span>` +
+        `<span class="k">${x.label}</span><span class="v" style="color:${x.color}">${fmt(valAt(x.data, i), P)}</span>`).join("") + `</div>`;
+    }
+    lg0.innerHTML = html;
+    lg1.innerHTML = `<span class="k">RSI 14</span><span class="v" style="color:#B39DDB">${fmt(valAt(a.rsi, i), 2)}</span>`;
+    const q = Math.max(2, P);
+    lg2.innerHTML = `<span class="k">MACD 12 26 9</span>` +
+      `<span class="v" style="color:#5C9DFF">${fmt(valAt(a.macd.line, i), q)}</span>` +
+      `<span class="v" style="color:#FF9F43">${fmt(valAt(a.macd.signal, i), q)}</span>` +
+      `<span class="v ${valAt(a.macd.hist, i) >= 0 ? "up" : "down"}">${fmt(valAt(a.macd.hist, i), q)}</span>`;
+  }
+  chart.subscribeCrosshairMove(p => { draw(p && p.time != null ? byTime.get(p.time) : null); placeLegends(); });
+  draw(null);
+  requestAnimationFrame(placeLegends);
+
+  if (keepRange) chart.timeScale().setVisibleLogicalRange(keepRange);
+  else if (a.bars.length > (a.mobile ? 90 : 180)) {
+    const n = a.mobile ? 90 : 180;
+    chart.timeScale().setVisibleLogicalRange({from: a.bars.length - n, to: a.bars.length + 5});
+  } else chart.timeScale().fitContent();
+  lastRev = a.rev;
+  send("streamlit:setFrameHeight", {height: a.height + 2});
+}
+
+window.addEventListener("message", (e) => {
+  if (!e.data || e.data.type !== "streamlit:render") return;
+  if (!LW) { document.getElementById("err").style.display = "flex"; wrap.style.height = "120px";
+             send("streamlit:setFrameHeight", {height: 122}); return; }
+  const lt = !!(e.data.theme && e.data.theme.base === "light");
+  document.documentElement.classList.toggle("light", lt);
+  args = e.data.args;
+  const sig = JSON.stringify([lt, args.rev, args.height, args.bars.length, args.bars[args.bars.length - 1],
+                              args.lines.map(l => l.name), args.levels.length]);
+  if (sig === lastSig) return;  // nothing changed since the last rerun: keep the user's zoom and crosshair
+  lastSig = sig; light = lt;
+  build(args);
+});
+window.addEventListener("resize", () => { if (chart) placeLegends(); });
+send("streamlit:componentReady", {apiVersion: 1});
+</script>
+</body>
+</html>

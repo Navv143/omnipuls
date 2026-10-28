@@ -1,0 +1,417 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --fg:#E6EDF7; --mut:#8A97AB; --card:#131D2F; --line:#22314A; --up:#26A69A; --down:#EF5350;
+          --accent:#2EE6F6; --hover:#1A2740; }
+  :root.light { --fg:#0F1B2D; --mut:#5B6B82; --card:#FFFFFF; --line:#D9E1EC; --hover:#EEF3FA; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; overflow:hidden; background:transparent; color:var(--fg);
+               font-family:Sora, "Segoe UI", system-ui, sans-serif; font-size:14px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .up { color:var(--up); } .down { color:var(--down); } .mut { color:var(--mut); }
+  .live { display:inline-flex; align-items:center; gap:.35rem; font-size:.72rem; letter-spacing:.06em;
+          text-transform:uppercase; color:var(--mut); }
+  .dot { width:7px; height:7px; border-radius:50%; background:#5B6B82; }
+  .live.on .dot { background:var(--up); animation:pulse 1.4s ease-in-out infinite; }
+  .live.on { color:var(--up); }
+  @keyframes pulse { 50% { opacity:.3; } }
+  .flash-up { animation: fu .7s ease-out; } .flash-down { animation: fd .7s ease-out; }
+  @keyframes fu { from { background:rgba(38,166,154,.35); } to { background:transparent; } }
+  @keyframes fd { from { background:rgba(239,83,80,.35); } to { background:transparent; } }
+  .click { cursor:pointer; } .click:hover { text-decoration:underline; text-underline-offset:3px; }
+  /* tape */
+  .tape { overflow:hidden; white-space:nowrap; border-block:1px solid var(--line); padding:.45rem 0; margin-bottom:.8rem;
+          mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent); }
+  .tape-track { display:inline-block; animation: tape 50s linear infinite; }
+  .tape:hover .tape-track { animation-play-state:paused; }
+  .ti { display:inline-block; margin-right:2.2rem; } .ti b { margin-right:.4rem; font-weight:600; }
+  @keyframes tape { from { transform:translateX(0); } to { transform:translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .tape-track { animation:none; } .live.on .dot { animation:none; } }
+  /* tiles */
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:12px; }
+  @media (max-width: 520px) {
+    .grid { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+    .tile { padding:10px 10px 6px; } .tp { font-size:1.15rem; } .tc { font-size:.74rem; } .spark { height:28px; }
+    .qp { font-size:1.8rem; } .kv { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
+    th, td { padding:6px 6px; font-size:.82rem; } input[type=search] { min-width:0; width:100%; }
+    .panel { padding:8px; } }
+  .panel table { min-width:100%; } .panel { overflow-x:auto; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px 8px; }
+  .tile:hover { border-color:#2F4466; }
+  .tl { font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:var(--mut); display:flex; justify-content:space-between; }
+  .tp { font-size:1.45rem; font-weight:600; margin:.25rem 0 .1rem; border-radius:4px; }
+  .tc { font-size:.85rem; font-weight:600; }
+  .spark { width:100%; height:38px; display:block; margin-top:6px; }
+  /* tables */
+  .wrap { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width: 760px) { .wrap { grid-template-columns:1fr; } }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; min-width:0; }
+  .ph { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-weight:600; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:right; font-weight:400; font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; color:var(--mut);
+       padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; user-select:none; }
+  th:first-child, td:first-child { text-align:left; }
+  th.sort { cursor:pointer; } th.sort:hover { color:var(--fg); } th.active { color:var(--accent); }
+  td { text-align:right; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  tr:hover td { background:var(--hover); }
+  .scroll { overflow:auto; max-height:640px; }
+  .tools { display:flex; gap:10px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+  input[type=search] { background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:8px;
+                       padding:6px 10px; font:inherit; min-width:200px; }
+  /* quote */
+  .q { display:grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap:16px; }
+  @media (max-width: 760px) { .q { grid-template-columns:1fr; } }
+  .qp { font-size:2.3rem; font-weight:700; border-radius:6px; display:inline-block; padding:0 4px; margin-left:-4px; }
+  .kv { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:8px 14px; margin-top:10px; }
+  .kv div span { display:block; font-size:.7rem; color:var(--mut); text-transform:uppercase; letter-spacing:.05em; }
+  .bs { display:flex; height:8px; border-radius:4px; overflow:hidden; margin:6px 0 2px; background:var(--line); }
+  .bs i { display:block; height:100%; }
+
+  /* ---------- data table (layout-driven) ---------- */
+  :root { --t-border:1px solid #E2E8F0; --t-radius:0px; --t-line:#E2E8F0; --h-bg:#0F172A; --h-fg:#F8FAFC; --h-case:none;
+          --h-weight:600; --h-rule:none; --even:#FFFFFF; --odd:#F1F5F9; --row-hover:#E0E7FF; --accent2:#2563EB; }
+  .dt-tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+  .dt-tools input[type=search], .dt-tools select { background:var(--even); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; font-size:.85rem; }
+  .dt-tools input[type=search] { min-width:220px; flex:0 1 280px; }
+  .chip { border:1px solid var(--line); background:var(--even); color:var(--fg); border-radius:999px; padding:4px 12px; font:inherit;
+          font-size:.8rem; cursor:pointer; }
+  .chip.on { background:var(--accent2); border-color:var(--accent2); color:#fff; }
+  .btn { border:1px solid var(--line); background:var(--even); color:var(--fg); border-radius:8px; padding:5px 10px; font:inherit;
+         font-size:.8rem; cursor:pointer; } .btn:hover { border-color:var(--accent2); }
+  .dt-wrap { border:var(--t-border); border-radius:var(--t-radius); overflow:auto; background:var(--even); }
+  .dt { width:100%; border-collapse:separate; border-spacing:0; font-size:.86rem; }
+  .dt th { position:sticky; top:0; z-index:1; background:var(--h-bg); color:var(--h-fg); text-transform:var(--h-case);
+           font-weight:var(--h-weight); letter-spacing:.03em; font-size:.74rem; border-bottom:var(--h-rule); opacity:1; }
+  .dt th.sort:hover { opacity:.85; } .dt th.active { color:var(--h-fg); text-decoration:underline; text-underline-offset:4px; }
+  .dt td { border-bottom:1px solid var(--t-line); }
+  .dt tbody tr:nth-child(odd) td { background:var(--even); } .dt tbody tr:nth-child(even) td { background:var(--odd); }
+  .dt tbody tr:hover td { background:var(--row-hover); }
+  .dt td.name { font-weight:600; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:999px; font-size:.74rem; font-weight:600; }
+  .badge.up { background:rgba(38,166,154,.14); } .badge.down { background:rgba(239,83,80,.13); } .badge.mut { background:rgba(100,116,139,.12); }
+  .rsi { display:inline-flex; align-items:center; gap:6px; } .rsi i { display:block; width:46px; height:6px; border-radius:3px; background:var(--line); overflow:hidden; }
+  .rsi i b { display:block; height:100%; background:var(--accent2); }
+  .mini { width:84px; height:22px; display:block; }
+  .empty { padding:18px; text-align:center; color:var(--mut); }
+  @media (max-width: 520px) { .dt-tools input[type=search] { min-width:0; flex:1 1 100%; } .dt { font-size:.8rem; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ---------------------------------------------------------------- Streamlit component protocol
+const send = (type, extra) => window.parent.postMessage(Object.assign({isStreamlitMessage: true, type}, extra), "*");
+let lastH = 0;
+// Measure the content itself, never the frame: measuring the document (which is at least as tall as the frame)
+// made the frame grow a little on every update.
+const fit = () => { const r = document.getElementById("root");
+                    const h = Math.ceil(r ? r.getBoundingClientRect().height : 0) + 4;
+                    if (h > 4 && Math.abs(h - lastH) > 2) { lastH = h; send("streamlit:setFrameHeight", {height: h}); } };
+const choose = (sym) => send("streamlit:setComponentValue", {value: {open: sym, nonce: Date.now()}, dataType: "json"});
+const rootEl = document.getElementById("root");
+new ResizeObserver(() => fit()).observe(rootEl || document.body);
+
+// ---------------------------------------------------------------- state
+let A = null, items = [], byKey = {}, ws = null, wsPort = 0, lastMsg = 0, sortCol = null, sortDir = -1, query = "";
+
+const fmt = (v, it, signed) => {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const d = it.dec ?? 2;
+  const s = new Intl.NumberFormat(it.locale || "en-IN", {minimumFractionDigits: d, maximumFractionDigits: d}).format(Math.abs(v));
+  return (signed ? (v > 0 ? "+" : v < 0 ? "-" : "") : (v < 0 ? "-" : "")) + (signed ? "" : (it.prefix || "")) + s;
+};
+const compact = (v) => {
+  if (!v) return "—";
+  const a = Math.abs(v);
+  if (a >= 1e7) return (v / 1e7).toFixed(2) + " Cr";
+  if (a >= 1e5) return (v / 1e5).toFixed(2) + " L";
+  if (a >= 1e3) return (v / 1e3).toFixed(1) + "K";
+  return String(Math.round(v));
+};
+const chg = (it) => (it.price != null && it.prev) ? it.price - it.prev : null;
+const pct = (it) => (it.price != null && it.prev) ? (it.price / it.prev - 1) * 100 : null;
+const cls = (v) => v > 0 ? "up" : v < 0 ? "down" : "mut";
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function liveBadge() {
+  const on = Date.now() - lastMsg < 15000;
+  return `<span class="live ${on ? "on" : ""}" id="lv"><span class="dot"></span>${on ? "Live ticks" : (wsPort ? "Connecting…" : "Waiting for ticks")}</span>`;
+}
+setInterval(() => { const el = document.getElementById("lv"); if (el) el.outerHTML = liveBadge(); }, 3000);
+
+// ---------------------------------------------------------------- renderers
+function sparkSvg(arr, up) {
+  if (!arr || arr.length < 2) return "";
+  const lo = Math.min(...arr), hi = Math.max(...arr), w = 200, h = 38, r = hi - lo || 1;
+  const pts = arr.map((v, i) => `${(i / (arr.length - 1) * w).toFixed(1)},${(h - 3 - (v - lo) / r * (h - 6)).toFixed(1)}`);
+  const c = up ? "var(--up)" : "var(--down)";
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline points="0,${h} ${pts.join(" ")} ${w},${h}" fill="${up ? "rgba(38,166,154,.15)" : "rgba(239,83,80,.15)"}" stroke="none"/>
+    <polyline points="${pts.join(" ")}" fill="none" stroke="${c}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`;
+}
+
+function renderTiles() {
+  const tape = A.tape ? `<div class="tape"><div class="tape-track">${[0,1].map(() => items.map(it =>
+      `<span class="ti" data-tape="${it.id}"><b>${esc(it.label)}</b><span class="num tp-p">${fmt(it.price, it)}</span>
+       <span class="num tp-c ${cls(pct(it))}">${pct(it) == null ? "" : (pct(it) >= 0 ? "▲ " : "▼ ") + fmt(pct(it), {dec:2}, true) + "%"}</span></span>`).join("")).join("")}</div></div>` : "";
+  const tiles = items.map(it => `<div class="tile ${it.sym ? "click" : ""}" data-sym="${esc(it.sym || "")}" id="t_${it.id}">
+      <div class="tl"><span>${esc(it.label)}</span>${it.k ? '<span class="up" title="Live from Dhan">●</span>' : ""}</div>
+      <div class="tp num" id="p_${it.id}">${fmt(it.price, it)}</div>
+      <div class="tc num ${cls(pct(it))}" id="c_${it.id}">${chgText(it)}</div>
+      ${sparkSvg(it.spark, (pct(it) ?? 0) >= 0)}</div>`).join("");
+  root.innerHTML = `<div style="display:flex;justify-content:flex-end;margin-bottom:4px">${liveBadge()}</div>${tape}<div class="grid">${tiles}</div>`;
+  root.querySelectorAll(".tile.click").forEach(el => el.onclick = () => choose(el.dataset.sym));
+}
+const chgText = (it) => pct(it) == null ? "—" : `${pct(it) >= 0 ? "▲" : "▼"} ${fmt(chg(it), it, true)} (${fmt(pct(it), {dec:2}, true)}%)`;
+
+function updateTile(it, dir) {
+  const p = document.getElementById("p_" + it.id), c = document.getElementById("c_" + it.id);
+  if (p) { p.textContent = fmt(it.price, it); flash(p, dir); }
+  if (c) { c.textContent = chgText(it); c.className = "tc num " + cls(pct(it)); }
+  document.querySelectorAll(`[data-tape="${it.id}"]`).forEach(el => {
+    el.querySelector(".tp-p").textContent = fmt(it.price, it);
+    const tc = el.querySelector(".tp-c"); const v = pct(it);
+    tc.textContent = v == null ? "" : (v >= 0 ? "▲ " : "▼ ") + fmt(v, {dec:2}, true) + "%"; tc.className = "num tp-c " + cls(v);
+  });
+}
+function flash(el, dir) { if (!dir) return; el.classList.remove("flash-up", "flash-down"); void el.offsetWidth;
+                          el.classList.add(dir > 0 ? "flash-up" : "flash-down"); }
+
+// movers: top N gainers and losers, re-ranked on every tick
+let moversTimer = null;
+function renderMovers() {
+  const n = A.n || 10;
+  const ranked = items.filter(it => pct(it) != null).sort((a, b) => pct(b) - pct(a));
+  const table = (rows, title) => `<div class="panel"><div class="ph"><span>${title}</span>${title.startsWith("Top 10 g") ? liveBadge() : ""}</div>
+    <table><thead><tr><th>Stock</th><th>LTP</th><th>Change</th><th>%</th><th>Volume</th></tr></thead><tbody>
+    ${rows.map(it => `<tr><td class="click" data-sym="${esc(it.sym)}">${esc(it.label)}</td>
+      <td class="num" id="mp_${it.id}">${fmt(it.price, it)}</td><td class="num ${cls(chg(it))}">${fmt(chg(it), it, true)}</td>
+      <td class="num ${cls(pct(it))}"><b>${fmt(pct(it), {dec:2}, true)}%</b></td><td class="num">${compact(it.vol)}</td></tr>`).join("")}
+    </tbody></table></div>`;
+  const adv = items.filter(it => pct(it) > 0).length, dec = items.filter(it => pct(it) < 0).length;
+  root.innerHTML = `<div class="mut" style="margin-bottom:8px"><span class="up">${adv} advancing</span> · <span class="down">${dec} declining</span> · ${items.length} stocks</div>
+    <div class="wrap">${table(ranked.slice(0, n), "Top 10 gainers")}${table(ranked.slice(-n).reverse(), "Top 10 losers")}</div>`;
+  root.querySelectorAll("[data-sym]").forEach(el => el.onclick = () => choose(el.dataset.sym));
+}
+
+// board: full live table, sortable, searchable
+const COLS = [["label","Stock"],["price","LTP"],["chg","Chg"],["pct","Chg %"],["open","Open"],["high","High"],["low","Low"],
+              ["prev","Prev close"],["avg","Avg price"],["vol","Volume"],["oi","OI"]];
+function val(it, c) { return c === "chg" ? chg(it) : c === "pct" ? pct(it) : it[c]; }
+function renderBoard() {
+  let rows = items.filter(it => !query || it.label.toLowerCase().includes(query));
+  if (sortCol) rows.sort((a, b) => { const x = val(a, sortCol), y = val(b, sortCol);
+    if (typeof x === "string") return sortDir * x.localeCompare(y);
+    return sortDir * ((x ?? -Infinity) - (y ?? -Infinity)); });
+  const showOi = items.some(it => it.oi);
+  const cols = COLS.filter(c => c[0] !== "oi" || showOi);
+  const body = rows.map(it => `<tr id="r_${it.id}"><td class="click" data-sym="${esc(it.sym)}"><b>${esc(it.label)}</b></td>
+     ${cols.slice(1).map(([c]) => { const v = val(it, c);
+        const txt = c === "vol" || c === "oi" ? compact(v) : c === "pct" ? (v == null ? "—" : fmt(v, {dec:2}, true) + "%")
+                  : c === "chg" ? fmt(v, it, true) : fmt(v, Object.assign({}, it, {prefix: ""}));
+        return `<td class="num ${c === "chg" || c === "pct" ? cls(v) : ""}" data-c="${c}">${txt}</td>`; }).join("")}</tr>`).join("");
+  const adv = items.filter(it => pct(it) > 0).length, dec = items.filter(it => pct(it) < 0).length;
+  const keepFocus = document.activeElement && document.activeElement.id === "q";
+  root.innerHTML = `<div class="tools"><input id="q" type="search" placeholder="Search…" value="${esc(query)}">
+      <span class="mut"><span class="up">${adv}▲</span> · <span class="down">${dec}▼</span> · ${rows.length} shown</span>
+      <span style="flex:1"></span>${liveBadge()}</div>
+    <div class="panel scroll"><table><thead><tr>${cols.map(([c, t]) =>
+      `<th class="sort ${sortCol === c ? "active" : ""}" data-c="${c}">${t}${sortCol === c ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead>
+    <tbody>${body}</tbody></table></div>`;
+  const q = document.getElementById("q");
+  q.oninput = () => { query = q.value.toLowerCase(); renderBoard(); };
+  if (keepFocus) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+  root.querySelectorAll("th.sort").forEach(th => th.onclick = () => {
+    const c = th.dataset.c; if (sortCol === c) sortDir = -sortDir; else { sortCol = c; sortDir = c === "label" ? 1 : -1; }
+    renderBoard(); });
+  root.querySelectorAll("[data-sym]").forEach(el => el.onclick = () => choose(el.dataset.sym));
+}
+
+// quote: one instrument with market depth
+function renderQuote() {
+  const it = items[0]; if (!it) { root.innerHTML = ""; return; }
+  const d = it.depth || [];
+  const bq = it.tbq || 0, sq = it.tsq || 0, tot = bq + sq || 1;
+  const depthRows = [0,1,2,3,4].map(i => { const r = d[i] || [];
+    return `<tr><td class="num mut">${r[2] ?? ""}</td><td class="num">${r[0] != null ? r[0].toLocaleString("en-IN") : ""}</td>
+      <td class="num up">${r[4] != null ? fmt(r[4], it) : "—"}</td><td class="num down">${r[5] != null ? fmt(r[5], it) : "—"}</td>
+      <td class="num">${r[1] != null ? r[1].toLocaleString("en-IN") : ""}</td><td class="num mut">${r[3] ?? ""}</td></tr>`; }).join("");
+  root.innerHTML = `<div class="q"><div class="panel">
+      <div style="display:flex;justify-content:space-between">${liveBadge()}<span class="mut num">${esc(it.ltt || "")}</span></div>
+      <div class="qp num" id="qp">${fmt(it.price, it)}</div>
+      <div class="tc num ${cls(pct(it))}" style="font-size:1rem">${chgText(it)}</div>
+      <div class="kv num"><div><span>Open</span>${fmt(it.open, it)}</div><div><span>High</span>${fmt(it.high, it)}</div>
+        <div><span>Low</span>${fmt(it.low, it)}</div><div><span>Prev close</span>${fmt(it.prev, it)}</div>
+        <div><span>Avg price</span>${fmt(it.avg, it)}</div><div><span>Volume</span>${compact(it.vol)}</div>
+        ${it.oi ? `<div><span>OI</span>${compact(it.oi)}</div><div><span>OI chg</span><span class="${cls(it.oi - (it.poi || it.oi))}" style="display:inline;font-size:inherit;text-transform:none;letter-spacing:0">${it.poi ? fmt((it.oi / it.poi - 1) * 100, {dec:2}, true) + "%" : "—"}</span></div>` : ""}
+      </div></div>
+    <div class="panel"><div class="ph"><span>Market depth</span><span class="mut num">Buy ${compact(bq)} · Sell ${compact(sq)}</span></div>
+      <div class="bs"><i style="width:${bq / tot * 100}%;background:var(--up)"></i><i style="width:${sq / tot * 100}%;background:var(--down)"></i></div>
+      <table><thead><tr><th>Orders</th><th>Bid qty</th><th>Bid</th><th>Ask</th><th>Ask qty</th><th>Orders</th></tr></thead>
+      <tbody>${depthRows}</tbody></table></div></div>`;
+}
+
+
+// ---------------------------------------------------------------- data table
+let dtSort = null, dtDir = -1, dtQuery = "", dtFilters = {}, dtChip = "all";
+const UPWORDS = /^(bullish|strong bullish|up|strong up|long buildup|short covering)$/i;
+const DOWNWORDS = /^(bearish|strong bearish|down|strong down|short buildup|long unwinding)$/i;
+function cell(c, r) {
+  const v = r[c.k];
+  if (v === null || v === undefined || v === "" || (typeof v === "number" && Number.isNaN(v))) return `<td class="num mut">—</td>`;
+  const n = typeof v === "number";
+  switch (c.t) {
+    case "name": return `<td class="name ${r._sym ? "click" : ""}" data-sym="${esc(r._sym || "")}">${esc(v)}</td>`;
+    case "price": return `<td class="num">${fmt(v, {dec: c.dec ?? 2, locale: "en-IN"})}</td>`;
+    case "num": return `<td class="num">${fmt(v, {dec: c.dec ?? 2, locale: "en-IN"})}</td>`;
+    case "int": return `<td class="num">${Math.round(v).toLocaleString("en-IN")}</td>`;
+    case "signed": return `<td class="num ${cls(v)}">${fmt(v, {dec: c.dec ?? 2, locale: "en-IN"}, true)}</td>`;
+    case "pct": return `<td class="num ${cls(v)}">${fmt(v, {dec: c.dec ?? 2}, true)}%</td>`;
+    case "pctu": return `<td class="num">${fmt(v, {dec: c.dec ?? 2})}%</td>`;
+    case "compact": return `<td class="num">${compact(v)}</td>`;
+    case "ratio": return `<td class="num">${fmt(v, {dec: 2})}×</td>`;
+    case "rsi": { const p = Math.max(0, Math.min(100, v));
+      const col = p >= 70 ? "var(--down)" : p <= 30 ? "var(--up)" : "var(--accent2)";
+      return `<td class="num"><span class="rsi"><i><b style="width:${p}%;background:${col}"></b></i>${p.toFixed(0)}</span></td>`; }
+    case "spark": { if (!Array.isArray(v) || v.length < 2) return `<td></td>`;
+      const lo = Math.min(...v), hi = Math.max(...v), rg = hi - lo || 1, w = 84, h = 22;
+      const pts = v.map((x, i) => `${(i / (v.length - 1) * w).toFixed(1)},${(h - 2 - (x - lo) / rg * (h - 4)).toFixed(1)}`).join(" ");
+      return `<td><svg class="mini" viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="${v[v.length-1] >= v[0] ? "var(--up)" : "var(--down)"}" stroke-width="1.5"/></svg></td>`; }
+    case "badge": { const c2 = UPWORDS.test(v) ? "up" : DOWNWORDS.test(v) ? "down" : "mut";
+      return `<td><span class="badge ${c2}">${esc(v)}</span></td>`; }
+    default: return `<td class="${n ? "num" : ""}">${n ? fmt(v, {dec: c.dec ?? 2, locale: "en-IN"}) : esc(v)}</td>`;
+  }
+}
+function dtRows() {
+  const cols = A.columns || [];
+  const pctCol = cols.find(c => c.role === "pct");
+  let rows = items.slice();
+  if (dtQuery) { const q = dtQuery.toLowerCase();
+    rows = rows.filter(r => cols.some(c => (c.t === "name" || c.t === "text" || c.t === "badge") && String(r[c.k] ?? "").toLowerCase().includes(q))
+                          || String(r._sym || "").toLowerCase().includes(q)); }
+  for (const [k, v] of Object.entries(dtFilters)) if (v) rows = rows.filter(r => String(r[k]) === v);
+  if (pctCol && dtChip !== "all") rows = rows.filter(r => dtChip === "up" ? r[pctCol.k] > 0 : r[pctCol.k] < 0);
+  if (dtSort) rows.sort((a, b) => { const x = a[dtSort], y = b[dtSort];
+    if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+    return typeof x === "string" ? dtDir * x.localeCompare(y) : dtDir * (x - y); });
+  return rows;
+}
+function renderTable() {
+  const cols = A.columns || [];
+  const rows = dtRows();
+  const pctCol = cols.find(c => c.role === "pct");
+  const keepFocus = document.activeElement && document.activeElement.id === "dtq";
+  const filt = (A.filters || []).map(k => { const vals = [...new Set(items.map(r => r[k]).filter(x => x != null && x !== ""))].sort();
+    const c = cols.find(c => c.k === k) || {label: k};
+    return `<select data-f="${esc(k)}"><option value="">All ${esc((c.label || k).toLowerCase())}</option>${vals.map(v =>
+      `<option ${dtFilters[k] === String(v) ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>`; }).join("");
+  const chips = pctCol ? ["all", "up", "down"].map(c => `<button class="chip ${dtChip === c ? "on" : ""}" data-chip="${c}">${
+      {all: "All", up: "▲ Gainers", down: "▼ Losers"}[c]}</button>`).join("") : "";
+  const live = items.some(r => r.k);
+  const head = `<tr>${cols.map(c => `<th class="sort ${dtSort === c.k ? "active" : ""}" data-c="${esc(c.k)}">${esc(c.label)}${
+      dtSort === c.k ? (dtDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr>`;
+  const body = rows.length ? rows.map(r => `<tr>${cols.map(c => cell(c, r)).join("")}</tr>`).join("")
+                           : `<tr><td colspan="${cols.length}" class="empty">No rows match. Clear the search or filters.</td></tr>`;
+  root.innerHTML = `${A.search === false ? "" : `<div class="dt-tools"><input id="dtq" type="search" placeholder="${esc(A.placeholder || "Search…")}" value="${esc(dtQuery)}">
+      ${filt}${chips}<span class="mut" style="font-size:.8rem">${rows.length} of ${items.length}</span><span style="flex:1"></span>
+      ${live ? liveBadge() : ""}<button class="btn" id="dtcsv" title="Download the rows shown as CSV">CSV</button></div>`}
+    <div class="dt-wrap" style="max-height:${A.max_height || 640}px"><table class="dt"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+  const q = document.getElementById("dtq");
+  if (q) { q.oninput = () => { dtQuery = q.value; renderTable(); fit(); };
+           if (keepFocus) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+  root.querySelectorAll("select[data-f]").forEach(s => s.onchange = () => { dtFilters[s.dataset.f] = s.value; renderTable(); fit(); });
+  root.querySelectorAll("[data-chip]").forEach(b => b.onclick = () => { dtChip = b.dataset.chip; renderTable(); fit(); });
+  root.querySelectorAll("th.sort").forEach(th => th.onclick = () => { const k = th.dataset.c;
+    if (dtSort === k) dtDir = -dtDir; else { dtSort = k; dtDir = (cols.find(c => c.k === k) || {}).t === "name" ? 1 : -1; }
+    renderTable(); });
+  root.querySelectorAll("td.click[data-sym]").forEach(td => td.onclick = () => td.dataset.sym && choose(td.dataset.sym));
+  const csv = document.getElementById("dtcsv");
+  if (csv) csv.onclick = () => {
+    const lines = [cols.filter(c => c.t !== "spark").map(c => `"${c.label}"`).join(",")].concat(dtRows().map(r =>
+      cols.filter(c => c.t !== "spark").map(c => { const v = r[c.k]; return v == null ? "" : typeof v === "number" ? v : `"${String(v).replace(/"/g, '""')}"`; }).join(",")));
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([lines.join("\n")], {type: "text/csv"}));
+    a.download = (A.csv_name || "omnipuls") + ".csv"; document.body.appendChild(a); a.click(); a.remove(); };
+}
+function tickTable(it, v) {   // update the live columns of one row
+  const cols = A.columns || [];
+  const prev = v[1] || it._prev;
+  for (const c of cols) {
+    if (c.role === "ltp") it[c.k] = v[0];
+    else if (c.role === "chg" && prev) it[c.k] = v[0] - prev;
+    else if (c.role === "pct" && prev) it[c.k] = (v[0] / prev - 1) * 100;
+    else if (c.role === "vol" && v[2] != null) it[c.k] = v[2];
+  }
+}
+function applyStyle(s) {
+  if (!s) return;
+  const map = {t_border: "--t-border", t_radius: "--t-radius", t_line: "--t-line", h_bg: "--h-bg", h_fg: "--h-fg", h_case: "--h-case",
+               h_weight: "--h-weight", h_rule: "--h-rule", even: "--even", odd: "--odd", hover: "--row-hover", accent: "--accent2",
+               card: "--card", card_line: "--line"};
+  for (const [k, v] of Object.entries(map)) if (s[k]) document.documentElement.style.setProperty(v, s[k]);
+}
+const RENDER = {tiles: renderTiles, movers: renderMovers, board: renderBoard, quote: renderQuote, table: renderTable};
+function render() { (RENDER[A.kind] || renderTiles)(); fit(); }
+
+// ---------------------------------------------------------------- live ticks
+let pending = false;
+function onTicks(upd) {
+  const wasOff = Date.now() - lastMsg > 15000;
+  lastMsg = Date.now();
+  if (wasOff) { const el = document.getElementById("lv"); if (el) el.outerHTML = liveBadge(); }
+  for (const [k, v] of Object.entries(upd)) {
+    for (const it of (byKey[k] || [])) {
+      const old = it.price;
+      it.price = v[0]; if (v[1]) it.prev = v[1];
+      Object.assign(it, {vol: v[2] ?? it.vol, oi: v[3] ?? it.oi, high: v[4] || it.high, low: v[5] || it.low,
+                         open: v[6] || it.open, ltt: v[7] || it.ltt, avg: v[8] ?? it.avg, tbq: v[9] ?? it.tbq,
+                         tsq: v[10] ?? it.tsq, depth: v[11] || it.depth, poi: v[12] || it.poi});
+      if (A.kind === "tiles") updateTile(it, Math.sign((it.price ?? 0) - (old ?? it.price)));
+      if (A.kind === "table") tickTable(it, v);
+    }
+  }
+  if (A.kind !== "tiles" && !pending) {  // coalesce redraws to one per animation frame
+    pending = true;
+    requestAnimationFrame(() => { pending = false; render();
+      if (A.kind === "quote") { const p = document.getElementById("qp"); if (p) flash(p, 1); } });
+  }
+}
+function connect() {
+  if (!wsPort) return;
+  try { ws = new WebSocket(`ws://${location.hostname || "127.0.0.1"}:${wsPort}`); } catch (e) { return; }
+  ws.onopen = () => ws.send(JSON.stringify({keys: Object.keys(byKey)}));
+  ws.onmessage = (e) => { try { onTicks(JSON.parse(e.data)); } catch (err) {} };
+  ws.onclose = () => { ws = null; setTimeout(connect, 2000); };
+}
+
+window.addEventListener("message", (e) => {
+  if (!e.data || e.data.type !== "streamlit:render") return;
+  const args = e.data.args || {};
+  if (e.data.theme && e.data.theme.base === "light") document.documentElement.classList.add("light");
+  applyStyle(args.style);
+  const first = A === null;
+  A = args;
+  // keep live prices already received for items that stay on screen
+  const prevByKey = byKey;
+  items = (args.items || []).map((it, i) => {
+    const live = it.k && prevByKey[it.k] && prevByKey[it.k][0];
+    return live && live.price != null ? Object.assign({}, it, {id: i, price: live.price, prev: live.prev || it.prev,
+           vol: live.vol ?? it.vol, oi: live.oi ?? it.oi, depth: live.depth || it.depth}) : Object.assign({id: i}, it);
+  });
+  byKey = {};
+  items.forEach(it => { if (it.k) (byKey[it.k] = byKey[it.k] || []).push(it); });
+  render();
+  if (args.ticks && Object.keys(args.ticks).length) onTicks(args.ticks);
+  if (args.port && args.port !== wsPort) { wsPort = args.port; if (ws) ws.close(); else connect(); }
+  else if (ws && ws.readyState === 1) ws.send(JSON.stringify({keys: Object.keys(byKey)}));
+  if (first) fit();
+});
+const root = document.getElementById("root");
+send("streamlit:componentReady", {apiVersion: 1});
+</script>
+</body>
+</html>

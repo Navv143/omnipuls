@@ -1,0 +1,513 @@
+selection,stop%,target%,fill,trades,win%,avg%,pf,total%/yr,maxDD%,sharpe
+ML mover top1 (direction = higher of up/down),0.75,2.0,stop first,2911,19.7,-0.328,0.53,-80.8,-955.2,-4.77
+ML mover top1 (direction = higher of up/down),0.75,2.0,target first,2911,63.6,0.881,3.84,217.1,-9.4,10.59
+ML mover top1 (direction = higher of up/down),0.75,3.0,stop first,2911,19.3,-0.189,0.73,-46.5,-555.0,-2.12
+ML mover top1 (direction = higher of up/down),0.75,3.0,target first,2911,49.3,0.936,3.17,230.7,-14.7,8.03
+ML mover top1 (direction = higher of up/down),0.75,4.0,stop first,2911,19.2,-0.085,0.88,-20.9,-316.3,-0.81
+ML mover top1 (direction = higher of up/down),0.75,4.0,target first,2911,39.4,0.873,2.69,215.2,-14.7,6.23
+ML mover top1 (direction = higher of up/down),0.75,close,stop first,2911,19.1,0.085,1.12,21.0,-113.6,0.55
+ML mover top1 (direction = higher of up/down),0.75,close,target first,2911,19.1,0.085,1.12,21.0,-113.6,0.55
+ML mover top1 (direction = higher of up/down),1.0,2.0,stop first,2911,24.4,-0.385,0.54,-95.0,-1121.0,-4.78
+ML mover top1 (direction = higher of up/down),1.0,2.0,target first,2911,63.9,0.801,3.04,197.4,-13.4,8.88
+ML mover top1 (direction = higher of up/down),1.0,3.0,stop first,2911,23.9,-0.22,0.74,-54.3,-643.1,-2.16
+ML mover top1 (direction = higher of up/down),1.0,3.0,target first,2911,50.4,0.839,2.56,206.8,-21.2,6.8
+ML mover top1 (direction = higher of up/down),1.0,4.0,stop first,2911,23.6,-0.106,0.87,-26.2,-367.3,-0.89
+ML mover top1 (direction = higher of up/down),1.0,4.0,target first,2911,41.3,0.778,2.22,191.9,-19.7,5.31
+ML mover top1 (direction = higher of up/down),1.0,close,stop first,2911,23.4,0.074,1.09,18.1,-145.5,0.44
+ML mover top1 (direction = higher of up/down),1.0,close,target first,2911,23.4,0.074,1.09,18.1,-145.5,0.44
+ML mover top1 (direction = higher of up/down),1.5,2.0,stop first,2911,33.5,-0.437,0.58,-107.8,-1275.9,-4.26
+ML mover top1 (direction = higher of up/down),1.5,2.0,target first,2911,64.9,0.662,2.23,163.1,-22.0,6.41
+ML mover top1 (direction = higher of up/down),1.5,3.0,stop first,2911,32.5,-0.24,0.77,-59.3,-703.6,-1.93
+ML mover top1 (direction = higher of up/down),1.5,3.0,target first,2911,53.1,0.689,1.96,169.8,-30.3,5.07
+ML mover top1 (direction = higher of up/down),1.5,4.0,stop first,2911,32.0,-0.11,0.9,-27.1,-383.7,-0.78
+ML mover top1 (direction = higher of up/down),1.5,4.0,target first,2911,45.7,0.644,1.77,158.8,-28.5,4.06
+ML mover top1 (direction = higher of up/down),1.5,close,stop first,2911,31.5,0.111,1.1,27.3,-196.6,0.56
+ML mover top1 (direction = higher of up/down),1.5,close,target first,2911,31.5,0.111,1.1,27.3,-196.6,0.56
+ML mover top1 (direction = higher of up/down),2.0,2.0,stop first,2911,41.0,-0.444,0.63,-109.4,-1294.2,-3.67
+ML mover top1 (direction = higher of up/down),2.0,2.0,target first,2911,65.8,0.545,1.83,134.5,-25.2,4.73
+ML mover top1 (direction = higher of up/down),2.0,3.0,stop first,2911,39.1,-0.238,0.8,-58.8,-735.7,-1.68
+ML mover top1 (direction = higher of up/down),2.0,3.0,target first,2911,55.3,0.576,1.68,141.9,-33.6,3.92
+ML mover top1 (direction = higher of up/down),2.0,4.0,stop first,2911,38.3,-0.103,0.91,-25.3,-447.5,-0.65
+ML mover top1 (direction = higher of up/down),2.0,4.0,target first,2911,49.1,0.543,1.56,133.8,-37.2,3.21
+ML mover top1 (direction = higher of up/down),2.0,close,stop first,2911,37.5,0.124,1.1,30.5,-210.9,0.58
+ML mover top1 (direction = higher of up/down),2.0,close,target first,2911,37.5,0.124,1.1,30.5,-210.9,0.58
+ML long-only top1,0.75,2.0,stop first,2911,21.8,-0.278,0.59,-68.6,-818.1,-3.96
+ML long-only top1,0.75,2.0,target first,2911,60.2,0.779,3.31,192.0,-8.7,9.24
+ML long-only top1,0.75,3.0,stop first,2911,21.3,-0.14,0.79,-34.4,-415.7,-1.55
+ML long-only top1,0.75,3.0,target first,2911,46.9,0.82,2.83,202.2,-11.9,7.13
+ML long-only top1,0.75,4.0,stop first,2911,21.1,-0.048,0.93,-11.9,-215.1,-0.46
+ML long-only top1,0.75,4.0,target first,2911,38.1,0.758,2.44,186.8,-17.1,5.55
+ML long-only top1,0.75,close,stop first,2911,21.0,0.143,1.21,35.2,-101.1,0.89
+ML long-only top1,0.75,close,target first,2911,21.0,0.143,1.21,35.2,-101.1,0.89
+ML long-only top1,1.0,2.0,stop first,2911,26.5,-0.329,0.59,-81.2,-965.5,-4.01
+ML long-only top1,1.0,2.0,target first,2911,60.5,0.691,2.62,170.4,-11.2,7.56
+ML long-only top1,1.0,3.0,stop first,2911,25.8,-0.168,0.79,-41.5,-503.9,-1.64
+ML long-only top1,1.0,3.0,target first,2911,48.1,0.723,2.29,178.3,-16.4,5.94
+ML long-only top1,1.0,4.0,stop first,2911,25.4,-0.067,0.92,-16.5,-262.4,-0.56
+ML long-only top1,1.0,4.0,target first,2911,40.0,0.663,2.03,163.4,-21.0,4.64
+ML long-only top1,1.0,close,stop first,2911,25.1,0.147,1.18,36.2,-94.0,0.84
+ML long-only top1,1.0,close,target first,2911,25.1,0.147,1.18,36.2,-94.0,0.84
+ML long-only top1,1.5,2.0,stop first,2911,33.3,-0.44,0.58,-108.4,-1286.3,-4.33
+ML long-only top1,1.5,2.0,target first,2911,61.3,0.539,1.93,132.9,-23.0,5.16
+ML long-only top1,1.5,3.0,stop first,2911,32.0,-0.263,0.75,-64.9,-775.7,-2.16
+ML long-only top1,1.5,3.0,target first,2911,50.2,0.553,1.74,136.4,-29.6,4.12
+ML long-only top1,1.5,4.0,stop first,2911,31.3,-0.159,0.85,-39.3,-475.2,-1.16
+ML long-only top1,1.5,4.0,target first,2911,43.0,0.483,1.56,119.1,-44.0,3.12
+ML long-only top1,1.5,close,stop first,2911,30.7,0.067,1.06,16.5,-132.7,0.35
+ML long-only top1,1.5,close,target first,2911,30.7,0.067,1.06,16.5,-132.7,0.35
+ML long-only top1,2.0,2.0,stop first,2911,40.1,-0.456,0.61,-112.5,-1334.2,-3.83
+ML long-only top1,2.0,2.0,target first,2911,61.9,0.418,1.59,102.9,-28.0,3.6
+ML long-only top1,2.0,3.0,stop first,2911,37.9,-0.271,0.77,-66.7,-800.8,-1.94
+ML long-only top1,2.0,3.0,target first,2911,51.8,0.423,1.48,104.4,-48.9,2.91
+ML long-only top1,2.0,4.0,stop first,2911,36.7,-0.164,0.86,-40.5,-514.7,-1.06
+ML long-only top1,2.0,4.0,target first,2911,45.5,0.363,1.36,89.5,-65.3,2.19
+ML long-only top1,2.0,close,stop first,2911,35.9,0.059,1.05,14.5,-223.0,0.28
+ML long-only top1,2.0,close,target first,2911,35.9,0.059,1.05,14.5,-223.0,0.28
+ML short-only top1,0.75,2.0,stop first,2911,23.8,-0.223,0.66,-55.0,-660.4,-3.07
+ML short-only top1,0.75,2.0,target first,2911,64.4,0.892,3.95,220.0,-5.2,10.81
+ML short-only top1,0.75,3.0,stop first,2911,23.5,-0.054,0.92,-13.3,-301.1,-0.57
+ML short-only top1,0.75,3.0,target first,2911,50.5,0.958,3.27,236.3,-9.8,8.28
+ML short-only top1,0.75,4.0,stop first,2911,23.4,0.064,1.1,15.9,-164.6,0.58
+ML short-only top1,0.75,4.0,target first,2911,41.8,0.937,2.89,231.1,-12.2,6.72
+ML short-only top1,0.75,close,stop first,2911,23.2,0.252,1.38,62.1,-65.2,1.51
+ML short-only top1,0.75,close,target first,2911,23.2,0.252,1.38,62.1,-65.2,1.51
+ML short-only top1,1.0,2.0,stop first,2911,29.5,-0.245,0.68,-60.4,-721.0,-2.9
+ML short-only top1,1.0,2.0,target first,2911,65.2,0.826,3.2,203.6,-7.1,9.28
+ML short-only top1,1.0,3.0,stop first,2911,29.1,-0.053,0.93,-13.0,-312.0,-0.49
+ML short-only top1,1.0,3.0,target first,2911,52.6,0.887,2.73,218.7,-13.6,7.27
+ML short-only top1,1.0,4.0,stop first,2911,28.9,0.077,1.1,18.9,-162.4,0.62
+ML short-only top1,1.0,4.0,target first,2911,44.9,0.88,2.47,217.0,-15.7,6.05
+ML short-only top1,1.0,close,stop first,2911,28.6,0.269,1.35,66.3,-75.2,1.52
+ML short-only top1,1.0,close,target first,2911,28.6,0.269,1.35,66.3,-75.2,1.52
+ML short-only top1,1.5,2.0,stop first,2911,38.6,-0.278,0.71,-68.5,-822.3,-2.66
+ML short-only top1,1.5,2.0,target first,2911,66.7,0.707,2.4,174.2,-9.6,6.98
+ML short-only top1,1.5,3.0,stop first,2911,37.6,-0.054,0.94,-13.2,-327.3,-0.42
+ML short-only top1,1.5,3.0,target first,2911,55.6,0.756,2.12,186.5,-18.2,5.65
+ML short-only top1,1.5,4.0,stop first,2911,37.2,0.101,1.1,25.0,-102.1,0.7
+ML short-only top1,1.5,4.0,target first,2911,49.3,0.765,1.99,188.5,-20.8,4.87
+ML short-only top1,1.5,close,stop first,2911,36.7,0.306,1.32,75.4,-47.7,1.56
+ML short-only top1,1.5,close,target first,2911,36.7,0.306,1.32,75.4,-47.7,1.56
+ML short-only top1,2.0,2.0,stop first,2911,45.5,-0.279,0.74,-68.9,-840.9,-2.32
+ML short-only top1,2.0,2.0,target first,2911,67.8,0.612,2.01,151.0,-15.3,5.47
+ML short-only top1,2.0,3.0,stop first,2911,44.0,-0.046,0.96,-11.4,-381.5,-0.33
+ML short-only top1,2.0,3.0,target first,2911,58.4,0.673,1.86,166.0,-22.8,4.68
+ML short-only top1,2.0,4.0,stop first,2911,43.4,0.113,1.1,27.9,-131.0,0.71
+ML short-only top1,2.0,4.0,target first,2911,53.1,0.698,1.79,172.2,-21.8,4.2
+ML short-only top1,2.0,close,stop first,2911,42.7,0.327,1.3,80.6,-63.6,1.55
+ML short-only top1,2.0,close,target first,2911,42.7,0.327,1.3,80.6,-63.6,1.55
+"Rule: highest ATR%, gap direction top1",0.75,2.0,stop first,2911,16.5,-0.428,0.41,-105.5,-1248.9,-6.83
+"Rule: highest ATR%, gap direction top1",0.75,2.0,target first,2911,49.2,0.472,2.08,116.4,-11.9,5.49
+"Rule: highest ATR%, gap direction top1",0.75,3.0,stop first,2911,16.1,-0.332,0.54,-81.8,-970.6,-4.18
+"Rule: highest ATR%, gap direction top1",0.75,3.0,target first,2911,36.9,0.445,1.82,109.7,-17.5,4.03
+"Rule: highest ATR%, gap direction top1",0.75,4.0,stop first,2911,16.1,-0.28,0.61,-69.0,-821.4,-3.09
+"Rule: highest ATR%, gap direction top1",0.75,4.0,target first,2911,29.7,0.366,1.61,90.3,-33.7,2.92
+"Rule: highest ATR%, gap direction top1",0.75,close,stop first,2911,16.1,-0.177,0.75,-43.6,-521.2,-1.31
+"Rule: highest ATR%, gap direction top1",0.75,close,target first,2911,16.1,-0.177,0.75,-43.6,-521.2,-1.31
+"Rule: highest ATR%, gap direction top1",1.0,2.0,stop first,2911,21.2,-0.496,0.43,-122.2,-1450.0,-6.63
+"Rule: highest ATR%, gap direction top1",1.0,2.0,target first,2911,50.2,0.374,1.69,92.2,-22.9,4.02
+"Rule: highest ATR%, gap direction top1",1.0,3.0,stop first,2911,20.6,-0.388,0.55,-95.6,-1137.3,-4.23
+"Rule: highest ATR%, gap direction top1",1.0,3.0,target first,2911,38.9,0.343,1.52,84.6,-35.3,2.94
+"Rule: highest ATR%, gap direction top1",1.0,4.0,stop first,2911,20.5,-0.326,0.62,-80.2,-957.2,-3.14
+"Rule: highest ATR%, gap direction top1",1.0,4.0,target first,2911,32.3,0.265,1.36,65.4,-62.4,2.01
+"Rule: highest ATR%, gap direction top1",1.0,close,stop first,2911,20.4,-0.2,0.77,-49.3,-592.9,-1.31
+"Rule: highest ATR%, gap direction top1",1.0,close,target first,2911,20.4,-0.2,0.77,-49.3,-592.9,-1.31
+"Rule: highest ATR%, gap direction top1",1.5,2.0,stop first,2911,28.5,-0.619,0.44,-152.6,-1812.7,-6.49
+"Rule: highest ATR%, gap direction top1",1.5,2.0,target first,2911,51.7,0.192,1.26,47.2,-68.9,1.8
+"Rule: highest ATR%, gap direction top1",1.5,3.0,stop first,2911,27.3,-0.493,0.56,-121.6,-1450.3,-4.38
+"Rule: highest ATR%, gap direction top1",1.5,3.0,target first,2911,41.5,0.148,1.17,36.6,-116.7,1.14
+"Rule: highest ATR%, gap direction top1",1.5,4.0,stop first,2911,26.8,-0.424,0.62,-104.6,-1248.7,-3.4
+"Rule: highest ATR%, gap direction top1",1.5,4.0,target first,2911,36.0,0.078,1.08,19.3,-133.2,0.54
+"Rule: highest ATR%, gap direction top1",1.5,close,stop first,2911,26.6,-0.288,0.74,-71.0,-855.4,-1.68
+"Rule: highest ATR%, gap direction top1",1.5,close,target first,2911,26.6,-0.288,0.74,-71.0,-855.4,-1.68
+"Rule: highest ATR%, gap direction top1",2.0,2.0,stop first,2911,34.8,-0.669,0.47,-164.9,-1956.8,-5.88
+"Rule: highest ATR%, gap direction top1",2.0,2.0,target first,2911,52.6,0.041,1.05,10.2,-161.5,0.35
+"Rule: highest ATR%, gap direction top1",2.0,3.0,stop first,2911,32.6,-0.542,0.57,-133.6,-1591.9,-4.14
+"Rule: highest ATR%, gap direction top1",2.0,3.0,target first,2911,43.4,-0.001,1.0,-0.3,-204.0,-0.01
+"Rule: highest ATR%, gap direction top1",2.0,4.0,stop first,2911,31.7,-0.479,0.63,-118.2,-1407.3,-3.37
+"Rule: highest ATR%, gap direction top1",2.0,4.0,target first,2911,38.9,-0.049,0.96,-12.0,-211.1,-0.31
+"Rule: highest ATR%, gap direction top1",2.0,close,stop first,2911,31.4,-0.304,0.76,-74.9,-898.8,-1.55
+"Rule: highest ATR%, gap direction top1",2.0,close,target first,2911,31.4,-0.304,0.76,-74.9,-898.8,-1.55
+"Rule: biggest gap, go with gap top1",0.75,2.0,stop first,2911,15.8,-0.444,0.38,-109.4,-1296.3,-7.34
+"Rule: biggest gap, go with gap top1",0.75,2.0,target first,2911,42.5,0.29,1.6,71.5,-14.6,3.45
+"Rule: biggest gap, go with gap top1",0.75,3.0,stop first,2911,15.8,-0.344,0.52,-84.9,-1025.5,-4.46
+"Rule: biggest gap, go with gap top1",0.75,3.0,target first,2911,32.3,0.275,1.48,67.8,-40.2,2.61
+"Rule: biggest gap, go with gap top1",0.75,4.0,stop first,2911,15.7,-0.288,0.6,-71.0,-869.2,-3.23
+"Rule: biggest gap, go with gap top1",0.75,4.0,target first,2911,27.1,0.254,1.41,62.6,-31.9,2.11
+"Rule: biggest gap, go with gap top1",0.75,close,stop first,2911,15.7,-0.084,0.88,-20.7,-357.9,-0.46
+"Rule: biggest gap, go with gap top1",0.75,close,target first,2911,15.7,-0.084,0.88,-20.7,-357.9,-0.46
+"Rule: biggest gap, go with gap top1",1.0,2.0,stop first,2911,19.4,-0.543,0.38,-133.8,-1585.7,-7.59
+"Rule: biggest gap, go with gap top1",1.0,2.0,target first,2911,43.2,0.172,1.28,42.3,-38.5,1.88
+"Rule: biggest gap, go with gap top1",1.0,3.0,stop first,2911,19.3,-0.432,0.5,-106.5,-1274.9,-4.89
+"Rule: biggest gap, go with gap top1",1.0,3.0,target first,2911,34.1,0.157,1.22,38.8,-63.9,1.4
+"Rule: biggest gap, go with gap top1",1.0,4.0,stop first,2911,19.3,-0.365,0.58,-89.9,-1089.6,-3.61
+"Rule: biggest gap, go with gap top1",1.0,4.0,target first,2911,29.2,0.133,1.18,32.9,-77.8,1.05
+"Rule: biggest gap, go with gap top1",1.0,close,stop first,2911,19.2,-0.152,0.83,-37.6,-530.0,-0.8
+"Rule: biggest gap, go with gap top1",1.0,close,target first,2911,19.2,-0.152,0.83,-37.6,-530.0,-0.8
+"Rule: biggest gap, go with gap top1",1.5,2.0,stop first,2911,26.6,-0.663,0.4,-163.3,-1934.7,-7.18
+"Rule: biggest gap, go with gap top1",1.5,2.0,target first,2911,45.0,-0.018,0.98,-4.5,-142.1,-0.17
+"Rule: biggest gap, go with gap top1",1.5,3.0,stop first,2911,26.0,-0.538,0.51,-132.6,-1577.4,-4.93
+"Rule: biggest gap, go with gap top1",1.5,3.0,target first,2911,37.2,-0.031,0.97,-7.6,-159.4,-0.25
+"Rule: biggest gap, go with gap top1",1.5,4.0,stop first,2911,25.8,-0.458,0.59,-112.9,-1352.9,-3.75
+"Rule: biggest gap, go with gap top1",1.5,4.0,target first,2911,33.3,-0.048,0.95,-11.8,-212.5,-0.34
+"Rule: biggest gap, go with gap top1",1.5,close,stop first,2911,25.7,-0.221,0.8,-54.6,-717.8,-1.07
+"Rule: biggest gap, go with gap top1",1.5,close,target first,2911,25.7,-0.221,0.8,-54.6,-717.8,-1.07
+"Rule: biggest gap, go with gap top1",2.0,2.0,stop first,2911,32.5,-0.724,0.43,-178.4,-2112.7,-6.57
+"Rule: biggest gap, go with gap top1",2.0,2.0,target first,2911,46.4,-0.17,0.82,-41.9,-525.4,-1.46
+"Rule: biggest gap, go with gap top1",2.0,3.0,stop first,2911,31.4,-0.59,0.53,-145.4,-1733.2,-4.64
+"Rule: biggest gap, go with gap top1",2.0,3.0,target first,2911,39.6,-0.176,0.84,-43.3,-553.2,-1.29
+"Rule: biggest gap, go with gap top1",2.0,4.0,stop first,2911,30.9,-0.505,0.6,-124.5,-1505.2,-3.61
+"Rule: biggest gap, go with gap top1",2.0,4.0,target first,2911,36.3,-0.182,0.84,-44.7,-588.8,-1.2
+"Rule: biggest gap, go with gap top1",2.0,close,stop first,2911,30.6,-0.251,0.8,-61.8,-795.8,-1.13
+"Rule: biggest gap, go with gap top1",2.0,close,target first,2911,30.6,-0.251,0.8,-61.8,-795.8,-1.13
+"Rule: biggest gap, fade gap top1",0.75,2.0,stop first,2911,32.4,0.001,1.0,0.3,-111.7,0.02
+"Rule: biggest gap, fade gap top1",0.75,2.0,target first,2911,59.9,0.758,3.34,186.9,-7.1,9.15
+"Rule: biggest gap, fade gap top1",0.75,3.0,stop first,2911,31.8,0.178,1.31,43.9,-53.6,1.8
+"Rule: biggest gap, fade gap top1",0.75,3.0,target first,2911,49.0,0.825,2.99,203.3,-11.5,7.42
+"Rule: biggest gap, fade gap top1",0.75,4.0,stop first,2911,31.6,0.3,1.53,73.9,-32.0,2.6
+"Rule: biggest gap, fade gap top1",0.75,4.0,target first,2911,42.9,0.838,2.8,206.7,-18.1,6.37
+"Rule: biggest gap, fade gap top1",0.75,close,stop first,2911,30.8,0.465,1.82,114.6,-22.8,2.92
+"Rule: biggest gap, fade gap top1",0.75,close,target first,2911,30.8,0.465,1.82,114.6,-22.8,2.92
+"Rule: biggest gap, fade gap top1",1.0,2.0,stop first,2911,36.7,-0.036,0.95,-8.8,-190.4,-0.41
+"Rule: biggest gap, fade gap top1",1.0,2.0,target first,2911,60.8,0.688,2.72,169.5,-9.9,7.72
+"Rule: biggest gap, fade gap top1",1.0,3.0,stop first,2911,35.8,0.153,1.23,37.8,-55.7,1.42
+"Rule: biggest gap, fade gap top1",1.0,3.0,target first,2911,50.7,0.75,2.48,184.8,-14.8,6.4
+"Rule: biggest gap, fade gap top1",1.0,4.0,stop first,2911,35.5,0.279,1.41,68.8,-36.3,2.24
+"Rule: biggest gap, fade gap top1",1.0,4.0,target first,2911,45.3,0.767,2.36,189.0,-15.4,5.59
+"Rule: biggest gap, fade gap top1",1.0,close,stop first,2911,34.7,0.449,1.67,110.7,-22.3,2.68
+"Rule: biggest gap, fade gap top1",1.0,close,target first,2911,34.7,0.449,1.67,110.7,-22.3,2.68
+"Rule: biggest gap, fade gap top1",1.5,2.0,stop first,2911,44.3,-0.058,0.93,-14.2,-247.2,-0.56
+"Rule: biggest gap, fade gap top1",1.5,2.0,target first,2911,62.6,0.581,2.12,143.2,-17.7,5.81
+"Rule: biggest gap, fade gap top1",1.5,3.0,stop first,2911,42.8,0.145,1.18,35.7,-86.4,1.17
+"Rule: biggest gap, fade gap top1",1.5,3.0,target first,2911,53.8,0.643,2.0,158.4,-20.6,5.04
+"Rule: biggest gap, fade gap top1",1.5,4.0,stop first,2911,42.4,0.281,1.34,69.3,-60.0,2.01
+"Rule: biggest gap, fade gap top1",1.5,4.0,target first,2911,49.5,0.672,1.95,165.7,-21.4,4.57
+"Rule: biggest gap, fade gap top1",1.5,close,stop first,2911,41.4,0.47,1.57,115.8,-36.0,2.55
+"Rule: biggest gap, fade gap top1",1.5,close,target first,2911,41.4,0.47,1.57,115.8,-36.0,2.55
+"Rule: biggest gap, fade gap top1",2.0,2.0,stop first,2911,49.6,-0.07,0.92,-17.3,-289.6,-0.6
+"Rule: biggest gap, fade gap top1",2.0,2.0,target first,2911,63.4,0.484,1.78,119.3,-32.5,4.39
+"Rule: biggest gap, fade gap top1",2.0,3.0,stop first,2911,47.5,0.133,1.14,32.8,-101.2,0.98
+"Rule: biggest gap, fade gap top1",2.0,3.0,target first,2911,56.0,0.559,1.75,137.8,-29.9,4.09
+"Rule: biggest gap, fade gap top1",2.0,4.0,stop first,2911,46.9,0.271,1.29,66.9,-66.2,1.78
+"Rule: biggest gap, fade gap top1",2.0,4.0,target first,2911,52.4,0.603,1.75,148.7,-30.2,3.87
+"Rule: biggest gap, fade gap top1",2.0,close,stop first,2911,45.9,0.476,1.51,117.4,-50.2,2.4
+"Rule: biggest gap, fade gap top1",2.0,close,target first,2911,45.9,0.476,1.51,117.4,-50.2,2.4
+"Rule: volume surge yesterday, follow yesterday top1",0.75,2.0,stop first,2911,24.3,-0.279,0.57,-68.8,-816.0,-4.17
+"Rule: volume surge yesterday, follow yesterday top1",0.75,2.0,target first,2911,43.2,0.243,1.51,60.0,-20.0,2.98
+"Rule: volume surge yesterday, follow yesterday top1",0.75,3.0,stop first,2911,23.9,-0.207,0.68,-51.1,-616.4,-2.6
+"Rule: volume surge yesterday, follow yesterday top1",0.75,3.0,target first,2911,33.7,0.16,1.29,39.4,-33.6,1.65
+"Rule: volume surge yesterday, follow yesterday top1",0.75,4.0,stop first,2911,23.8,-0.173,0.73,-42.6,-514.9,-1.97
+"Rule: volume surge yesterday, follow yesterday top1",0.75,4.0,target first,2911,29.9,0.113,1.19,27.8,-55.7,1.07
+"Rule: volume surge yesterday, follow yesterday top1",0.75,close,stop first,2911,23.8,-0.11,0.83,-27.0,-336.4,-0.95
+"Rule: volume surge yesterday, follow yesterday top1",0.75,close,target first,2911,23.8,-0.11,0.83,-27.0,-336.4,-0.95
+"Rule: volume surge yesterday, follow yesterday top1",1.0,2.0,stop first,2911,29.9,-0.306,0.59,-75.4,-895.7,-3.94
+"Rule: volume surge yesterday, follow yesterday top1",1.0,2.0,target first,2911,45.5,0.163,1.28,40.1,-46.7,1.85
+"Rule: volume surge yesterday, follow yesterday top1",1.0,3.0,stop first,2911,29.2,-0.231,0.69,-57.0,-677.0,-2.56
+"Rule: volume surge yesterday, follow yesterday top1",1.0,3.0,target first,2911,37.2,0.089,1.13,22.0,-67.4,0.87
+"Rule: volume surge yesterday, follow yesterday top1",1.0,4.0,stop first,2911,29.1,-0.198,0.74,-48.8,-581.3,-2.02
+"Rule: volume surge yesterday, follow yesterday top1",1.0,4.0,target first,2911,34.0,0.049,1.07,12.1,-97.3,0.44
+"Rule: volume surge yesterday, follow yesterday top1",1.0,close,stop first,2911,29.1,-0.128,0.83,-31.5,-384.5,-1.02
+"Rule: volume surge yesterday, follow yesterday top1",1.0,close,target first,2911,29.1,-0.128,0.83,-31.5,-384.5,-1.02
+"Rule: volume surge yesterday, follow yesterday top1",1.5,2.0,stop first,2911,37.3,-0.344,0.61,-84.8,-1010.8,-3.66
+"Rule: volume surge yesterday, follow yesterday top1",1.5,2.0,target first,2911,48.3,0.041,1.06,10.0,-112.0,0.41
+"Rule: volume surge yesterday, follow yesterday top1",1.5,3.0,stop first,2911,36.1,-0.273,0.69,-67.3,-798.7,-2.57
+"Rule: volume surge yesterday, follow yesterday top1",1.5,3.0,target first,2911,41.7,-0.022,0.97,-5.5,-170.0,-0.2
+"Rule: volume surge yesterday, follow yesterday top1",1.5,4.0,stop first,2911,35.9,-0.238,0.73,-58.8,-698.4,-2.1
+"Rule: volume surge yesterday, follow yesterday top1",1.5,4.0,target first,2911,39.6,-0.038,0.95,-9.4,-188.7,-0.31
+"Rule: volume surge yesterday, follow yesterday top1",1.5,close,stop first,2911,35.9,-0.172,0.81,-42.4,-506.2,-1.25
+"Rule: volume surge yesterday, follow yesterday top1",1.5,close,target first,2911,35.9,-0.172,0.81,-42.4,-506.2,-1.25
+"Rule: volume surge yesterday, follow yesterday top1",2.0,2.0,stop first,2911,42.7,-0.325,0.66,-80.2,-962.4,-3.05
+"Rule: volume surge yesterday, follow yesterday top1",2.0,2.0,target first,2911,50.1,-0.031,0.96,-7.7,-143.3,-0.29
+"Rule: volume surge yesterday, follow yesterday top1",2.0,3.0,stop first,2911,40.6,-0.272,0.72,-67.1,-806.0,-2.32
+"Rule: volume surge yesterday, follow yesterday top1",2.0,3.0,target first,2911,44.5,-0.075,0.91,-18.4,-289.0,-0.62
+"Rule: volume surge yesterday, follow yesterday top1",2.0,4.0,stop first,2911,40.3,-0.236,0.76,-58.1,-692.8,-1.88
+"Rule: volume surge yesterday, follow yesterday top1",2.0,4.0,target first,2911,42.9,-0.079,0.91,-19.4,-276.3,-0.61
+"Rule: volume surge yesterday, follow yesterday top1",2.0,close,stop first,2911,40.1,-0.181,0.81,-44.7,-535.7,-1.23
+"Rule: volume surge yesterday, follow yesterday top1",2.0,close,target first,2911,40.1,-0.181,0.81,-44.7,-535.7,-1.23
+"Random stock, random side top1",0.75,2.0,stop first,2911,30.3,-0.191,0.67,-47.2,-564.4,-2.9
+"Random stock, random side top1",0.75,2.0,target first,2911,40.4,0.085,1.17,21.0,-27.5,1.14
+"Random stock, random side top1",0.75,3.0,stop first,2911,30.2,-0.145,0.75,-35.7,-436.7,-1.93
+"Random stock, random side top1",0.75,3.0,target first,2911,34.7,0.025,1.05,6.2,-66.5,0.3
+"Random stock, random side top1",0.75,4.0,stop first,2911,30.1,-0.123,0.79,-30.4,-381.0,-1.54
+"Random stock, random side top1",0.75,4.0,target first,2911,32.1,-0.03,0.95,-7.5,-128.7,-0.35
+"Random stock, random side top1",0.75,close,stop first,2911,30.1,-0.094,0.84,-23.1,-296.4,-1.0
+"Random stock, random side top1",0.75,close,target first,2911,30.1,-0.094,0.84,-23.1,-296.4,-1.0
+"Random stock, random side top1",1.0,2.0,stop first,2911,35.6,-0.207,0.68,-51.1,-612.0,-2.78
+"Random stock, random side top1",1.0,2.0,target first,2911,43.5,0.028,1.05,6.8,-49.5,0.35
+"Random stock, random side top1",1.0,3.0,stop first,2911,35.3,-0.158,0.76,-39.0,-481.3,-1.89
+"Random stock, random side top1",1.0,3.0,target first,2911,38.6,-0.023,0.96,-5.8,-129.3,-0.26
+"Random stock, random side top1",1.0,4.0,stop first,2911,35.2,-0.138,0.79,-33.9,-427.8,-1.55
+"Random stock, random side top1",1.0,4.0,target first,2911,36.7,-0.062,0.9,-15.3,-207.8,-0.66
+"Random stock, random side top1",1.0,close,stop first,2911,35.2,-0.109,0.83,-26.9,-349.4,-1.08
+"Random stock, random side top1",1.0,close,target first,2911,35.2,-0.109,0.83,-26.9,-349.4,-1.08
+"Random stock, random side top1",1.5,2.0,stop first,2911,41.8,-0.219,0.7,-54.0,-645.5,-2.53
+"Random stock, random side top1",1.5,2.0,target first,2911,46.8,-0.045,0.93,-11.1,-138.0,-0.5
+"Random stock, random side top1",1.5,3.0,stop first,2911,41.1,-0.176,0.76,-43.3,-526.5,-1.85
+"Random stock, random side top1",1.5,3.0,target first,2911,43.5,-0.069,0.9,-17.0,-219.8,-0.7
+"Random stock, random side top1",1.5,4.0,stop first,2911,40.9,-0.158,0.79,-38.9,-479.9,-1.59
+"Random stock, random side top1",1.5,4.0,target first,2911,42.1,-0.095,0.87,-23.5,-298.4,-0.93
+"Random stock, random side top1",1.5,close,stop first,2911,40.9,-0.126,0.83,-31.0,-390.9,-1.11
+"Random stock, random side top1",1.5,close,target first,2911,40.9,-0.126,0.83,-31.0,-390.9,-1.11
+"Random stock, random side top1",2.0,2.0,stop first,2911,45.4,-0.203,0.73,-50.0,-596.3,-2.13
+"Random stock, random side top1",2.0,2.0,target first,2911,48.2,-0.09,0.87,-22.3,-268.3,-0.94
+"Random stock, random side top1",2.0,3.0,stop first,2911,44.2,-0.167,0.78,-41.2,-498.6,-1.62
+"Random stock, random side top1",2.0,3.0,target first,2911,45.6,-0.1,0.86,-24.7,-305.3,-0.96
+"Random stock, random side top1",2.0,4.0,stop first,2911,44.0,-0.149,0.81,-36.7,-448.2,-1.38
+"Random stock, random side top1",2.0,4.0,target first,2911,44.5,-0.12,0.84,-29.6,-364.2,-1.1
+"Random stock, random side top1",2.0,close,stop first,2911,44.0,-0.108,0.86,-26.5,-331.7,-0.87
+"Random stock, random side top1",2.0,close,target first,2911,44.0,-0.108,0.86,-26.5,-331.7,-0.87
+ML mover top2 (direction = higher of up/down),0.75,2.0,stop first,5822,21.3,-0.288,0.57,-142.1,-1683.9,-5.59
+ML mover top2 (direction = higher of up/down),0.75,2.0,target first,5822,62.2,0.837,3.61,412.9,-8.7,13.82
+ML mover top2 (direction = higher of up/down),0.75,3.0,stop first,5822,21.0,-0.14,0.79,-69.0,-845.1,-2.1
+ML mover top2 (direction = higher of up/down),0.75,3.0,target first,5822,47.9,0.869,2.96,428.3,-13.4,10.24
+ML mover top2 (direction = higher of up/down),0.75,4.0,stop first,5822,20.8,-0.045,0.93,-22.0,-404.4,-0.57
+ML mover top2 (direction = higher of up/down),0.75,4.0,target first,5822,38.7,0.806,2.54,397.6,-15.0,7.96
+ML mover top2 (direction = higher of up/down),0.75,close,stop first,5822,20.6,0.086,1.13,42.2,-102.8,0.81
+ML mover top2 (direction = higher of up/down),0.75,close,target first,5822,20.6,0.086,1.13,42.2,-102.8,0.81
+ML mover top2 (direction = higher of up/down),1.0,2.0,stop first,5822,26.5,-0.329,0.59,-162.2,-1919.6,-5.49
+ML mover top2 (direction = higher of up/down),1.0,2.0,target first,5822,62.6,0.757,2.87,373.1,-11.2,11.54
+ML mover top2 (direction = higher of up/down),1.0,3.0,stop first,5822,26.0,-0.156,0.81,-77.1,-933.6,-2.08
+ML mover top2 (direction = higher of up/down),1.0,3.0,target first,5822,49.4,0.779,2.42,383.9,-24.5,8.69
+ML mover top2 (direction = higher of up/down),1.0,4.0,stop first,5822,25.7,-0.047,0.94,-23.2,-417.9,-0.54
+ML mover top2 (direction = higher of up/down),1.0,4.0,target first,5822,41.1,0.72,2.13,354.9,-24.3,6.79
+ML mover top2 (direction = higher of up/down),1.0,close,stop first,5822,25.4,0.096,1.12,47.4,-123.8,0.83
+ML mover top2 (direction = higher of up/down),1.0,close,target first,5822,25.4,0.096,1.12,47.4,-123.8,0.83
+ML mover top2 (direction = higher of up/down),1.5,2.0,stop first,5822,35.6,-0.37,0.63,-182.4,-2162.8,-4.89
+ML mover top2 (direction = higher of up/down),1.5,2.0,target first,5822,63.8,0.617,2.12,304.3,-25.8,8.23
+ML mover top2 (direction = higher of up/down),1.5,3.0,stop first,5822,34.5,-0.172,0.83,-84.7,-1025.2,-1.88
+ML mover top2 (direction = higher of up/down),1.5,3.0,target first,5822,52.4,0.634,1.88,312.4,-41.6,6.45
+ML mover top2 (direction = higher of up/down),1.5,4.0,stop first,5822,34.1,-0.051,0.95,-25.1,-454.9,-0.49
+ML mover top2 (direction = higher of up/down),1.5,4.0,target first,5822,45.7,0.591,1.71,291.1,-40.7,5.16
+ML mover top2 (direction = higher of up/down),1.5,close,stop first,5822,33.5,0.122,1.12,60.0,-160.3,0.9
+ML mover top2 (direction = higher of up/down),1.5,close,target first,5822,33.5,0.122,1.12,60.0,-160.3,0.9
+ML mover top2 (direction = higher of up/down),2.0,2.0,stop first,5822,42.9,-0.366,0.68,-180.3,-2136.6,-4.12
+ML mover top2 (direction = higher of up/down),2.0,2.0,target first,5822,64.8,0.508,1.76,250.2,-30.1,6.11
+ML mover top2 (direction = higher of up/down),2.0,3.0,stop first,5822,41.0,-0.16,0.86,-78.7,-1010.6,-1.53
+ML mover top2 (direction = higher of up/down),2.0,3.0,target first,5822,54.8,0.529,1.62,260.9,-40.8,5.0
+ML mover top2 (direction = higher of up/down),2.0,4.0,stop first,5822,40.3,-0.036,0.97,-17.8,-468.3,-0.31
+ML mover top2 (direction = higher of up/down),2.0,4.0,target first,5822,49.3,0.505,1.53,248.9,-45.1,4.15
+ML mover top2 (direction = higher of up/down),2.0,close,stop first,5822,39.5,0.156,1.14,76.8,-101.4,1.05
+ML mover top2 (direction = higher of up/down),2.0,close,target first,5822,39.5,0.156,1.14,76.8,-101.4,1.05
+ML long-only top2,0.75,2.0,stop first,5822,21.9,-0.278,0.58,-137.3,-1625.6,-5.35
+ML long-only top2,0.75,2.0,target first,5822,58.0,0.714,3.0,352.2,-10.5,11.43
+ML long-only top2,0.75,3.0,stop first,5822,21.6,-0.142,0.79,-69.9,-833.0,-2.12
+ML long-only top2,0.75,3.0,target first,5822,44.9,0.732,2.56,361.1,-15.7,8.56
+ML long-only top2,0.75,4.0,stop first,5822,21.3,-0.063,0.91,-31.2,-413.4,-0.81
+ML long-only top2,0.75,4.0,target first,5822,36.6,0.66,2.23,325.6,-25.9,6.55
+ML long-only top2,0.75,close,stop first,5822,21.2,0.075,1.11,37.2,-123.1,0.68
+ML long-only top2,0.75,close,target first,5822,21.2,0.075,1.11,37.2,-123.1,0.68
+ML long-only top2,1.0,2.0,stop first,5822,26.5,-0.332,0.59,-163.8,-1937.0,-5.45
+ML long-only top2,1.0,2.0,target first,5822,58.5,0.626,2.4,308.8,-14.8,9.27
+ML long-only top2,1.0,3.0,stop first,5822,25.8,-0.178,0.78,-87.6,-1042.0,-2.33
+ML long-only top2,1.0,3.0,target first,5822,46.1,0.632,2.09,311.7,-20.3,6.99
+ML long-only top2,1.0,4.0,stop first,5822,25.4,-0.091,0.89,-45.0,-561.7,-1.05
+ML long-only top2,1.0,4.0,target first,5822,38.5,0.562,1.85,277.2,-34.6,5.34
+ML long-only top2,1.0,close,stop first,5822,25.1,0.066,1.08,32.4,-146.4,0.54
+ML long-only top2,1.0,close,target first,5822,25.1,0.066,1.08,32.4,-146.4,0.54
+ML long-only top2,1.5,2.0,stop first,5822,34.0,-0.421,0.59,-207.7,-2460.9,-5.52
+ML long-only top2,1.5,2.0,target first,5822,59.5,0.472,1.78,232.7,-30.9,6.11
+ML long-only top2,1.5,3.0,stop first,5822,32.6,-0.253,0.75,-124.9,-1485.0,-2.77
+ML long-only top2,1.5,3.0,target first,5822,48.5,0.464,1.6,228.8,-51.2,4.65
+ML long-only top2,1.5,4.0,stop first,5822,31.8,-0.167,0.84,-82.3,-978.6,-1.63
+ML long-only top2,1.5,4.0,target first,5822,42.0,0.396,1.46,195.3,-89.4,3.46
+ML long-only top2,1.5,close,stop first,5822,31.4,0.004,1.0,1.8,-278.7,0.03
+ML long-only top2,1.5,close,target first,5822,31.4,0.004,1.0,1.8,-278.7,0.03
+ML long-only top2,2.0,2.0,stop first,5822,40.6,-0.439,0.62,-216.5,-2563.6,-4.93
+ML long-only top2,2.0,2.0,target first,5822,60.2,0.343,1.47,169.3,-62.5,3.99
+ML long-only top2,2.0,3.0,stop first,5822,38.1,-0.268,0.77,-132.1,-1569.6,-2.57
+ML long-only top2,2.0,3.0,target first,5822,50.1,0.331,1.36,163.0,-84.3,3.06
+ML long-only top2,2.0,4.0,stop first,5822,36.8,-0.18,0.85,-88.5,-1056.1,-1.56
+ML long-only top2,2.0,4.0,target first,5822,44.3,0.271,1.27,133.5,-145.1,2.22
+ML long-only top2,2.0,close,stop first,5822,36.2,0.009,1.01,4.5,-325.8,0.06
+ML long-only top2,2.0,close,target first,5822,36.2,0.009,1.01,4.5,-325.8,0.06
+ML short-only top2,0.75,2.0,stop first,5822,25.3,-0.186,0.71,-91.6,-1099.8,-3.41
+ML short-only top2,0.75,2.0,target first,5822,63.1,0.855,3.74,421.7,-7.7,13.79
+ML short-only top2,0.75,3.0,stop first,5822,25.0,-0.02,0.97,-10.1,-376.9,-0.29
+ML short-only top2,0.75,3.0,target first,5822,49.3,0.89,3.06,438.6,-13.6,10.19
+ML short-only top2,0.75,4.0,stop first,5822,24.8,0.083,1.13,40.9,-131.4,1.01
+ML short-only top2,0.75,4.0,target first,5822,40.6,0.832,2.64,410.2,-16.1,7.98
+ML short-only top2,0.75,close,stop first,5822,24.6,0.218,1.34,107.7,-81.8,1.92
+ML short-only top2,0.75,close,target first,5822,24.6,0.218,1.34,107.7,-81.8,1.92
+ML short-only top2,1.0,2.0,stop first,5822,30.8,-0.208,0.73,-102.5,-1233.8,-3.35
+ML short-only top2,1.0,2.0,target first,5822,63.9,0.786,3.02,387.3,-10.4,11.77
+ML short-only top2,1.0,3.0,stop first,5822,30.4,-0.022,0.97,-10.6,-409.3,-0.28
+ML short-only top2,1.0,3.0,target first,5822,51.4,0.819,2.56,403.6,-18.5,8.93
+ML short-only top2,1.0,4.0,stop first,5822,30.2,0.096,1.13,47.6,-122.4,1.07
+ML short-only top2,1.0,4.0,target first,5822,43.6,0.769,2.26,379.1,-20.1,7.1
+ML short-only top2,1.0,close,stop first,5822,29.9,0.242,1.32,119.4,-87.4,1.99
+ML short-only top2,1.0,close,target first,5822,29.9,0.242,1.32,119.4,-87.4,1.99
+ML short-only top2,1.5,2.0,stop first,5822,40.3,-0.221,0.76,-108.7,-1319.9,-2.86
+ML short-only top2,1.5,2.0,target first,5822,65.8,0.67,2.3,330.2,-15.2,8.84
+ML short-only top2,1.5,3.0,stop first,5822,39.3,-0.006,0.99,-2.8,-355.5,-0.06
+ML short-only top2,1.5,3.0,target first,5822,55.0,0.701,2.03,345.5,-26.8,7.03
+ML short-only top2,1.5,4.0,stop first,5822,38.9,0.128,1.14,63.2,-77.7,1.21
+ML short-only top2,1.5,4.0,target first,5822,48.9,0.676,1.88,333.3,-27.1,5.82
+ML short-only top2,1.5,close,stop first,5822,38.4,0.282,1.3,139.0,-54.5,2.05
+ML short-only top2,1.5,close,target first,5822,38.4,0.282,1.3,139.0,-54.5,2.05
+ML short-only top2,2.0,2.0,stop first,5822,47.3,-0.205,0.8,-101.3,-1269.3,-2.3
+ML short-only top2,2.0,2.0,target first,5822,66.9,0.577,1.94,284.6,-19.1,6.91
+ML short-only top2,2.0,3.0,stop first,5822,45.6,0.015,1.01,7.4,-329.6,0.14
+ML short-only top2,2.0,3.0,target first,5822,57.8,0.626,1.8,308.4,-35.4,5.84
+ML short-only top2,2.0,4.0,stop first,5822,45.1,0.152,1.15,75.0,-79.7,1.3
+ML short-only top2,2.0,4.0,target first,5822,52.9,0.621,1.71,306.2,-34.1,5.04
+ML short-only top2,2.0,close,stop first,5822,44.4,0.315,1.3,155.3,-64.9,2.11
+ML short-only top2,2.0,close,target first,5822,44.4,0.315,1.3,155.3,-64.9,2.11
+"Rule: highest ATR%, gap direction top2",0.75,2.0,stop first,5822,16.7,-0.421,0.41,-207.5,-2450.1,-9.21
+"Rule: highest ATR%, gap direction top2",0.75,2.0,target first,5822,48.1,0.44,1.99,217.0,-14.2,6.99
+"Rule: highest ATR%, gap direction top2",0.75,3.0,stop first,5822,16.4,-0.329,0.54,-162.2,-1918.9,-5.71
+"Rule: highest ATR%, gap direction top2",0.75,3.0,target first,5822,35.8,0.396,1.72,195.1,-22.9,4.94
+"Rule: highest ATR%, gap direction top2",0.75,4.0,stop first,5822,16.4,-0.274,0.62,-135.2,-1603.0,-4.16
+"Rule: highest ATR%, gap direction top2",0.75,4.0,target first,5822,28.6,0.306,1.5,150.8,-62.0,3.41
+"Rule: highest ATR%, gap direction top2",0.75,close,stop first,5822,16.4,-0.191,0.73,-94.2,-1117.4,-2.11
+"Rule: highest ATR%, gap direction top2",0.75,close,target first,5822,16.4,-0.191,0.73,-94.2,-1117.4,-2.11
+"Rule: highest ATR%, gap direction top2",1.0,2.0,stop first,5822,21.8,-0.479,0.44,-236.0,-2788.9,-8.65
+"Rule: highest ATR%, gap direction top2",1.0,2.0,target first,5822,49.0,0.338,1.61,166.4,-20.2,4.95
+"Rule: highest ATR%, gap direction top2",1.0,3.0,stop first,5822,21.2,-0.375,0.56,-184.9,-2190.1,-5.56
+"Rule: highest ATR%, gap direction top2",1.0,3.0,target first,5822,37.9,0.293,1.44,144.7,-47.4,3.45
+"Rule: highest ATR%, gap direction top2",1.0,4.0,stop first,5822,21.0,-0.313,0.64,-154.5,-1834.8,-4.13
+"Rule: highest ATR%, gap direction top2",1.0,4.0,target first,5822,31.5,0.209,1.28,102.9,-115.9,2.2
+"Rule: highest ATR%, gap direction top2",1.0,close,stop first,5822,20.9,-0.214,0.75,-105.5,-1253.1,-2.07
+"Rule: highest ATR%, gap direction top2",1.0,close,target first,5822,20.9,-0.214,0.75,-105.5,-1253.1,-2.07
+"Rule: highest ATR%, gap direction top2",1.5,2.0,stop first,5822,29.2,-0.589,0.46,-290.3,-3434.1,-8.36
+"Rule: highest ATR%, gap direction top2",1.5,2.0,target first,5822,50.5,0.157,1.21,77.5,-85.9,2.01
+"Rule: highest ATR%, gap direction top2",1.5,3.0,stop first,5822,27.8,-0.473,0.57,-233.4,-2768.5,-5.75
+"Rule: highest ATR%, gap direction top2",1.5,3.0,target first,5822,40.7,0.109,1.12,53.5,-179.5,1.15
+"Rule: highest ATR%, gap direction top2",1.5,4.0,stop first,5822,27.4,-0.406,0.63,-199.9,-2374.6,-4.48
+"Rule: highest ATR%, gap direction top2",1.5,4.0,target first,5822,35.4,0.032,1.03,15.7,-270.9,0.31
+"Rule: highest ATR%, gap direction top2",1.5,close,stop first,5822,27.2,-0.292,0.73,-143.7,-1707.6,-2.45
+"Rule: highest ATR%, gap direction top2",1.5,close,target first,5822,27.2,-0.292,0.73,-143.7,-1707.6,-2.45
+"Rule: highest ATR%, gap direction top2",2.0,2.0,stop first,5822,35.7,-0.619,0.49,-305.4,-3612.1,-7.4
+"Rule: highest ATR%, gap direction top2",2.0,2.0,target first,5822,51.7,0.021,1.02,10.3,-237.1,0.24
+"Rule: highest ATR%, gap direction top2",2.0,3.0,stop first,5822,33.2,-0.507,0.59,-250.1,-2969.1,-5.32
+"Rule: highest ATR%, gap direction top2",2.0,3.0,target first,5822,42.8,-0.027,0.97,-13.4,-331.4,-0.27
+"Rule: highest ATR%, gap direction top2",2.0,4.0,stop first,5822,32.3,-0.447,0.64,-220.3,-2626.1,-4.33
+"Rule: highest ATR%, gap direction top2",2.0,4.0,target first,5822,38.4,-0.085,0.92,-42.0,-532.1,-0.76
+"Rule: highest ATR%, gap direction top2",2.0,close,stop first,5822,31.9,-0.309,0.75,-152.3,-1814.9,-2.32
+"Rule: highest ATR%, gap direction top2",2.0,close,target first,5822,31.9,-0.309,0.75,-152.3,-1814.9,-2.32
+"Rule: biggest gap, go with gap top2",0.75,2.0,stop first,5822,16.5,-0.428,0.4,-211.0,-2501.7,-9.64
+"Rule: biggest gap, go with gap top2",0.75,2.0,target first,5822,41.8,0.265,1.54,130.9,-25.5,4.3
+"Rule: biggest gap, go with gap top2",0.75,3.0,stop first,5822,16.5,-0.332,0.53,-163.8,-1966.3,-5.91
+"Rule: biggest gap, go with gap top2",0.75,3.0,target first,5822,31.7,0.238,1.41,117.3,-52.6,3.08
+"Rule: biggest gap, go with gap top2",0.75,4.0,stop first,5822,16.4,-0.278,0.61,-136.8,-1664.0,-4.29
+"Rule: biggest gap, go with gap top2",0.75,4.0,target first,5822,26.3,0.19,1.3,93.7,-77.4,2.2
+"Rule: biggest gap, go with gap top2",0.75,close,stop first,5822,16.4,-0.123,0.83,-60.8,-842.8,-1.09
+"Rule: biggest gap, go with gap top2",0.75,close,target first,5822,16.4,-0.123,0.83,-60.8,-842.8,-1.09
+"Rule: biggest gap, go with gap top2",1.0,2.0,stop first,5822,20.9,-0.505,0.41,-249.1,-2951.2,-9.57
+"Rule: biggest gap, go with gap top2",1.0,2.0,target first,5822,42.7,0.15,1.24,73.8,-61.6,2.24
+"Rule: biggest gap, go with gap top2",1.0,3.0,stop first,5822,20.7,-0.399,0.53,-196.7,-2343.7,-6.14
+"Rule: biggest gap, go with gap top2",1.0,3.0,target first,5822,33.8,0.127,1.18,62.5,-101.1,1.55
+"Rule: biggest gap, go with gap top2",1.0,4.0,stop first,5822,20.5,-0.338,0.61,-166.6,-2001.9,-4.58
+"Rule: biggest gap, go with gap top2",1.0,4.0,target first,5822,29.0,0.085,1.11,41.8,-149.6,0.93
+"Rule: biggest gap, go with gap top2",1.0,close,stop first,5822,20.5,-0.177,0.79,-87.1,-1122.3,-1.46
+"Rule: biggest gap, go with gap top2",1.0,close,target first,5822,20.5,-0.177,0.79,-87.1,-1122.3,-1.46
+"Rule: biggest gap, go with gap top2",1.5,2.0,stop first,5822,28.5,-0.603,0.44,-297.2,-3523.7,-8.83
+"Rule: biggest gap, go with gap top2",1.5,2.0,target first,5822,44.8,-0.033,0.96,-16.2,-307.2,-0.43
+"Rule: biggest gap, go with gap top2",1.5,3.0,stop first,5822,27.8,-0.482,0.55,-237.8,-2832.1,-6.01
+"Rule: biggest gap, go with gap top2",1.5,3.0,target first,5822,37.4,-0.051,0.94,-25.2,-392.7,-0.56
+"Rule: biggest gap, go with gap top2",1.5,4.0,stop first,5822,27.5,-0.413,0.62,-203.9,-2448.2,-4.65
+"Rule: biggest gap, go with gap top2",1.5,4.0,target first,5822,33.6,-0.077,0.92,-38.0,-543.5,-0.77
+"Rule: biggest gap, go with gap top2",1.5,close,stop first,5822,27.4,-0.236,0.78,-116.3,-1470.3,-1.75
+"Rule: biggest gap, go with gap top2",1.5,close,target first,5822,27.4,-0.236,0.78,-116.3,-1470.3,-1.75
+"Rule: biggest gap, go with gap top2",2.0,2.0,stop first,5822,34.3,-0.652,0.46,-321.6,-3803.7,-8.09
+"Rule: biggest gap, go with gap top2",2.0,2.0,target first,5822,46.3,-0.175,0.82,-86.5,-1104.8,-2.07
+"Rule: biggest gap, go with gap top2",2.0,3.0,stop first,5822,32.9,-0.531,0.57,-261.7,-3122.9,-5.75
+"Rule: biggest gap, go with gap top2",2.0,3.0,target first,5822,39.9,-0.181,0.83,-89.4,-1122.7,-1.83
+"Rule: biggest gap, go with gap top2",2.0,4.0,stop first,5822,32.4,-0.461,0.62,-227.1,-2737.1,-4.58
+"Rule: biggest gap, go with gap top2",2.0,4.0,target first,5822,36.8,-0.197,0.83,-97.1,-1233.3,-1.83
+"Rule: biggest gap, go with gap top2",2.0,close,stop first,5822,32.1,-0.264,0.78,-130.2,-1643.3,-1.78
+"Rule: biggest gap, go with gap top2",2.0,close,target first,5822,32.1,-0.264,0.78,-130.2,-1643.3,-1.78
+"Rule: biggest gap, fade gap top2",0.75,2.0,stop first,5822,32.9,0.001,1.0,0.3,-172.5,0.01
+"Rule: biggest gap, fade gap top2",0.75,2.0,target first,5822,58.0,0.69,3.0,340.1,-15.3,11.34
+"Rule: biggest gap, fade gap top2",0.75,3.0,stop first,5822,32.4,0.166,1.29,81.9,-66.9,2.37
+"Rule: biggest gap, fade gap top2",0.75,3.0,target first,5822,47.7,0.741,2.72,365.1,-20.2,9.23
+"Rule: biggest gap, fade gap top2",0.75,4.0,stop first,5822,32.1,0.268,1.47,132.0,-37.8,3.3
+"Rule: biggest gap, fade gap top2",0.75,4.0,target first,5822,41.7,0.721,2.5,355.3,-23.2,7.71
+"Rule: biggest gap, fade gap top2",0.75,close,stop first,5822,31.6,0.406,1.72,200.3,-33.9,3.73
+"Rule: biggest gap, fade gap top2",0.75,close,target first,5822,31.6,0.406,1.72,200.3,-33.9,3.73
+"Rule: biggest gap, fade gap top2",1.0,2.0,stop first,5822,37.4,-0.031,0.95,-15.4,-343.5,-0.5
+"Rule: biggest gap, fade gap top2",1.0,2.0,target first,5822,59.1,0.62,2.47,305.5,-21.3,9.48
+"Rule: biggest gap, fade gap top2",1.0,3.0,stop first,5822,36.5,0.145,1.22,71.3,-84.5,1.86
+"Rule: biggest gap, fade gap top2",1.0,3.0,target first,5822,49.6,0.667,2.28,328.8,-25.4,7.89
+"Rule: biggest gap, fade gap top2",1.0,4.0,stop first,5822,36.2,0.252,1.38,124.3,-44.8,2.85
+"Rule: biggest gap, fade gap top2",1.0,4.0,target first,5822,44.2,0.653,2.13,322.0,-28.3,6.71
+"Rule: biggest gap, fade gap top2",1.0,close,stop first,5822,35.6,0.395,1.59,194.7,-38.9,3.4
+"Rule: biggest gap, fade gap top2",1.0,close,target first,5822,35.6,0.395,1.59,194.7,-38.9,3.4
+"Rule: biggest gap, fade gap top2",1.5,2.0,stop first,5822,44.9,-0.055,0.93,-26.9,-464.0,-0.73
+"Rule: biggest gap, fade gap top2",1.5,2.0,target first,5822,61.0,0.508,1.93,250.2,-33.6,6.9
+"Rule: biggest gap, fade gap top2",1.5,3.0,stop first,5822,43.5,0.135,1.17,66.7,-137.5,1.52
+"Rule: biggest gap, fade gap top2",1.5,3.0,target first,5822,52.9,0.558,1.85,275.1,-37.1,6.08
+"Rule: biggest gap, fade gap top2",1.5,4.0,stop first,5822,43.0,0.245,1.3,120.9,-84.9,2.46
+"Rule: biggest gap, fade gap top2",1.5,4.0,target first,5822,48.8,0.564,1.78,277.9,-39.4,5.39
+"Rule: biggest gap, fade gap top2",1.5,close,stop first,5822,42.2,0.4,1.49,197.2,-64.9,3.11
+"Rule: biggest gap, fade gap top2",1.5,close,target first,5822,42.2,0.4,1.49,197.2,-64.9,3.11
+"Rule: biggest gap, fade gap top2",2.0,2.0,stop first,5822,50.0,-0.065,0.93,-31.8,-532.8,-0.76
+"Rule: biggest gap, fade gap top2",2.0,2.0,target first,5822,61.9,0.412,1.64,203.2,-49.9,5.11
+"Rule: biggest gap, fade gap top2",2.0,3.0,stop first,5822,48.1,0.125,1.14,61.9,-147.4,1.28
+"Rule: biggest gap, fade gap top2",2.0,3.0,target first,5822,55.2,0.48,1.63,236.7,-50.4,4.87
+"Rule: biggest gap, fade gap top2",2.0,4.0,stop first,5822,47.3,0.234,1.26,115.4,-110.4,2.15
+"Rule: biggest gap, fade gap top2",2.0,4.0,target first,5822,51.8,0.502,1.61,247.5,-73.4,4.51
+"Rule: biggest gap, fade gap top2",2.0,close,stop first,5822,46.5,0.401,1.44,197.6,-97.0,2.88
+"Rule: biggest gap, fade gap top2",2.0,close,target first,5822,46.5,0.401,1.44,197.6,-97.0,2.88
+"Rule: volume surge yesterday, follow yesterday top2",0.75,2.0,stop first,5822,25.2,-0.253,0.6,-124.7,-1475.4,-5.23
+"Rule: volume surge yesterday, follow yesterday top2",0.75,2.0,target first,5822,43.4,0.247,1.52,121.9,-31.9,4.21
+"Rule: volume surge yesterday, follow yesterday top2",0.75,3.0,stop first,5822,24.9,-0.174,0.73,-85.6,-1031.5,-3.0
+"Rule: volume surge yesterday, follow yesterday top2",0.75,3.0,target first,5822,34.6,0.19,1.34,93.5,-30.5,2.72
+"Rule: volume surge yesterday, follow yesterday top2",0.75,4.0,stop first,5822,24.8,-0.139,0.78,-68.6,-828.1,-2.19
+"Rule: volume surge yesterday, follow yesterday top2",0.75,4.0,target first,5822,30.6,0.138,1.23,67.8,-49.9,1.81
+"Rule: volume surge yesterday, follow yesterday top2",0.75,close,stop first,5822,24.8,-0.071,0.89,-35.1,-519.4,-0.76
+"Rule: volume surge yesterday, follow yesterday top2",0.75,close,target first,5822,24.8,-0.071,0.89,-35.1,-519.4,-0.76
+"Rule: volume surge yesterday, follow yesterday top2",1.0,2.0,stop first,5822,30.8,-0.276,0.62,-135.9,-1607.6,-4.97
+"Rule: volume surge yesterday, follow yesterday top2",1.0,2.0,target first,5822,45.7,0.172,1.3,84.6,-40.3,2.73
+"Rule: volume surge yesterday, follow yesterday top2",1.0,3.0,stop first,5822,30.2,-0.192,0.74,-94.4,-1131.1,-2.95
+"Rule: volume surge yesterday, follow yesterday top2",1.0,3.0,target first,5822,38.1,0.125,1.19,61.4,-62.3,1.69
+"Rule: volume surge yesterday, follow yesterday top2",1.0,4.0,stop first,5822,30.1,-0.155,0.79,-76.6,-921.8,-2.2
+"Rule: volume surge yesterday, follow yesterday top2",1.0,4.0,target first,5822,34.7,0.079,1.12,39.0,-89.2,0.99
+"Rule: volume surge yesterday, follow yesterday top2",1.0,close,stop first,5822,30.0,-0.082,0.89,-40.3,-586.4,-0.81
+"Rule: volume surge yesterday, follow yesterday top2",1.0,close,target first,5822,30.0,-0.082,0.89,-40.3,-586.4,-0.81
+"Rule: volume surge yesterday, follow yesterday top2",1.5,2.0,stop first,5822,38.5,-0.301,0.65,-148.3,-1753.8,-4.46
+"Rule: volume surge yesterday, follow yesterday top2",1.5,2.0,target first,5822,48.7,0.057,1.08,28.1,-118.9,0.81
+"Rule: volume surge yesterday, follow yesterday top2",1.5,3.0,stop first,5822,37.3,-0.219,0.75,-107.8,-1275.3,-2.86
+"Rule: volume surge yesterday, follow yesterday top2",1.5,3.0,target first,5822,42.7,0.026,1.03,12.6,-160.7,0.32
+"Rule: volume surge yesterday, follow yesterday top2",1.5,4.0,stop first,5822,37.0,-0.182,0.79,-89.9,-1070.1,-2.22
+"Rule: volume surge yesterday, follow yesterday top2",1.5,4.0,target first,5822,40.4,0.003,1.0,1.4,-201.8,0.03
+"Rule: volume surge yesterday, follow yesterday top2",1.5,close,stop first,5822,36.9,-0.111,0.87,-54.8,-745.2,-1.01
+"Rule: volume surge yesterday, follow yesterday top2",1.5,close,target first,5822,36.9,-0.111,0.87,-54.8,-745.2,-1.01
+"Rule: volume surge yesterday, follow yesterday top2",2.0,2.0,stop first,5822,43.2,-0.301,0.68,-148.4,-1759.0,-3.94
+"Rule: volume surge yesterday, follow yesterday top2",2.0,2.0,target first,5822,50.3,-0.017,0.98,-8.5,-186.1,-0.23
+"Rule: volume surge yesterday, follow yesterday top2",2.0,3.0,stop first,5822,41.3,-0.229,0.76,-112.8,-1334.2,-2.69
+"Rule: volume surge yesterday, follow yesterday top2",2.0,3.0,target first,5822,45.1,-0.038,0.96,-18.8,-288.1,-0.44
+"Rule: volume surge yesterday, follow yesterday top2",2.0,4.0,stop first,5822,40.9,-0.19,0.8,-93.8,-1119.2,-2.09
+"Rule: volume surge yesterday, follow yesterday top2",2.0,4.0,target first,5822,43.2,-0.05,0.94,-24.7,-323.7,-0.54
+"Rule: volume surge yesterday, follow yesterday top2",2.0,close,stop first,5822,40.6,-0.124,0.87,-61.2,-825.7,-1.06
+"Rule: volume surge yesterday, follow yesterday top2",2.0,close,target first,5822,40.6,-0.124,0.87,-61.2,-825.7,-1.06
+"Random stock, random side top2",0.75,2.0,stop first,5822,31.1,-0.167,0.71,-82.2,-980.3,-3.5
+"Random stock, random side top2",0.75,2.0,target first,5822,41.0,0.103,1.21,51.0,-37.2,1.89
+"Random stock, random side top2",0.75,3.0,stop first,5822,30.8,-0.121,0.79,-59.5,-727.6,-2.23
+"Random stock, random side top2",0.75,3.0,target first,5822,35.7,0.063,1.12,31.1,-73.5,1.03
+"Random stock, random side top2",0.75,4.0,stop first,5822,30.7,-0.108,0.81,-53.0,-657.5,-1.88
+"Random stock, random side top2",0.75,4.0,target first,5822,33.0,0.001,1.0,0.5,-159.7,0.01
+"Random stock, random side top2",0.75,close,stop first,5822,30.7,-0.101,0.82,-49.6,-617.1,-1.64
+"Random stock, random side top2",0.75,close,target first,5822,30.7,-0.101,0.82,-49.6,-617.1,-1.64
+"Random stock, random side top2",1.0,2.0,stop first,5822,37.1,-0.166,0.74,-81.7,-977.5,-3.09
+"Random stock, random side top2",1.0,2.0,target first,5822,44.6,0.058,1.11,28.6,-64.2,1.0
+"Random stock, random side top2",1.0,3.0,stop first,5822,36.7,-0.115,0.82,-56.7,-698.8,-1.91
+"Random stock, random side top2",1.0,3.0,target first,5822,40.3,0.03,1.05,14.8,-126.4,0.46
+"Random stock, random side top2",1.0,4.0,stop first,5822,36.5,-0.102,0.84,-50.3,-631.9,-1.61
+"Random stock, random side top2",1.0,4.0,target first,5822,38.2,-0.017,0.97,-8.4,-219.9,-0.25
+"Random stock, random side top2",1.0,close,stop first,5822,36.5,-0.094,0.85,-46.5,-585.9,-1.4
+"Random stock, random side top2",1.0,close,target first,5822,36.5,-0.094,0.85,-46.5,-585.9,-1.4
+"Random stock, random side top2",1.5,2.0,stop first,5822,43.9,-0.16,0.77,-78.7,-942.7,-2.58
+"Random stock, random side top2",1.5,2.0,target first,5822,48.2,-0.01,0.98,-4.9,-173.3,-0.16
+"Random stock, random side top2",1.5,3.0,stop first,5822,43.1,-0.109,0.85,-53.7,-660.1,-1.6
+"Random stock, random side top2",1.5,3.0,target first,5822,45.3,-0.011,0.98,-5.3,-197.8,-0.15
+"Random stock, random side top2",1.5,4.0,stop first,5822,42.9,-0.098,0.86,-48.4,-603.3,-1.39
+"Random stock, random side top2",1.5,4.0,target first,5822,44.0,-0.04,0.94,-19.5,-293.1,-0.54
+"Random stock, random side top2",1.5,close,stop first,5822,42.9,-0.09,0.87,-44.5,-560.4,-1.19
+"Random stock, random side top2",1.5,close,target first,5822,42.9,-0.09,0.87,-44.5,-560.4,-1.19
+"Random stock, random side top2",2.0,2.0,stop first,5822,47.2,-0.147,0.8,-72.5,-866.6,-2.19
+"Random stock, random side top2",2.0,2.0,target first,5822,49.9,-0.041,0.94,-20.0,-267.0,-0.6
+"Random stock, random side top2",2.0,3.0,stop first,5822,46.1,-0.099,0.87,-48.9,-608.6,-1.35
+"Random stock, random side top2",2.0,3.0,target first,5822,47.5,-0.031,0.96,-15.5,-240.4,-0.42
+"Random stock, random side top2",2.0,4.0,stop first,5822,45.8,-0.092,0.87,-45.5,-578.7,-1.22
+"Random stock, random side top2",2.0,4.0,target first,5822,46.5,-0.05,0.93,-24.7,-353.2,-0.64
+"Random stock, random side top2",2.0,close,stop first,5822,45.8,-0.084,0.89,-41.4,-536.0,-1.04
+"Random stock, random side top2",2.0,close,target first,5822,45.8,-0.084,0.89,-41.4,-536.0,-1.04

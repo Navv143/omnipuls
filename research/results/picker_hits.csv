@@ -1,0 +1,17 @@
+selection,picks,moved 3%+ my way,moved 3%+ either way,went 1% against first-or-later,avg open->close my way %,median favorable %,median adverse %
+ML mover top1 (direction = higher of up/down),2911,46.4,75.0,74.2,0.389,2.78,2.27
+ML long-only top1,2911,42.6,70.8,71.6,0.131,2.55,2.18
+ML short-only top1,2911,46.2,72.3,68.9,0.547,2.74,1.95
+"Rule: highest ATR%, gap direction top1",2911,32.7,65.1,76.6,-0.397,1.89,2.36
+"Rule: biggest gap, go with gap top1",2911,27.6,61.8,77.3,-0.484,1.39,2.31
+"Rule: biggest gap, fade gap top1",2911,39.0,61.8,58.9,0.484,2.31,1.39
+"Rule: volume surge yesterday, follow yesterday top1",2911,20.5,39.4,65.2,-0.104,1.45,1.54
+"Random stock, random side top1",2911,12.5,25.3,55.2,0.001,1.1,1.13
+ML mover top2 (direction = higher of up/down),5822,44.1,71.6,72.0,0.39,2.63,2.07
+ML long-only top2,5822,40.0,67.9,71.2,0.089,2.37,2.12
+ML short-only top2,5822,43.6,69.2,67.4,0.489,2.59,1.8
+"Rule: highest ATR%, gap direction top2",5822,31.1,63.1,75.9,-0.389,1.82,2.23
+"Rule: biggest gap, go with gap top2",5822,26.1,58.1,75.8,-0.436,1.38,2.17
+"Rule: biggest gap, fade gap top2",5822,36.1,58.1,58.5,0.436,2.17,1.38
+"Rule: volume surge yesterday, follow yesterday top2",5822,21.0,39.2,63.9,-0.045,1.41,1.47
+"Random stock, random side top2",5822,13.5,24.7,53.6,0.009,1.14,1.1

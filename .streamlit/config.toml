@@ -1,0 +1,29 @@
+# Omnipuls theme: dark work area with a darker sidebar. The three selectable layouts
+# (Account > Appearance) restyle the sidebar and tables on top of this.
+[theme]
+base = "dark"
+primaryColor = "#3B82F6"
+backgroundColor = "#0B1220"
+secondaryBackgroundColor = "#131D2F"
+textColor = "#E6EDF7"
+borderColor = "#22314A"
+dataframeHeaderBackgroundColor = "#1E293B"
+dataframeHeaderTextColor = "#E6EDF7"
+font = "Sora:https://fonts.googleapis.com/css2?family=Sora:wght@300..700&display=swap"
+showSidebarBorder = true
+
+[theme.sidebar]
+backgroundColor = "#070D18"
+secondaryBackgroundColor = "#131D2F"
+textColor = "#E2E8F0"
+borderColor = "#22314A"
+primaryColor = "#38BDF8"
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

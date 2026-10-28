@@ -1,0 +1,23 @@
+# Private: never upload these to GitHub
+dhan_config.json
+users.json
+user_state.json
+watchlist*.json
+.streamlit/secrets.toml
+
+# Generated on each computer
+.venv/
+__pycache__/
+dhan_cache/
+fno_cache.json
+navv.log
+*.tmp
+
+# Research downloads and caches
+research/data/
+research/cache/
+
+scan_cache/
+
+# Old copy of the app; the cloud runs app.py in this folder
+navv/
