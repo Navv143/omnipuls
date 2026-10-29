@@ -1149,6 +1149,11 @@ COLSPEC = {
     "Score": ("Score", "signed0", None), "Trend": ("Trend", "badge", None), "Supertrend": ("Supertrend", "badge", None),
     "Rating": ("Rating", "badge", None), "Buildup": ("Buildup", "badge", None), "Fut Expiry": ("Expiry", "text", None),
     "Sector": ("Sector", "text", None), "Market": ("Market", "text", None), "Signals": ("Signals", "text", None),
+    "R-factor": ("R-factor", "num0", None), "Flow Cr": ("Flow ₹ Cr", "signed0", None),
+    "Volume vs usual": ("Vol × usual", "ratio", None), "OI vs usual": ("OI × usual", "ratio", None),
+    "Range vs usual": ("Range × usual", "ratio", None), "Move / ATR": ("Move / ATR", "ratio", None),
+    "Broke yday high/low": ("Broke yday H/L", "text", None), "Big-money bars": ("Big bars", "int", None),
+    "Side": ("Side", "text", None),
 }
 FILTER_COLS = ["Sector", "Market", "Trend", "Buildup", "Rating", "Supertrend"]
 
@@ -1215,7 +1220,8 @@ def data_table(df: pd.DataFrame, key: str, labels: dict | None = None, signed: t
     spec = []
     for c in cols:
         num = pd.api.types.is_numeric_dtype(df[c])
-        t = "name" if c == name_col else ("signed" if c in signed else "num" if num else "text")
+        t = "name" if c == name_col else ("signed" if c in signed else
+                                          "int" if pd.api.types.is_integer_dtype(df[c]) else "num" if num else "text")
         spec.append({"k": c, "label": labels.get(c, c), "t": t})
     rows = [{c: _py(v) for c, v in rec.items()} for rec in df.to_dict("records")]
     live("table", rows, key=key, columns=spec, filters=[], max_height=height, csv_name=key, placeholder="Search…")
@@ -3375,19 +3381,117 @@ def page_apex():
                "wait for the shakeout against it, trail the stop. Not backtested here: Dhan keeps no option OI history "
                "for expired contracts, so only the latest session can be shown.")
 
-    st.subheader("Sectors by smart money")
-    st.caption("Rupee value of fresh positions in each sector's stock futures today (near month, OI change x price): "
-               "long build-up counts fully bullish, short covering half, short build-up fully bearish, long "
-               "unwinding half. Stocks are picked from the sector the money favours.")
+    st.page_link(P["smart"], label="Smart money sectors and their best R-factor stocks", icon=":material/insights:")
+
+
+def smart_money_stocks(svc) -> tuple[pd.DataFrame, object]:
+    """Every F&O stock with its live price, today's futures buildup and rupee flow, and its R-factor."""
+    res, _ = safe(oi_data, True)
+    flows = SC.stock_flows(res[0]) if res else pd.DataFrame()
+    bars, nifty_df = svc.bars()
+    if not bars or nifty_df is None or nifty_df.empty:
+        return pd.DataFrame(), None
+    session = SC.session_of(nifty_df)
+    S = SC.prepare(bars, session)
+    rf = SC.r_factor(S, svc.oi() if hasattr(svc, "oi") else {})
+    if rf.empty:
+        return rf, session
+    rf = rf.drop(columns=["Buildup", "OI chg %", "Side", "Sector"], errors="ignore")
+    rf["Prev Close"] = rf["Stock"].map(lambda s: S[s].prev_close if s in S else np.nan)
+    rf["Chg %"] = rf["Move %"]
+    if not flows.empty:
+        f = flows.set_index("Stock")
+        rf["Fut LTP"] = rf["Stock"].map(f["Fut LTP"])
+        rf["OI Chg %"] = rf["Stock"].map(f["OI Chg %"])
+        rf["Buildup"] = rf["Stock"].map(f["Buildup"]).fillna("")
+        rf["Flow Cr"] = rf["Stock"].map(f["flow"])
+    for c, v in (("Fut LTP", np.nan), ("OI Chg %", np.nan), ("Buildup", ""), ("Flow Cr", np.nan)):
+        if c not in rf:
+            rf[c] = v
+    rf["Sector"] = rf["Stock"].map(U.FNO_SECTOR_OF).fillna("Other")
+    rf["Symbol"] = rf["Stock"].map(U.fno_yahoo)
+    return rf, session
+
+
+SMART_COLS = ["Stock", "Price", "Chg %", "R-factor", "Buildup", "OI Chg %", "Flow Cr", "Volume vs usual",
+              "OI vs usual", "Range vs usual", "Move / ATR", "Broke yday high/low", "Big-money bars", "Sector"]
+
+
+def page_smart_money():
+    status_strip()
+    st.header("Smart money sectors")
+    if not DHAN_DATA:
+        need_dhan()
+        return
+    st.caption("Sectors ranked by fresh positions in their stock futures today, not by price or volume. Inside each "
+               "sector, stocks are ranked by R-factor: how unusual today's volume, futures OI change, range and move "
+               "are versus the same time window on the last 20 sessions (0-100, across all F&O stocks). TradeFinder's "
+               "way: take the sector the money favours, then its top 2-3 R-factor stocks moving with it.")
+    svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
+    svc.set_universe(scan_universe("All F&O stocks"))
+    svc.touch()
+    smart_money_body(svc)
+
+
+@st.fragment(run_every=30)
+def smart_money_body(svc):
     sf = sector_flow_table()
     if DSTAT.get("hist_left_oi", 0):
         st.info(f"Loading previous-day open interest: {DSTAT['hist_left_oi']} contracts to go, so sectors are still "
                 "filling in.", icon="⏳")
     if sf.empty:
         st.caption("No futures OI data yet.")
+        return
+    done, total = svc.progress()
+    with st.spinner("Loading stock bars…"):
+        rf, session = smart_money_stocks(svc)
+    if done < total:
+        st.progress(done / max(total, 1), text=f"Loading earlier sessions for R-factor: {done} of {total} stocks.")
+    if session is not None:
+        live_today = session.date() == datetime.now(IST).date()
+        st.caption(("Live session" if live_today else f"Market closed: showing the {session:%a %d %b} session") +
+                   " · refreshes every 30 s")
+
+    # ---- best picks: top R-factor stocks moving with a favoured sector
+    st.subheader("Best picks")
+    if rf.empty:
+        st.caption("Stock bars are still loading.")
     else:
-        data_table(sf, "apex_sectors", signed=("Smart money (Rs cr)", "Bias %", "Price move %"), name_col="Sector",
-                   height=520)
+        flow = sf.set_index("Sector")["Flow"]
+        bull_b, bear_b = ("Long buildup", "Short covering"), ("Short buildup", "Long unwinding")
+        sec_flow = rf["Sector"].map(flow)
+        with_money = (((sec_flow == "Bullish") & (rf["Chg %"] > 0) & rf["Buildup"].isin(bull_b)) |
+                      ((sec_flow == "Bearish") & (rf["Chg %"] < 0) & rf["Buildup"].isin(bear_b)))
+        picks = rf[with_money].copy()
+        picks["Side"] = np.where(picks["Chg %"] > 0, "BUY / CE", "SELL / PE")
+        picks = picks.groupby("Sector", sort=False).head(3).head(10)
+        if picks.empty:
+            st.caption("No stock is moving with a bullish or bearish sector yet.")
+        else:
+            show_table(picks, ["Stock", "Side"] + SMART_COLS[1:], "smart_picks", height=420)
+            st.caption("Stocks in a Bullish sector that are up with long build-up or short covering in their future "
+                       "(Bearish: down with short build-up or long unwinding), top 3 per sector by R-factor, best 10 "
+                       "overall. Then check the radar's yesterday high/low break and option writing before entry.")
+
+    # ---- sector table
+    st.subheader("Sectors by smart money")
+    data_table(sf, "smart_sectors", signed=("Smart money (Rs cr)", "Bias %", "Price move %"), name_col="Sector",
+               height=480)
+    st.caption("Rupee value of fresh positions in each sector's stock futures today (near month, OI change x price): "
+               "long build-up counts fully bullish, short covering half, short build-up fully bearish, long "
+               "unwinding half.")
+
+    # ---- stocks per sector
+    if rf.empty:
+        return
+    st.subheader("Stocks in each sector")
+    for _, r in sf.iterrows():
+        g = rf[rf["Sector"] == r["Sector"]]
+        if g.empty:
+            continue
+        with st.expander(f"{r['Sector']} · {r['Flow']} · ₹{r['Smart money (Rs cr)']:+,.0f} cr · {len(g)} stocks",
+                         expanded=False):
+            show_table(g, SMART_COLS[:-1], f"smart_sec_{r['Sector']}", height=420)
 
 
 def _sign_out():
@@ -3404,6 +3508,7 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("oi", page_oi, "OI Analysis", ":material/stacked_bar_chart:"),
     ("options", page_option_chain, "Option Chain", ":material/table_chart:"),
     ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
+    ("smart", page_smart_money, "Smart Money Sectors", ":material/insights:"),
     ("crypto", page_crypto, "Crypto", ":material/currency_bitcoin:"),
     ("forex", page_forex, "Forex", ":material/currency_exchange:"),
     ("currency", page_currency, "Currency (INR)", ":material/currency_rupee:"),
@@ -3423,7 +3528,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "dashboard"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({
-    "Markets": [P["dashboard"], P["setups"], P["scanners"], P["indices"], P["sectors"], P["fno"], P["oi"], P["options"], P["apex"], P["crypto"], P["forex"], P["currency"],
+    "Markets": [P["dashboard"], P["setups"], P["scanners"], P["indices"], P["sectors"], P["fno"], P["oi"], P["options"], P["apex"], P["smart"], P["crypto"], P["forex"], P["currency"],
                 P["commodities"]],
     "Dhan": [P["mcx"], P["cdsfut"]] + ([P["portfolio"], P["dhan"]] if IS_ADMIN else []),
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["account"]],

@@ -438,6 +438,31 @@ def option_writing(chain: pd.DataFrame, spot: float, side: int, strikes: int = 3
 SMART_WEIGHT = {"Long buildup": 1.0, "Short covering": 0.5, "Short buildup": -1.0, "Long unwinding": -0.5}
 
 
+def stock_flows(fut: pd.DataFrame) -> pd.DataFrame:
+    """Per stock: oi_cr = rupee value of today's futures OI change (Rs crore), flow = the same signed by buildup."""
+    need = {"Stock", "Sector", "Fut LTP", "Fut Chg %", "OI", "OI Chg %", "Buildup"}
+    if fut is None or fut.empty or not need <= set(fut.columns):
+        return pd.DataFrame()
+    d = fut.dropna(subset=["Fut LTP", "OI", "OI Chg %"]).copy()
+    prev = d["OI"] / (1 + d["OI Chg %"] / 100)
+    d["oi_cr"] = (d["OI"] - prev).abs() * d["Fut LTP"] / 1e7
+    d["flow"] = d["oi_cr"] * d["Buildup"].map(SMART_WEIGHT).fillna(0)
+    return d
+
+
+def r_factor(S: dict, oi: dict | None = None, at: dtime | None = None, lookback: int = 20) -> pd.DataFrame:
+    """TradeFinder-style relative factor for every stock: how unusual today is versus the same time window on its
+    last `lookback` sessions. Average percentile (0-100, across all stocks today) of volume vs usual, futures OI change
+    vs usual, range vs usual (the 'beta spread') and move vs ATR. Turnover is volume x price, so volume covers it.
+    Not backtested as a ranking on its own; the volume and move parts are the tested radar score."""
+    df = radar(S, oi, at=at, lookback=lookback, min_move=0.0)
+    if df.empty:
+        return df
+    parts = ["Volume vs usual", "OI vs usual", "Range vs usual", "Move / ATR"]
+    df["R-factor"] = pd.concat([df[c].rank(pct=True) for c in parts], axis=1).mean(axis=1, skipna=True) * 100
+    return df.drop(columns=["Rank", "Score"]).sort_values("R-factor", ascending=False).reset_index(drop=True)
+
+
 def sector_smart_money(fut: pd.DataFrame, min_stocks: int = 3) -> pd.DataFrame:
     """Rank sectors by fresh futures positions, not by price or volume.
 
@@ -445,14 +470,10 @@ def sector_smart_money(fut: pd.DataFrame, min_stocks: int = 3) -> pd.DataFrame:
     its buildup: long buildup counts fully bullish, short covering half bullish (shorts leaving, no new buyers),
     short buildup fully bearish, long unwinding half bearish. Summed per sector, in Rs crore.
     """
-    need = {"Stock", "Sector", "Fut LTP", "Fut Chg %", "OI", "OI Chg %", "Buildup"}
-    if fut is None or fut.empty or not need <= set(fut.columns):
-        return pd.DataFrame()
-    d = fut.dropna(subset=["Fut LTP", "OI", "OI Chg %"]).copy()
+    d = stock_flows(fut)
+    if d.empty:
+        return d
     d = d[d["Sector"] != "Other"]
-    prev = d["OI"] / (1 + d["OI Chg %"] / 100)
-    d["oi_cr"] = (d["OI"] - prev).abs() * d["Fut LTP"] / 1e7
-    d["flow"] = d["oi_cr"] * d["Buildup"].map(SMART_WEIGHT).fillna(0)
     d["bull"] = d["Buildup"].isin(["Long buildup", "Short covering"])
     d["bear"] = d["Buildup"].isin(["Short buildup", "Long unwinding"])
     rows = []
