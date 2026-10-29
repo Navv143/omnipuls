@@ -48,6 +48,59 @@ move size, for stocks 1%+ from yesterday's close. Only the #1 stock at 10:30 hel
 direction) do not help. 3+ by 10:30: -0.01% per trade (+0.06% in 2021-24, -0.11% in 2025, -0.09% in 2026); buying
 loses (-0.07%), shorting is +0.13% but only from 2022-24 (H2 -0.02%). OI cannot be tested (no expired-futures history).
 
+## What big movers look like, and NR5/NR7/box/ATR-squeeze/OBV breakouts (Oct 2026)
+
+`research/fetch_recent.py` (latest bars + 45 days of near+next futures OI), `research/movers_study.py`.
+Last month (28 Sep - 29 Oct 2026, 22 sessions): of 4,004 stock-days that reached +-1% from yesterday's close, 405
+were the day's top-10 gainers/losers. Movers start at the open: half had moved 1% by the first 5-minute bar, 2% by
+9:35, 3% by 10:20. At the first 1% they differed from stocks that stalled in volume (median 1.3x usual vs 0.85x;
+3x+ volume -> 38% became top-10 vs 10% base), gap the same way (25% vs 8%) and an early start (72% before 9:30).
+They did NOT differ in NR5 (19% vs 18%), NR7, inside day, tight 10-day box, ATR squeeze or OBV leading; futures OI
+was added less often for movers (60% vs 67%). Even with 3x+ volume the median move left after the first 1% was +0.19%.
+5 years, 206 stocks, breakout of yesterday's high/low or the 10-day box by a 5-minute close (9:20-13:00), entry next
+candle, 1% stop: all 84 versions lose after costs (-0.03% to -0.18% per trade); only 12-24% reach +2% before the stop
+(an option buyer with a +2%/-1% plan needs 33%+). Adding volume 2x+ raises the +2% share to ~22% but still loses.
+
+## Time-of-day volume spikes, 3-minute and 5-minute (Oct 2026)
+
+`research/fetch_1min.py` (1-minute bars, last 40 days) and `research/volume_spikes.py`. Volume ratio = bar volume vs
+the same time slot on the stock's previous 10 sessions; trade the candle's direction from the next bar's open.
+Last month (3-minute, 17 sessions): after 5x+ and 10x+ spikes the average move is about 0 at 3-60 minutes, the same
+as normal bars; held to the close -0.11% after costs; +1% before -0.5% in 26-28% of trades (2:1 needs 33%+).
+Stock-days with a 5x+ spike were top-10 movers 11.6% of the time = the base rate; only 5% of movers had a spike
+before their first 1%. 5 years (5-minute, 1,196 sessions, 464k spikes): same answer every year (-0.08% to -0.13%
+held to the close; 10x+ spikes +0.015% after 60 minutes). Volume spikes mark activity, not direction.
+
+## Sector money flow, TradeFinder-style (Oct 2026)
+
+`research/sector_flow.py`, 5 years, 206 stocks. At 9:45/10:00/10:15/10:30 the sector with the strongest average
+move in ATRs (optionally 70%+ breadth and/or 1.3x volume), then its stock with the highest R-factor proxy (volume vs
+usual + move/ATR), entry next candle, "hit and run": 1% stop else exit after 30 minutes. All 64 versions lose
+(-0.08% to -0.15% per trade after 0.12% costs, every half and 2025-26); the chosen stock does no better than a
+random stock of the same sector or the market-wide top R stock. Last month at 10:00: 22 trades, 50% wins, -0.07%
+average before costs. Holding to the close with the 1% stop is about 0.
+
+## TradeFinder's verified trades vs our data (Oct 2026)
+
+`research/tradefinder_trades.txt`: their Sensibull verified P&L (fanged-okra, Upstox), 2 Dec 2024 - 29 Oct 2026:
+402 trading days, 369 positive (92%), about Rs 61 lakh shown, losses avg -Rs 2,465; 22 no-trade days, 44 days
+not shared, no long-term statement. 398 of 402 days are stock options, 397 on a single stock; 183 different stocks;
+63% calls. `research/tradefinder_match.py` (360 trades matched to Dhan 5-minute data): at 10:00 their stock is
+already in the top 6% of F&O stocks by move that way (median +1.9%, 0.7 ATR), volume 1.5-1.8x its 20-day same-time
+average, 77% had crossed yesterday's high (CE) / low (PE) by 10:30 (median 9:25; base 29%), sector moving the same
+way 77% (base 50%). From 10:00 it moved a further +3.1% (median; base +0.7%) and finished in the day's top 10% of
+movers 87% of the time. Our radar-style score at 10:30 ranks their stock median #10 (top 20: 71%, #1: 13%): the
+radar finds the shortlist; the final pick from it is where their edge is (OI/option data we don't have, plus judgement).
+Their 10 YouTube videos (playlist "TRADEFINDER aakash") describe: Nifty bias from index option/futures OI build-up in
+the first 15-60 min; trade the extreme sector (strongest/weakest 9:15-10:00); in it the top 2-3 R-factor stocks
+(R-factor = volume, OI, beta spread, turnover from 9:15 to now vs the same window on the last 20 days, futures and
+options); avoid heavyweights; first 5-15 min low (high for PE) never broken; decisive first 30 min; breakout of
+several levels at once (day high, swing high, yesterday's high); range bigger than yesterday's; move with Nifty;
+entry mostly 9:45-10:30 on a pullback or strong candle; one trade a day; exit when sideways or a big opposite
+candle. Tested on their picks: the morning low/high held for 94% of them but also for 91% of other movers, so it does
+not narrow the list; the shortlist (broke yesterday's high/low, sector same way, volume 1.5x) holds their stock in
+its top 5 on ~27% of days.
+
 ## Top-5 gainers/losers at 10:00, lowest-volume opposite candle break (Oct 2026)
 
 `lvc.py`, `run_lvc.py`, `run_lvc2.py`. About 5-8 signals a day, 2015-2026. All 8 basic variants lose after costs

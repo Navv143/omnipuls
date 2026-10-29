@@ -50,7 +50,9 @@ RESEARCH = [
      "Dhan 5-minute data, 205 F&O stocks, Nov 2021-Oct 2026: only the single top-ranked stock at 10:30 held up "
      "(t-stat 3.1, +0.10% in 2025-26), and it was 1 of 25 versions tried. Big-money bars (4x volume with the move) "
      "were tested too and add nothing (3+ by 10:30: -0.01%, -0.1% in 2025-26). OI has no history to test, so the radar "
-     "logs its 10:30 picks daily to build a track record."),
+     "logs its 10:30 picks daily to build a track record. Shortlist = TradeFinder pattern from 360 of their verified "
+     "trades (broke yesterday's high/low, sector same way, volume 1.5x+ 20-day usual): its top 5 held their stock on "
+     "~27% of days."),
     ("Swing calls: 20-day breakout on 2x volume, hold 10 days", "—", "weak", "+1.36%", "+16.5%", "8/12",
      "Random stocks held the same way made +9.6%: mostly bull market and today's-index bias."),
 ]
@@ -323,15 +325,23 @@ def _oi_window(o: pd.DataFrame, session, t_last, hhmm: str, lookback: int):
     return chg, usual, bar_chg
 
 
-def radar(S: dict, oi: dict | None = None, at: dtime | None = None, lookback: int = 10, recent: int = 6,
-          min_move: float = 0.01, big_x: float = 4.0) -> pd.DataFrame:
+def radar(S: dict, oi: dict | None = None, at: dtime | None = None, lookback: int = 20, recent: int = 6,
+          min_move: float = 0.01, big_x: float = 4.0, fit_vol: float = 1.5) -> pd.DataFrame:
     """Rank stocks 1%+ from yesterday's close by how unusual today's window is versus the same window on the last
-    `lookback` sessions. Score = within-day percentile of volume vs usual + move vs ATR + move size (the tested part).
-    OI and big-money bars are shown alongside (not in the score: there is no OI history to test them on)."""
+    `lookback` sessions (20, as TradeFinder's R-factor). Score = within-day percentile of volume vs usual + move vs
+    ATR + move size (the tested part). Also: yesterday's high (up) / low (down) broken and when, the stock's sector
+    move, futures OI and big-money bars. 'TradeFinder fit' = broke yesterday's high/low, sector moving the same way and
+    volume 1.5x+ usual: the pattern of 360 verified TradeFinder picks (research/tradefinder_match.py)."""
+    import universe as U
     oi = oi or {}
+    cut = {s: (st.today if at is None else st.today[st.today.index.time < at]) for s, st in S.items()}
+    moves = {s: float(t["Close"].iloc[-1]) / S[s].prev_close - 1 for s, t in cut.items() if not t.empty}
+    sec_of = {s: U.FNO_SECTOR_OF.get(s, "Other") for s in moves}
+    sec_mv = pd.Series(moves).groupby(pd.Series(sec_of)).mean() if moves else pd.Series(dtype=float)
+    sec_n = pd.Series(sec_of).value_counts() if moves else pd.Series(dtype=int)
     rows = []
     for s in S.values():
-        t = s.today if at is None else s.today[s.today.index.time < at]
+        t = cut[s.sym]
         if t.empty:
             continue
         last = t.index[-1]
@@ -341,6 +351,14 @@ def radar(S: dict, oi: dict | None = None, at: dtime | None = None, lookback: in
         if abs(move) < min_move:
             continue
         side = 1 if move > 0 else -1
+        beyond = t["Close"] > s.pdh if side > 0 else t["Close"] < s.pdl
+        broke = beyond.idxmax().strftime("%H:%M") if beyond.any() else ""
+        first15, later = t[t.index.time < dtime(9, 30)], t[t.index.time >= dtime(9, 30)]
+        held = "" if first15.empty or later.empty else \
+            ("Yes" if (later["Low"].min() >= first15["Low"].min() if side > 0
+                       else later["High"].max() <= first15["High"].max()) else "No")
+        sec = sec_of.get(s.sym, "Other")
+        smv = float(sec_mv.get(sec, np.nan)) if sec != "Other" and sec_n.get(sec, 0) >= 3 else np.nan
         rng_u, vol_u, rvol_u, slot_avg = _hist_window(s, hhmm, lookback, recent)
         vol_now, rvol_now = t["Volume"].sum(), t["Volume"].tail(recent).sum()
         rng_now = (t["High"].max() - t["Low"].min()) / s.open
@@ -349,8 +367,11 @@ def radar(S: dict, oi: dict | None = None, at: dtime | None = None, lookback: in
              "Volume vs usual": vol_now / vol_u if vol_u > 0 else np.nan,
              "Last 30 min vol vs usual": rvol_now / rvol_u if rvol_u > 0 else np.nan,
              "Range vs usual": rng_now / rng_u if rng_u > 0 else np.nan,
+             "Broke yday high/low": broke, "Morning low/high held": held, "Sector": sec, "Sector move %": smv * 100,
              "OI chg %": np.nan, "OI vs usual": np.nan, "Buildup": "", "Big-money bars": 0, "Last big bar": "",
              "As of": hhmm}
+        r["TradeFinder fit"] = "Yes" if (broke and np.isfinite(smv) and np.sign(smv) == side
+                                         and np.isfinite(r["Volume vs usual"]) and r["Volume vs usual"] >= fit_vol) else ""
         ow = _oi_window(oi.get(s.sym), last.normalize(), last, hhmm, lookback)
         bar_oi = None
         if ow is not None:

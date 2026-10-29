@@ -2543,7 +2543,7 @@ def scanner_body(svc, uni):
                    "1% stop, exit 15:20. OI readings are unreliable in expiry week, when positions roll into these "
                    "contracts.")
         c1, c2 = st.columns(2)
-        lookback = c1.select_slider("Compare with the last", [5, 10, 20], value=10, key="rad_lb",
+        lookback = c1.select_slider("Compare with the last", [5, 10, 20], value=20, key="rad_lb",
                                     format_func=lambda n: f"{n} sessions")
         asof = c2.radio("Window up to", ["Now", "10:30 (tested time)"], horizontal=True, key="rad_at")
         oi = svc.oi() if hasattr(svc, "oi") else {}
@@ -2553,7 +2553,21 @@ def scanner_body(svc, uni):
         if rd.empty:
             st.caption("No stock is 1%+ from yesterday's close yet.")
         else:
-            data_table(rd, "scan_radar", signed=("Move %", "From open %", "OI chg %"), name_col="Stock", height=520)
+            fit = rd[rd["TradeFinder fit"] == "Yes"].head(5)
+            st.markdown("**Shortlist: TradeFinder pattern** (broke yesterday's high for CE / low for PE, its sector "
+                        "moving the same way, volume 1.5x+ its 20-day usual for this time; top 5 by score)")
+            if fit.empty:
+                st.caption("No stock fits the pattern yet.")
+            else:
+                data_table(fit, "scan_radar_fit", signed=("Move %", "From open %", "Sector move %", "OI chg %"),
+                           name_col="Stock", height=230)
+            st.caption("Checked on 360 of their verified trades (Dec 2024 - Oct 2026): at 10:30 this top 5 held their "
+                       "stock on about 27% of days, the top 10 on about 37%. Their pick then ran a further 3% on "
+                       "average; the rest of the shortlist usually does not. Use it to narrow the field, then apply "
+                       "your own confirmation (5-minute candle, OI build-up) and a small stop.")
+            with st.expander(f"All {len(rd)} stocks 1%+ from yesterday's close"):
+                data_table(rd, "scan_radar", signed=("Move %", "From open %", "Sector move %", "OI chg %"),
+                           name_col="Stock", height=520)
         if live_today:
             radar_log_today(S, oi, session)
         with st.expander("Track record of the 10:30 picks (logged daily)"):

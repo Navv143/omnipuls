@@ -27,3 +27,6 @@ radar_log.csv
 
 # Large research outputs (re-create with the research scripts)
 research/results/bigbars_events.csv.gz
+research/results/*_trades.csv.gz
+research/results/volume_spikes_*.csv.gz
+research/results/selftest_*
