@@ -566,6 +566,25 @@ def nearest_futures(seg: str, instrument: str, symbols: list[str] | None = None,
     return out
 
 
+def live_futures(seg: str, instrument: str, symbols: list[str] | None = None, n: int = 2, cfg=None) -> dict:
+    """{underlying: [{"id", "expiry"}, ...]} for the n nearest unexpired futures (near and next month by default)."""
+    df = instruments(seg, cfg)
+    if "INSTRUMENT" in df.columns:
+        df = df[df["INSTRUMENT"] == instrument]
+    if df.empty:
+        return {}
+    df = df.assign(_u=_underlying(df).str.upper(), _e=_expiry(df))
+    df = df[df["_e"].notna() & (df["_e"] >= datetime.now(IST).date())]
+    if symbols:
+        df = df[df["_u"].isin([s.upper() for s in symbols])]
+    out: dict = {}
+    for _, r in df.sort_values("_e").iterrows():
+        lst = out.setdefault(r["_u"], [])
+        if len(lst) < n:
+            lst.append({"id": int(float(r["SECURITY_ID"])), "expiry": r["_e"]})
+    return out
+
+
 def fno_underlyings(cfg=None) -> dict:
     """{stock symbol: lot size} for stock futures, from Dhan's F&O instrument list."""
     fut = nearest_futures("NSE_FNO", "FUTSTK", cfg=cfg)

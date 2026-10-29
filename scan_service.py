@@ -21,7 +21,7 @@ import dhan as D
 IST = timezone(timedelta(hours=5, minutes=30))
 CACHE = Path(__file__).with_name("scan_cache")
 NIFTY = "__NIFTY__"
-VERSION = 1
+VERSION = 2  # bump when ScanService changes, so a running app replaces its old loader
 INSTANCES: list = []
 
 
@@ -34,6 +34,23 @@ def _naive(df: pd.DataFrame) -> pd.DataFrame:
         idx = idx.tz_convert("Asia/Kolkata").tz_localize(None)
     df.index = idx
     return df[~df.index.duplicated(keep="last")].sort_index()
+
+
+def combine_oi(frames: list) -> pd.DataFrame:
+    """Sum the OI of several futures contracts on the 5-minute grid (each contract carried forward within the day)."""
+    cols = []
+    for i, df in enumerate(frames):
+        if df is None or df.empty or "OI" not in df:
+            continue
+        s = df["OI"].copy()
+        s.index = s.index.floor("5min")
+        cols.append(s.groupby(level=0).last().rename(i))
+    if not cols:
+        return pd.DataFrame()
+    m = pd.concat(cols, axis=1).sort_index()
+    m = m.groupby(m.index.normalize()).ffill().fillna(0)
+    m = m[(m.index.time >= dtime(9, 15)) & (m.index.time <= dtime(15, 30))]
+    return pd.DataFrame({"OI": m.sum(axis=1)})
 
 
 def market_hours(now: datetime | None = None) -> bool:
@@ -58,8 +75,17 @@ class ScanService:
         self._ids: dict = {}
         self._day = None
         self._eod_done = False
+        # futures open interest (Dhan only): near + next month summed per 5-minute bar, so rollover doesn't break it
+        self.oi_raw: dict[str, dict[int, pd.DataFrame]] = {}
+        self.oi_hist: dict[str, pd.DataFrame] = {}
+        self.oi_status = "off" if source != "dhan" else "starting"
+        self._fut: dict = {}
+        self._oi_day = None
         self.thread = threading.Thread(target=self._run, name="scan-service", daemon=True)
         self.thread.start()
+        if source == "dhan":
+            self.oi_thread = threading.Thread(target=self._run_oi, name="scan-oi", daemon=True)
+            self.oi_thread.start()
 
     # ---------------------------------------------------------------- public
 
@@ -93,6 +119,12 @@ class ScanService:
             df = h if t is None or t.empty else pd.concat([h, t])
             out[s] = df[~df.index.duplicated(keep="last")]
         return out, out.pop(NIFTY, None)
+
+    def oi(self) -> dict:
+        """{sym: DataFrame with column OI (near + next futures summed) on the 5-minute grid}. Only loaded stocks."""
+        with self._lock:
+            raw = {s: dict(v) for s, v in self.oi_raw.items()}
+        return {s: combine_oi(list(v.values())) for s, v in raw.items() if v}
 
     def freshness(self) -> float | None:
         """Seconds since the oldest 'today' update among loaded stocks (None outside market hours)."""
@@ -196,6 +228,81 @@ class ScanService:
             except Exception:
                 pass
         self.last_pass = time.time()
+
+    def _fetch_fut(self, cid: int, days: int) -> pd.DataFrame:
+        df = _naive(D.intraday("NSE_FNO", cid, "FUTSTK", 5, days, self.cfg))
+        return df[["OI"]] if "OI" in df else pd.DataFrame()
+
+    def _run_oi(self):
+        npass = 0
+        while not self._stop:
+            try:
+                now = datetime.now(IST)
+                day = now.date()
+                if day != self._oi_day:
+                    self._oi_day = day
+                    with self._lock:
+                        self.oi_raw, self.oi_hist = {}, {}
+                    self.oi_status = "loading futures list"
+                    self._fut = D.live_futures("NSE_FNO", "FUTSTK", n=2, cfg=self.cfg)
+                with self._lock:
+                    want = [s for s in self.syms if s.upper() in self._fut]
+                cdir = self._cache_dir(day)
+                missing = [s for s in want if s not in self.oi_hist]
+                for i, s in enumerate(missing, 1):  # history: once a day, cached on disk
+                    if self._stop:
+                        return
+                    hist = {}
+                    for c in self._fut[s.upper()]:
+                        f = cdir / f"fut_{c['id']}.pkl"
+                        try:
+                            df = pickle.loads(f.read_bytes()) if f.exists() else None
+                        except Exception:
+                            df = None
+                        if df is None:
+                            try:
+                                df = self._fetch_fut(c["id"], 40)
+                            except Exception as e:
+                                self.error = f"{s} futures: {e}"
+                                df = pd.DataFrame()
+                            if not df.empty:
+                                df = df[df.index.normalize() < pd.Timestamp(day)]
+                            f.write_bytes(pickle.dumps(df))
+                        hist[c["id"]] = df
+                    with self._lock:
+                        self.oi_hist[s] = pd.DataFrame()  # marker: history done
+                        self.oi_raw[s] = hist
+                    self.oi_status = f"loading futures OI {i}/{len(missing)}"
+                active = time.time() - self.touched < 15 * 60
+                if market_hours(now) and active and want:
+                    for s in want:  # today: near month every pass, next month every 3rd pass
+                        if self._stop:
+                            return
+                        for k, c in enumerate(self._fut[s.upper()]):
+                            if k > 0 and npass % 3:
+                                continue
+                            try:
+                                t = self._fetch_fut(c["id"], 1)
+                            except Exception as e:
+                                self.error = f"{s} futures: {e}"
+                                continue
+                            if t.empty:
+                                continue
+                            with self._lock:
+                                old = self.oi_raw.get(s, {}).get(c["id"], pd.DataFrame())
+                                old = old[old.index.normalize() < pd.Timestamp(day)] if not old.empty else old
+                                self.oi_raw.setdefault(s, {})[c["id"]] = pd.concat([old, t[t.index.normalize() >= pd.Timestamp(day)]])
+                    npass += 1
+                    self.oi_status = "ready"
+                    time.sleep(20)
+                else:
+                    if not missing:
+                        self.oi_status = "ready"
+                    time.sleep(15)
+            except Exception as e:
+                self.error = str(e)[:200]
+                self.oi_status = "error, retrying"
+                time.sleep(20)
 
     def _run(self):
         while not self._stop:

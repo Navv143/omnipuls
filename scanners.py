@@ -45,15 +45,16 @@ RESEARCH = [
      "Gap-down 2.5%+ and 2.5% worse than its sector."),
     ("Version 3: top-2 movers, 15-min breakout with volume, Nifty check", "Shares", "ok", "+0.16% (+0.23% at 0.05%)",
      "+0.5%", "9/12", "Real but thin; the volume and Nifty filters add nothing; exit at 15:20 matters; weak in 2026."),
-    ("Momentum: 3%+ from yesterday's close by 10:00, volume 3x+, Nifty same way, 1% stop", "Shares", "test",
-     "+0.33% (+0.20% without the volume/Nifty filters)", "—", "2/2 halves",
-     "TESTING, paper trade only. Dhan 5-minute data Nov 2021-Oct 2026 on only 30 F&O stocks: positive in both halves "
-     "(t-stat 2.7; 3.8 without the filters) but win rate ~38%, and the 1% stop is assumed to fill exactly. Stocks "
-     "1-3% up/down at 9:30-11:00 lose after costs. Confirm with research/momentum_dhan.py on all F&O stocks."),
+    ("Momentum radar: #1 ranked stock at 10:30 (volume vs usual, move vs ATR, move size), 1% stop", "Shares",
+     "weak", "+0.17% (top 3: +0.07%, top 10: -0.02%)", "—", "2/2 halves",
+     "Dhan 5-minute data, 205 F&O stocks, Nov 2021-Oct 2026: only the single top-ranked stock at 10:30 held up "
+     "(t-stat 3.1, +0.10% in 2025-26), and it was 1 of 25 versions tried. Big-money bars (4x volume with the move) "
+     "were tested too and add nothing (3+ by 10:30: -0.01%, -0.1% in 2025-26). OI has no history to test, so the radar "
+     "logs its 10:30 picks daily to build a track record."),
     ("Swing calls: 20-day breakout on 2x volume, hold 10 days", "—", "weak", "+1.36%", "+16.5%", "8/12",
      "Random stocks held the same way made +9.6%: mostly bull market and today's-index bias."),
 ]
-VERDICT_LABEL = {"best": "Use", "ok": "Small edge", "weak": "Weak", "no": "Rejected", "test": "Testing"}
+VERDICT_LABEL = {"best": "Use", "ok": "Small edge", "weak": "Weak", "no": "Rejected"}
 
 
 # ---------------------------------------------------------------- preparation
@@ -268,53 +269,115 @@ def version3(S: dict, nifty: Stock | None, top=2, vol_mult=1.5, until=dtime(12, 
     return pd.DataFrame(rows), ranked.head(10)
 
 
-# ---------------------------------------------------------------- 3. momentum continuation (testing)
+# ---------------------------------------------------------------- 3. momentum radar (today's window vs the same window, last X days)
 
-def _move_and_rvol(s: Stock, t: dtime):
-    """Change from yesterday's close and volume vs the same time on the last 10 sessions, on bars before t."""
-    b = s.bars_until(t)
-    if b.empty:
+RADAR_CACHE: dict = {}
+
+
+def _hist_window(s: Stock, hhmm: str, lookback: int, recent: int):
+    """Average volume since the open, volume in the last `recent` bars, and range by hhmm on the last sessions."""
+    key = (s.sym, len(s.hist), s.hist.index[-1], hhmm, lookback, recent)
+    if key in RADAR_CACHE:
+        return RADAR_CACHE[key]
+    h = s.hist
+    t_end = dtime(*map(int, hhmm.split(":")))
+    w = h[h.index.time <= t_end]
+    g = w.groupby(w.index.normalize())
+    rng = ((g["High"].max() - g["Low"].min()) / g["Open"].first()).tail(lookback).mean()
+    cols = [c for c in s.slot_vol.columns if c <= hhmm]
+    vol = s.slot_vol[cols].fillna(0).sum(axis=1).tail(lookback).mean() if cols else np.nan
+    rcols = cols[-recent:]
+    rvol = s.slot_vol[rcols].fillna(0).sum(axis=1).tail(lookback).mean() if rcols else np.nan
+    slot_avg = s.slot_vol.tail(lookback).mean()
+    out = (float(rng), float(vol), float(rvol), slot_avg)
+    if len(RADAR_CACHE) > 5000:
+        RADAR_CACHE.clear()
+    RADAR_CACHE[key] = out
+    return out
+
+
+def _oi_window(o: pd.DataFrame, session, t_last, hhmm: str, lookback: int):
+    """OI change from the previous session's close to now, and the usual size of that change by hhmm."""
+    if o is None or o.empty:
         return None
-    last = b.index[-1]
-    avg = s.cum_avg(last.strftime("%H:%M"), 10)
-    rvol = b["Volume"].sum() / avg if np.isfinite(avg) and avg > 0 else np.nan
-    return b["Close"].iloc[-1] / s.prev_close - 1, rvol, last
+    d = o.index.normalize()
+    today = o[(d == session) & (o.index <= t_last)]
+    before = o[d < session]
+    if today.empty or before.empty:
+        return None
+    prev_close = before["OI"].iloc[-1]
+    chg = today["OI"].iloc[-1] / prev_close - 1 if prev_close > 0 else np.nan
+    days = before.index.normalize().unique()
+    t_end = dtime(*map(int, hhmm.split(":")))
+    past = []
+    for a, b in zip(days[:-1], days[1:]):
+        x = before[(before.index.normalize() == b) & (before.index.time <= t_end)]
+        p = before[before.index.normalize() == a]["OI"].iloc[-1]
+        if len(x) and p > 0:
+            past.append(abs(x["OI"].iloc[-1] / p - 1))
+    # rollover weeks (positions moving into these contracts) inflate OI change; leave out days above 3x the median
+    med = float(np.median(past)) if past else np.nan
+    clean = [x for x in past if x <= 3 * med] if past else []
+    usual = float(np.mean(clean[-lookback:])) if clean else np.nan
+    bar_chg = today["OI"].diff()
+    return chg, usual, bar_chg
 
 
-def momentum(S: dict, nifty: Stock | None, check=dtime(10, 0), move=0.03, rvol_min=3.0, stop_pct=0.01,
-             strict=True) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Stocks already 3%+ from yesterday's close at 10:00, traded the same way from the 10:00 bar open.
-    1% stop, exit 15:20. strict: also volume so far 3x+ its 10-day same-time average and Nifty moving the same way.
-    Also returns a watch list of stocks 3%+ right now (before 10:00 this is where the signals will come from)."""
-    n_chg = None
-    if nifty is not None:
-        nb = nifty.bars_until(check)
-        n_chg = nb["Close"].iloc[-1] / nifty.prev_close - 1 if len(nb) else None
-    rows, watch = [], []
-    now = dtime(23, 59)
+def radar(S: dict, oi: dict | None = None, at: dtime | None = None, lookback: int = 10, recent: int = 6,
+          min_move: float = 0.01, big_x: float = 4.0) -> pd.DataFrame:
+    """Rank stocks 1%+ from yesterday's close by how unusual today's window is versus the same window on the last
+    `lookback` sessions. Score = within-day percentile of volume vs usual + move vs ATR + move size (the tested part).
+    OI and big-money bars are shown alongside (not in the score: there is no OI history to test them on)."""
+    oi = oi or {}
+    rows = []
     for s in S.values():
-        cur = _move_and_rvol(s, now)
-        if cur and abs(cur[0]) >= move:
-            watch.append({"Stock": s.sym, "Change %": cur[0] * 100, "From open %": (s.ltp / s.open - 1) * 100,
-                          "Gap %": s.gap * 100, "RVOL so far": cur[1], "As of": cur[2].strftime("%H:%M")})
-        at = _move_and_rvol(s, check)
-        if at is None or at[2].time() < dtime(9, 50):  # need the 9:55 bar: the move must be measured at 10:00
+        t = s.today if at is None else s.today[s.today.index.time < at]
+        if t.empty:
             continue
-        chg, rvol, last = at
-        if abs(chg) < move:
+        last = t.index[-1]
+        hhmm = last.strftime("%H:%M")
+        px = float(t["Close"].iloc[-1])
+        move = px / s.prev_close - 1
+        if abs(move) < min_move:
             continue
-        side = 1 if chg > 0 else -1
-        nifty_same = n_chg is not None and np.sign(n_chg) == side
-        meets = bool(np.isfinite(rvol) and rvol >= rvol_min and nifty_same)
-        if strict and not meets:
-            continue
-        et, entry = _next_bar(s, last)
-        entry = entry if entry is not None else s.ltp
-        rows.append(_row(s, side, last + pd.Timedelta(minutes=5), et, entry, entry * (1 - side * stop_pct),
-                         {"Change at 10:00 %": chg * 100, "RVOL at 10:00": rvol,
-                          "Nifty same way": "Yes" if nifty_same else "No", "Volume and Nifty OK": "Yes" if meets else "No",
-                          "Gap %": s.gap * 100}))
-    w = pd.DataFrame(watch)
-    if not w.empty:
-        w = w.assign(_a=w["Change %"].abs()).sort_values("_a", ascending=False).drop(columns="_a")
-    return pd.DataFrame(rows), w
+        side = 1 if move > 0 else -1
+        rng_u, vol_u, rvol_u, slot_avg = _hist_window(s, hhmm, lookback, recent)
+        vol_now, rvol_now = t["Volume"].sum(), t["Volume"].tail(recent).sum()
+        rng_now = (t["High"].max() - t["Low"].min()) / s.open
+        r = {"Stock": s.sym, "Side": "BUY / CE" if side > 0 else "SELL / PE", "Price": px, "Move %": move * 100,
+             "From open %": (px / s.open - 1) * 100, "Move / ATR": abs(move) / s.atr_pct if s.atr_pct else np.nan,
+             "Volume vs usual": vol_now / vol_u if vol_u > 0 else np.nan,
+             "Last 30 min vol vs usual": rvol_now / rvol_u if rvol_u > 0 else np.nan,
+             "Range vs usual": rng_now / rng_u if rng_u > 0 else np.nan,
+             "OI chg %": np.nan, "OI vs usual": np.nan, "Buildup": "", "Big-money bars": 0, "Last big bar": "",
+             "As of": hhmm}
+        ow = _oi_window(oi.get(s.sym), last.normalize(), last, hhmm, lookback)
+        bar_oi = None
+        if ow is not None:
+            chg, usual, bar_oi = ow
+            r["OI chg %"] = chg * 100
+            r["OI vs usual"] = abs(chg) / usual if usual and usual > 0 else np.nan
+            r["Buildup"] = "" if not chg else ("Long buildup" if chg > 0 else "Short covering") if side > 0 else \
+                ("Short buildup" if chg > 0 else "Long unwinding")
+        # big-money bars: volume 4x+ the usual for that 5-minute slot, candle in the move's direction, OI added
+        big = []
+        for ts, b in t.iterrows():
+            avg = slot_avg.get(ts.strftime("%H:%M"), np.nan)
+            if not (np.isfinite(avg) and avg > 0 and b["Volume"] >= big_x * avg and side * (b["Close"] - b["Open"]) > 0):
+                continue
+            if bar_oi is not None:
+                k = ts.floor("5min")
+                if k not in bar_oi.index or not bar_oi.loc[k] > 0:
+                    continue
+            big.append(ts)
+        r["Big-money bars"] = len(big)
+        r["Last big bar"] = big[-1].strftime("%H:%M") if big else ""
+        rows.append(r)
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    df["Score"] = (df["Volume vs usual"].rank(pct=True) + df["Move / ATR"].rank(pct=True)
+                   + df["Move %"].abs().rank(pct=True)) * 100 / 3
+    df = df.sort_values("Score", ascending=False).reset_index(drop=True)
+    df.insert(0, "Rank", np.arange(1, len(df) + 1))
+    return df

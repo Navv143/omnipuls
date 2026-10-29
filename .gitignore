@@ -21,3 +21,9 @@ scan_cache/
 
 # Old copy of the app; the cloud runs app.py in this folder
 navv/
+
+# Written by the app on each computer
+radar_log.csv
+
+# Large research outputs (re-create with the research scripts)
+research/results/bigbars_events.csv.gz

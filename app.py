@@ -348,6 +348,34 @@ DHAN_DATA = DHAN_ON and DS["data"] and DCFG.get("use_for_data", True)
 
 
 @st.cache_resource(show_spinner=False)
+def _renew_attempts() -> dict:
+    return {}  # token tail -> time tried, shared by all sessions so a token is renewed once
+
+
+def auto_renew_token():
+    """A token can only be renewed while it is still valid: do it in its last 3 hours, so the app keeps working."""
+    try:
+        valid = datetime.strptime(str(DS["profile"].get("tokenValidity", "")), "%d/%m/%Y %H:%M").replace(tzinfo=IST)
+    except Exception:
+        return
+    left = (valid - datetime.now(IST)).total_seconds()
+    tried = _renew_attempts()
+    tail = str(DCFG.get("access_token", ""))[-16:]
+    if not (0 < left < 3 * 3600) or time.time() - tried.get(tail, 0) < 1800:
+        return
+    tried[tail] = time.time()
+    try:
+        if D.renew_token(DCFG):
+            dhan_status.clear()
+    except Exception as e:
+        tried["error"] = f"{datetime.now(IST):%d %b %H:%M}: {getattr(e, 'friendly', e)}"
+
+
+if DHAN_ON:
+    auto_renew_token()
+
+
+@st.cache_resource(show_spinner=False)
 def get_feed(sig: tuple, version=None):
     """One live Dhan feed per set of credentials, shared by every page and browser tab."""
     for old in list(F.INSTANCES):
@@ -930,8 +958,22 @@ def safe(fn, *args):
 
 
 def no_data_msg(err=None):
+    if D.configured(DCFG) and not DHAN_DATA:
+        # Dhan is set up but not usable, so Indian prices fell back to Yahoo, which often blocks cloud servers
+        why = DS.get("error") or ("Dhan Data APIs are not active on this account." if DHAN_ON else
+                                  "Dhan is not reachable.")
+        st.error(f"**Market data did not load because Dhan is not connected right now:** {why}  \n"
+                 + ("On Streamlit Cloud, Yahoo usually refuses requests, so F&O prices need a working Dhan token. "
+                    if PUBLIC else "")
+                 + "Dhan tokens last 24 hours: generate a new one on web.dhan.co and paste it in **Dhan Connect**"
+                 + (f" (or update it in {SECRETS_HELP})." if PUBLIC else ".")
+                 + (f"\n\nDetails: `{err}`" if err else ""), icon=":material/link_off:")
+        if "P" in globals() and "dhan" in P and IS_ADMIN:
+            st.page_link(P["dhan"], label="Open Dhan Connect", icon=":material/settings:")
+        return
     st.error("Could not load market data from Yahoo Finance. Check your internet connection and press "
              "**Refresh now**. If it keeps failing, Yahoo may be limiting requests: set refresh to 2 min or more."
+             + (" On Streamlit Cloud Yahoo often refuses requests: connect Dhan for Indian prices." if PUBLIC else "")
              + (f"\n\nDetails: `{err}`" if err else ""))
 
 # ---------------------------------------------------------------- market status
@@ -1418,7 +1460,7 @@ def page_dashboard():
     t = ft[0] if ft else pd.DataFrame()
     st.subheader("F&O stocks: top 10 gainers and losers")
     if t.empty:
-        st.caption("F&O stock prices did not load. Try **Refresh now**.")
+        no_data_msg()
         return
     live("movers", [live_item(r["Symbol"], r["Stock"], r["Price"], r["Prev Close"], vol=r["Volume"])
                      for _, r in t.iterrows()], key="dash_movers", n=10)
@@ -2367,7 +2409,7 @@ def page_setups():
 # ---------------------------------------------------------------- scanners (intraday research, Oct 2026)
 
 SCAN_BADGE = {"best": ("#0f9d58", "Use"), "ok": ("#1a73e8", "Small edge"), "weak": ("#f29900", "Weak"),
-              "no": ("#d93025", "Rejected"), "test": ("#9b59b6", "Testing")}
+              "no": ("#d93025", "Rejected")}
 
 
 def _badge(verdict: str) -> str:
@@ -2454,7 +2496,7 @@ def scanner_body(svc, uni):
                     f"<br><span class='muted'>{note}</span>", unsafe_allow_html=True)
 
     signed = ("P&L %", "Gap %", "Change by 10:00 %")
-    tabs = st.tabs(["Research summary", "Gap fade", "Version 3 breakout", "Momentum (testing)"])
+    tabs = st.tabs(["Research summary", "Gap fade", "Version 3 breakout", "Momentum radar"])
     with tabs[0]:
         rs = pd.DataFrame([{"Setup": r[0], "Verdict": SC.VERDICT_LABEL[r[2]], "Trade with": r[1],
                             "Shares / trade": r[3], "Options / trade": r[4], "Years +": r[5], "Notes": r[6]}
@@ -2493,24 +2535,101 @@ def scanner_body(svc, uni):
                 data_table(ranked, "scan_v3_rank", signed=("Gap %",), name_col="Stock", height=380)
     with tabs[3]:
         head(5)
-        st.warning("Testing only: paper trade this until the full F&O backtest confirms it.", icon=":material/science:")
-        st.caption("Rule: at 10:00 take stocks already 3%+ up or down from yesterday's close. Trade the same way at the "
-                   "10:00 candle's open, stop 1% from entry, exit 15:20. Stricter version: volume so far 3x+ its "
-                   "10-day average for the same time, and Nifty moving the same way. Stocks only 1-3% up or down "
-                   "lost money in the test, so they are not signals.")
-        strict = st.toggle("Only volume 3x+ and Nifty the same way (fewer, stronger signals)", value=True, key="mom_strict")
-        mo, watch = SC.momentum(S, N, strict=strict)
-        if mo.empty:
-            st.caption(("No signal yet: signals appear at 10:00." if (now.hour, now.minute) < (10, 0) else "No signal today.")
-                       if live_today else "No signal that session.")
+        st.caption("Each stock 1%+ from yesterday's close, compared with the same time window on its last sessions: "
+                   "volume since the open and in the last 30 minutes, range, move vs ATR, futures OI change (near + "
+                   "next month) and big-money bars (a 5-minute candle with 4x its usual volume, in the move's "
+                   "direction, with OI added). Ranked by the tested score; OI and big-money bars are shown but not "
+                   "scored. Trade idea that was tested: the #1 stock at 10:30, entry at the 10:30 candle's open, "
+                   "1% stop, exit 15:20. OI readings are unreliable in expiry week, when positions roll into these "
+                   "contracts.")
+        c1, c2 = st.columns(2)
+        lookback = c1.select_slider("Compare with the last", [5, 10, 20], value=10, key="rad_lb",
+                                    format_func=lambda n: f"{n} sessions")
+        asof = c2.radio("Window up to", ["Now", "10:30 (tested time)"], horizontal=True, key="rad_at")
+        oi = svc.oi() if hasattr(svc, "oi") else {}
+        rd = SC.radar(S, oi, at=SC.dtime(10, 30) if asof.startswith("10:30") else None, lookback=lookback)
+        if svc.source == "dhan" and getattr(svc, "oi_status", "") not in ("ready", "off"):
+            st.caption(f"Futures OI: {svc.oi_status}")
+        if rd.empty:
+            st.caption("No stock is 1%+ from yesterday's close yet.")
         else:
-            data_table(mo, "scan_mom", signed=signed + ("Change at 10:00 %",), name_col="Stock", height=260)
-        with st.expander(f"Stocks 3%+ from yesterday's close right now ({len(watch)})", expanded=mo.empty):
-            if watch.empty:
-                st.caption("None yet.")
-            else:
-                data_table(watch, "scan_mom_watch", signed=("Change %", "From open %", "Gap %"), name_col="Stock",
-                           height=380)
+            data_table(rd, "scan_radar", signed=("Move %", "From open %", "OI chg %"), name_col="Stock", height=520)
+        if live_today:
+            radar_log_today(S, oi, session)
+        with st.expander("Track record of the 10:30 picks (logged daily)"):
+            radar_track_record(bars)
+
+
+RADAR_LOG = Path(__file__).with_name("radar_log.csv")
+
+
+def radar_log_today(S: dict, oi: dict, session):
+    """Once a day after 10:35, save the radar's top 3 as of 10:30 with their entry (10:30 candle open) and OI readings."""
+    now = datetime.now(IST)
+    if (now.hour, now.minute) < (10, 35):
+        return
+    day = f"{session:%Y-%m-%d}"
+    try:
+        if RADAR_LOG.exists() and day in set(pd.read_csv(RADAR_LOG, usecols=["Date"])["Date"].astype(str)):
+            return
+    except Exception:
+        pass
+    rd = SC.radar(S, oi, at=SC.dtime(10, 30), lookback=10).head(3)
+    rows = []
+    for _, r in rd.iterrows():
+        s = S[r["Stock"]]
+        nb = s.today[s.today.index.time >= SC.dtime(10, 30)]
+        if nb.empty:
+            continue
+        side = 1 if r["Side"].startswith("BUY") else -1
+        entry = float(nb["Open"].iloc[0])
+        rows.append({"Date": day, "Rank": r["Rank"], "Stock": r["Stock"], "Side": side,
+                     "Entry time": f"{nb.index[0]:%H:%M}", "Entry": entry, "Stop": entry * (1 - side * 0.01),
+                     **{k: r[k] for k in ("Score", "Move %", "Volume vs usual", "OI chg %", "OI vs usual", "Buildup",
+                                          "Big-money bars")}})
+    if rows:
+        pd.DataFrame(rows).to_csv(RADAR_LOG, mode="a", header=not RADAR_LOG.exists(), index=False)
+
+
+def radar_track_record(bars: dict):
+    if not RADAR_LOG.exists():
+        st.caption("Nothing logged yet: the first picks are saved after 10:35 on a market day with this page open.")
+        return
+    log = pd.read_csv(RADAR_LOG)
+    out = []
+    for _, r in log.iterrows():
+        df = bars.get(r["Stock"])
+        if df is None or df.empty:
+            continue
+        s = SC.Stock(r["Stock"], df, pd.Timestamp(r["Date"]))
+        if not s.ok:
+            continue
+        hh, mm = map(int, str(r["Entry time"]).split(":"))
+        t = s.today[s.today.index.time >= SC.dtime(hh, mm)]
+        if t.empty:
+            continue
+        res = SC.track(s, int(r["Side"]), t.index[0], float(r["Entry"]), float(r["Stop"]))
+        out.append({"Date": r["Date"], "Rank": r["Rank"], "Stock": r["Stock"], "Side": "BUY" if r["Side"] > 0 else "SELL",
+                    "Entry": r["Entry"], **res, "Net %": res["P&L %"] - 0.12, "Buildup": r["Buildup"],
+                    "OI vs usual": r["OI vs usual"], "Big-money bars": r["Big-money bars"]})
+    t = pd.DataFrame(out)
+    if t.empty:
+        st.caption("No logged picks within the loaded data yet.")
+        return
+    done = t[~t["Status"].isin(["Open"])]
+    if not done.empty:
+        oi_ok = done["Buildup"].isin(["Long buildup", "Short buildup"])
+        summ = []
+        for name, x in [("#1 pick", done[done["Rank"] == 1]), ("Top 3", done), ("Top 3, OI confirms (fresh buildup)",
+                        done[oi_ok]), ("Top 3, OI does not confirm", done[~oi_ok])]:
+            if len(x):
+                summ.append({"Group": name, "Trades": len(x), "Avg net %": x["Net %"].mean(),
+                             "Win %": (x["Net %"] > 0).mean() * 100})
+        st.markdown(f"**{done['Date'].nunique()} days logged.** Net = after 0.12% costs. A few weeks are needed before "
+                    "these numbers mean anything.")
+        data_table(pd.DataFrame(summ), "radar_summary", signed=("Avg net %",), name_col="Group", height=200)
+    data_table(t.sort_values(["Date", "Rank"], ascending=[False, True]), "radar_log", signed=("P&L %", "Net %"),
+               name_col="Stock", height=380)
 
 # ---------------------------------------------------------------- Dhan pages
 
