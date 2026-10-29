@@ -2559,8 +2559,16 @@ def scanner_body(svc, uni):
             if fit.empty:
                 st.caption("No stock fits the pattern yet.")
             else:
-                data_table(fit, "scan_radar_fit", signed=("Move %", "From open %", "Sector move %", "OI chg %"),
-                           name_col="Stock", height=230)
+                if DHAN_DATA:
+                    fit = with_option_flow(fit, session)
+                data_table(fit, "scan_radar_fit", signed=("Move %", "From open %", "Sector move %", "OI chg %",
+                                                          "Put OI chg %", "Call OI chg %"), name_col="Stock", height=230)
+                if DHAN_DATA:
+                    st.caption("Option writing: OI change vs yesterday on the 3 strikes each side of the money, "
+                               "nearest expiry (Dhan option chain, refreshed about every 90 s). Puts written = option "
+                               "sellers expect the stock to hold up; calls written = they expect it to stay down. "
+                               "'Options confirm' when that backs the stock's direction; TradeFinder skips stocks "
+                               "where it starts late. Not backtested: there is no option-chain history.")
             st.caption("Checked on 360 of their verified trades (Dec 2024 - Oct 2026): at 10:30 this top 5 held their "
                        "stock on about 27% of days, the top 10 on about 37%. Their pick then ran a further 3% on "
                        "average; the rest of the shortlist usually does not. Use it to narrow the field, then apply "
@@ -2577,8 +2585,52 @@ def scanner_body(svc, uni):
 RADAR_LOG = Path(__file__).with_name("radar_log.csv")
 
 
+@st.cache_data(ttl=90, show_spinner=False)
+def stock_option_flow(sym: str, side: int) -> dict:
+    """Option writing near the money for one stock (nearest live expiry). Dhan allows one chain call per 3 s."""
+    for sid, seg in oc_refs(sym):
+        try:
+            exps = oc_expiries(sid, seg)
+        except Exception:
+            continue
+        today = datetime.now(IST).date()
+        live = [e for e in exps if pd.Timestamp(e).date() >= today] or exps
+        try:
+            spot, ch = D.option_chain(sid, seg, live[0], DCFG)
+        except Exception:
+            return {}
+        return SC.option_writing(ch, spot, side)
+    return {}
+
+
+@st.cache_resource(show_spinner=False)
+def _option_confirmed_at() -> dict:
+    return {}  # (session day, stock, side) -> first time the options confirmed, shared by all viewers
+
+
+def with_option_flow(df: pd.DataFrame, session) -> pd.DataFrame:
+    """Add option-writing columns to the shortlist, and when the options first confirmed the move today."""
+    seen = _option_confirmed_at()
+    now = datetime.now(IST).strftime("%H:%M")
+    rows = []
+    for _, r in df.iterrows():
+        side = 1 if str(r["Side"]).startswith("BUY") else -1
+        f = stock_option_flow(r["Stock"], side)
+        key = (f"{session:%Y-%m-%d}", r["Stock"], side)
+        if f.get("Options confirm") == "Yes":
+            seen.setdefault(key, now)
+        rows.append({**f, "Confirmed since": seen.get(key, "")})
+    extra = pd.DataFrame(rows, index=df.index)
+    for c in ("Option writing", "Put OI chg %", "Call OI chg %", "Options confirm", "Confirmed since"):
+        if c not in extra:
+            extra[c] = np.nan if c.endswith("%") else ""
+    return pd.concat([df, extra[["Option writing", "Put OI chg %", "Call OI chg %", "Options confirm",
+                                 "Confirmed since"]]], axis=1)
+
+
 def radar_log_today(S: dict, oi: dict, session):
-    """Once a day after 10:35, save the radar's top 3 as of 10:30 with their entry (10:30 candle open) and OI readings."""
+    """Once a day after 10:35, save the top 3 as of 10:30 (TradeFinder-pattern shortlist first, then the score) with
+    their entry (10:30 candle open), futures OI and option-writing readings."""
     now = datetime.now(IST)
     if (now.hour, now.minute) < (10, 35):
         return
@@ -2588,7 +2640,10 @@ def radar_log_today(S: dict, oi: dict, session):
             return
     except Exception:
         pass
-    rd = SC.radar(S, oi, at=SC.dtime(10, 30), lookback=10).head(3)
+    rd = SC.radar(S, oi, at=SC.dtime(10, 30))
+    if rd.empty:
+        return
+    rd = pd.concat([rd[rd["TradeFinder fit"] == "Yes"], rd[rd["TradeFinder fit"] != "Yes"]]).head(3)
     rows = []
     for _, r in rd.iterrows():
         s = S[r["Stock"]]
@@ -2597,10 +2652,12 @@ def radar_log_today(S: dict, oi: dict, session):
             continue
         side = 1 if r["Side"].startswith("BUY") else -1
         entry = float(nb["Open"].iloc[0])
+        opt = stock_option_flow(r["Stock"], side) if DHAN_DATA else {}
         rows.append({"Date": day, "Rank": r["Rank"], "Stock": r["Stock"], "Side": side,
                      "Entry time": f"{nb.index[0]:%H:%M}", "Entry": entry, "Stop": entry * (1 - side * 0.01),
                      **{k: r[k] for k in ("Score", "Move %", "Volume vs usual", "OI chg %", "OI vs usual", "Buildup",
-                                          "Big-money bars")}})
+                                          "Big-money bars", "TradeFinder fit")},
+                     "Option writing": opt.get("Option writing", ""), "Options confirm": opt.get("Options confirm", "")})
     if rows:
         pd.DataFrame(rows).to_csv(RADAR_LOG, mode="a", header=not RADAR_LOG.exists(), index=False)
 
@@ -2625,7 +2682,8 @@ def radar_track_record(bars: dict):
         res = SC.track(s, int(r["Side"]), t.index[0], float(r["Entry"]), float(r["Stop"]))
         out.append({"Date": r["Date"], "Rank": r["Rank"], "Stock": r["Stock"], "Side": "BUY" if r["Side"] > 0 else "SELL",
                     "Entry": r["Entry"], **res, "Net %": res["P&L %"] - 0.12, "Buildup": r["Buildup"],
-                    "OI vs usual": r["OI vs usual"], "Big-money bars": r["Big-money bars"]})
+                    "OI vs usual": r["OI vs usual"], "Big-money bars": r["Big-money bars"],
+                    "Options confirm": r.get("Options confirm", "")})
     t = pd.DataFrame(out)
     if t.empty:
         st.caption("No logged picks within the loaded data yet.")
@@ -2635,7 +2693,9 @@ def radar_track_record(bars: dict):
         oi_ok = done["Buildup"].isin(["Long buildup", "Short buildup"])
         summ = []
         for name, x in [("#1 pick", done[done["Rank"] == 1]), ("Top 3", done), ("Top 3, OI confirms (fresh buildup)",
-                        done[oi_ok]), ("Top 3, OI does not confirm", done[~oi_ok])]:
+                        done[oi_ok]), ("Top 3, OI does not confirm", done[~oi_ok]),
+                        ("Top 3, option writing confirms", done[done["Options confirm"] == "Yes"]),
+                        ("Top 3, option writing does not confirm", done[done["Options confirm"] != "Yes"])]:
             if len(x):
                 summ.append({"Group": name, "Trades": len(x), "Avg net %": x["Net %"].mean(),
                              "Win %": (x["Net %"] > 0).mean() * 100})

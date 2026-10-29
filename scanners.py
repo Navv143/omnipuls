@@ -402,3 +402,34 @@ def radar(S: dict, oi: dict | None = None, at: dtime | None = None, lookback: in
     df = df.sort_values("Score", ascending=False).reset_index(drop=True)
     df.insert(0, "Rank", np.arange(1, len(df) + 1))
     return df
+
+
+def option_writing(chain: pd.DataFrame, spot: float, side: int, strikes: int = 3, min_pct: float = 10.0) -> dict:
+    """Who is writing options near the money today (TradeFinder's 'blasting stocks' check): OI change vs yesterday on
+    the `strikes` strikes each side of the money. Put writing = sellers expect the stock to hold up (bullish);
+    call writing = they expect it to stay down (bearish). 'Confirms' when the writing backs the move's direction."""
+    out = {"Put OI chg %": np.nan, "Call OI chg %": np.nan, "Option writing": "", "Options confirm": ""}
+    if chain is None or chain.empty or not spot:
+        return out
+    ch = chain.dropna(subset=["Strike"]).copy()
+    ch["dist"] = (ch["Strike"] - spot).abs()
+    near = ch.nsmallest(2 * strikes + 1, "dist")
+    put_prev, call_prev = near["PE Prev OI"].fillna(0).sum(), near["CE Prev OI"].fillna(0).sum()
+    put_now, call_now = near["PE OI"].fillna(0).sum(), near["CE OI"].fillna(0).sum()
+    p = (put_now / put_prev - 1) * 100 if put_prev > 0 else (np.inf if put_now > 0 else np.nan)
+    c = (call_now / call_prev - 1) * 100 if call_prev > 0 else (np.inf if call_now > 0 else np.nan)
+    out["Put OI chg %"], out["Call OI chg %"] = p, c
+    pv, cv = (p if np.isfinite(p) else 999), (c if np.isfinite(c) else 999)
+    if np.isnan(p) and np.isnan(c):
+        return out
+    if pv >= min_pct and pv > cv:
+        out["Option writing"] = "Puts written (bullish)"
+    elif cv >= min_pct and cv > pv:
+        out["Option writing"] = "Calls written (bearish)"
+    else:
+        out["Option writing"] = "Quiet / mixed"
+    bull = out["Option writing"].startswith("Puts")
+    bear = out["Option writing"].startswith("Calls")
+    out["Options confirm"] = "Yes" if (side > 0 and bull) or (side < 0 and bear) else \
+        ("Against" if (side > 0 and bear) or (side < 0 and bull) else "")
+    return out
