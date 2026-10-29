@@ -1428,51 +1428,173 @@ def page_dashboard():
     if not data:
         no_data_msg(err)
         return
-
     live("tiles", items_from(data, [(label, res[label]) for label, _ in U.DASHBOARD if label in res]),
          key="dash_tiles", tape=True)
-    if res.get("XAU/USD") == "GC=F":
-        st.caption("XAU/USD shows COMEX gold futures (GC=F), which run a few dollars above spot. "
-                   "US Oil is WTI crude futures.")
-
-    # ---- sector performance
-    hist_note()
-    st.subheader("Sector performance")
-    sector_specs = [(n, c) for n, k, c in U.INDEX_SPECS if k == "Sector"]
-    sres = resolved(sector_specs)
-    period = st.segmented_control("Period", list(PERIODS), default="Today", key="dash_period",
-                                  label_visibility="collapsed") or "Today"
-    col = PERIODS[period]
-    if sres:
-        t, err = safe(build_table, tuple(sres.values()), tuple((v, k) for k, v in sres.items()))
-        if t is not None and not t.empty:
-            t = t.dropna(subset=[col]).sort_values(col)
-            fig = go.Figure(go.Bar(
-                x=t[col], y=t["Name"].str.replace("Nifty ", "", regex=False), orientation="h",
-                marker_color=np.where(t[col] >= 0, UP, DOWN),
-                text=[f"{v:+.2f}%" for v in t[col]], textposition="outside", cliponaxis=False,
-                customdata=t["Price"], hovertemplate="%{y}<br>%{x:+.2f}%<br>%{customdata:,.2f}<extra></extra>"))
-            fig.update_layout(height=max(320, 26 * len(t) + 60), margin=dict(l=10, r=40, t=10, b=10),
-                              xaxis=dict(ticksuffix="%", zeroline=True, zerolinecolor="rgba(128,128,128,.6)"),
-                              template=plot_template(), bargap=0.25)
-            st.plotly_chart(fig, width="stretch", key="sector_bar")
-            up = int((t["Chg %"] > 0).sum())
-            st.caption(f"{up} of {len(t)} sector indices are up today. Click **NSE Indices & Sectors** "
-                       "in the menu for full details.")
-    else:
-        st.caption("Sector indices did not load. Try **Refresh now**.")
-
-    # ---- F&O movers
     ft, _ = safe(fno_table)
     t = ft[0] if ft else pd.DataFrame()
-    st.subheader("F&O stocks: top 10 gainers and losers")
+    if DHAN_DATA:
+        svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
+        svc.set_universe(scan_universe("All F&O stocks"))
+        svc.touch()
+        dashboard_desk(svc, t)
+    else:
+        st.info("Connect Dhan for the market bias, smart-money heatmap and today's picks.", icon=":material/link:")
     if t.empty:
-        no_data_msg()
         return
+    st.subheader("F&O movers")
     live("movers", [live_item(r["Symbol"], r["Stock"], r["Price"], r["Prev Close"], vol=r["Volume"])
                      for _, r in t.iterrows()], key="dash_movers", n=10)
-    st.caption("Ranks update on every tick. Click a stock to open its chart.")
     check_alerts(dict(zip(t["Symbol"], t["Price"])))
+
+
+def _bias_card(col, title: str, value: str, note: str, tone: int):
+    color = UP if tone > 0 else DOWN if tone < 0 else "#94A3B8"
+    col.markdown(f"<div style='border:1px solid #22314A;border-left:4px solid {color};border-radius:10px;"
+                 f"padding:10px 14px;background:#131D2F;min-height:96px'>"
+                 f"<div class='muted' style='font-size:.78rem'>{title}</div>"
+                 f"<div style='font-size:1.25rem;font-weight:700;color:{color}'>{value}</div>"
+                 f"<div class='muted' style='font-size:.8rem'>{note}</div></div>", unsafe_allow_html=True)
+
+
+@st.fragment(run_every=60)
+def dashboard_desk(svc, t: pd.DataFrame):
+    """The morning answer in one screen: which way the index is being built, where the money is, what to look at."""
+    sf = sector_flow_table()
+    box = apex_live(_dhan_sig())
+    c = st.columns(3)
+    # 1. index bias from option + futures OI build-up
+    if box.get("bars") is not None:
+        bars, info = box["bars"], box["info"]
+        share, label = AP.dominance(bars)
+        early, elabel = AP.dominance(bars, "10:15")
+        tone = 0 if pd.isna(share) else (1 if share > 55 else -1 if share < 45 else 0)
+        _bias_card(c[0], f"Nifty build-up · {info['session']:%d %b} · {info['updated'][:5]}", label,
+                   (f"{share:.0f}% bullish so far" if pd.notna(share) else "") +
+                   (f" · first hour {early:.0f}%" if pd.notna(early) else ""), tone)
+    else:
+        _bias_card(c[0], "Nifty build-up", "Loading…", box.get("err") or "Option and futures OI, every 3 min", 0)
+    # 2. where the money is
+    if not sf.empty:
+        top, bot = sf.iloc[0], sf.iloc[-1]
+        _bias_card(c[1], "Smart money favours", f"{top['Sector']}",
+                   f"₹{top['Smart money (Rs cr)']:+,.0f} cr · weakest: {bot['Sector']} "
+                   f"₹{bot['Smart money (Rs cr)']:+,.0f} cr", 1 if top["Smart money (Rs cr)"] > 0 else 0)
+    else:
+        _bias_card(c[1], "Smart money favours", "Loading…", "Stock futures OI build-up by sector", 0)
+    # 3. breadth
+    if not t.empty and "Chg %" in t:
+        up, dn = int((t["Chg %"] > 0).sum()), int((t["Chg %"] < 0).sum())
+        _bias_card(c[2], "F&O breadth", f"{up} up · {dn} down",
+                   f"{int((t['Chg %'] >= 3).sum())} up 3%+, {int((t['Chg %'] <= -3).sum())} down 3%+",
+                   1 if up > 1.5 * dn else -1 if dn > 1.5 * up else 0)
+
+    # sector heatmap
+    st.subheader("Sector heatmap")
+    mode = st.segmented_control("Colour by", ["Smart money", "Price change"], default="Smart money",
+                                key="dash_heat", label_visibility="collapsed") or "Smart money"
+    res, _ = safe(oi_data, True)
+    flows = SC.stock_flows(res[0]) if res else pd.DataFrame()
+    fig = sector_heatmap(t, flows, sf, mode)
+    if fig is None:
+        st.caption("Waiting for prices and futures OI.")
+    else:
+        st.plotly_chart(fig, width="stretch", key="dash_heatmap", config={"displayModeBar": False})
+        st.caption("Box size: open interest value of the stock's future. "
+                   + ("Colour: fresh futures positions today (green long build-up / short covering, red short "
+                      "build-up / long unwinding); a sector's colour is its smart-money bias."
+                      if mode == "Smart money" else "Colour: change today; a sector's colour is its average move."))
+
+    # today's picks
+    st.subheader("Today's picks")
+    rf, session = smart_money_stocks(svc)
+    picks = best_picks(rf, sf).head(5) if not rf.empty and not sf.empty else pd.DataFrame()
+    if picks.empty:
+        done, total = svc.progress()
+        st.caption("No stock is moving with a favoured sector yet." if done >= total else
+                   f"Loading stock history for R-factor: {done} of {total}.")
+    else:
+        show_table(picks, ["Stock", "Side", "Price", "Chg %", "R-factor", "Buildup", "Flow Cr", "Volume vs usual",
+                           "Broke yday high/low", "Sector"], "dash_picks", height=250)
+        st.caption("Top R-factor stocks moving with a sector the money favours (max 3 per sector). Before entry: "
+                   "Nifty build-up the same way, yesterday's high/low broken, option writing backing it "
+                   "(Setups & Scanners → Momentum radar). Entry 9:45-10:30, one trade, small stop.")
+
+
+def sector_heatmap(t: pd.DataFrame, flows: pd.DataFrame, sf: pd.DataFrame, mode: str):
+    if t is None or t.empty or "Chg %" not in t:
+        return None
+    d = t[["Stock", "Sector", "Price", "Chg %"]].dropna(subset=["Chg %"]).copy()
+    d = d[d["Sector"] != "Other"]
+    if not flows.empty:
+        f = flows.set_index("Stock")
+        d["size"] = d["Stock"].map(f["OI"] * f["Fut LTP"] / 1e7)
+        d["flow"] = d["Stock"].map(f["flow"])
+        d["Buildup"] = d["Stock"].map(f["Buildup"]).fillna("")
+    else:
+        d["size"], d["flow"], d["Buildup"] = np.nan, np.nan, ""
+    d["size"] = d["size"].fillna(d["size"].median() if d["size"].notna().any() else 1).clip(lower=1)
+    if mode == "Smart money" and d["flow"].notna().any():
+        cap = max(float(d["flow"].abs().quantile(0.9)), 1.0)
+        d["c"] = (d["flow"].fillna(0) / cap).clip(-1, 1)
+        bias = sf.set_index("Sector")["Bias %"] / 100 if not sf.empty else pd.Series(dtype=float)
+        sec_c = {s: float(bias.get(s, 0) or 0) for s in d["Sector"].unique()}
+    else:
+        d["c"] = (d["Chg %"] / 3).clip(-1, 1)
+        sec_c = (d.groupby("Sector")["Chg %"].mean() / 3).clip(-1, 1).to_dict()
+    sec = d.groupby("Sector").agg(size=("size", "sum"), chg=("Chg %", "mean")).reset_index()
+    money = sf.set_index("Sector")["Smart money (Rs cr)"] if not sf.empty else pd.Series(dtype=float)
+    ids = list(sec["Sector"]) + [f"{r.Sector}/{r.Stock}" for r in d.itertuples()]
+    labels = [f"{s}  {money.get(s, np.nan):+,.0f} cr" if pd.notna(money.get(s, np.nan)) else s for s in sec["Sector"]] \
+        + list(d["Stock"])
+    parents = [""] * len(sec) + list(d["Sector"])
+    values = list(sec["size"]) + list(d["size"])
+    colors = [sec_c.get(s, 0) for s in sec["Sector"]] + list(d["c"])
+    text = [f"{c:+.2f}% avg" for c in sec["chg"]] + [
+        f"{r['Chg %']:+.2f}%" + (f"<br>{r['Buildup']}" if r["Buildup"] else "") for _, r in d.iterrows()]
+    fig = go.Figure(go.Treemap(
+        ids=ids, labels=labels, parents=parents, values=values, branchvalues="total", text=text,
+        texttemplate="<b>%{label}</b><br>%{text}", hovertemplate="<b>%{label}</b><br>%{text}<extra></extra>",
+        marker=dict(colors=colors, colorscale=[[0, DOWN], [0.5, "#1E293B"], [1, UP]], cmin=-1, cmax=1,
+                    line=dict(width=1, color="#0B1220")),
+        tiling=dict(pad=2), pathbar=dict(visible=False)))
+    fig.update_layout(template=plot_template(), height=380 if MOBILE else 560, margin=dict(l=0, r=0, t=0, b=0))
+    return fig
+
+
+def apex_live(sig: tuple) -> dict:
+    return _apex_live(sig)
+
+
+@st.cache_resource(show_spinner=False)
+def _apex_live(sig: tuple) -> dict:
+    """Nifty build-up kept fresh in the background (every 2 minutes in market hours), so the dashboard never waits."""
+    import threading
+    box = {"bars": None, "info": None, "err": None}
+
+    def loop():
+        while True:
+            try:
+                bars, info = AP.buildup("NIFTY", 5, 3, DCFG)
+                box.update(bars=bars, info=info, err=None)
+            except Exception as e:
+                box["err"] = getattr(e, "friendly", str(e))
+            time.sleep(120 if SS.market_hours() else 900)
+
+    threading.Thread(target=loop, daemon=True, name="apex-nifty").start()
+    return box
+
+
+def best_picks(rf: pd.DataFrame, sf: pd.DataFrame) -> pd.DataFrame:
+    """Top R-factor stocks moving with a sector the money favours: up with long build-up / short covering in a
+    Bullish sector, down with short build-up / long unwinding in a Bearish one; at most 3 per sector, best 10."""
+    flow = sf.set_index("Sector")["Flow"]
+    sec_flow = rf["Sector"].map(flow)
+    with_money = (((sec_flow == "Bullish") & (rf["Chg %"] > 0) & rf["Buildup"].isin(["Long buildup", "Short covering"]))
+                  | ((sec_flow == "Bearish") & (rf["Chg %"] < 0)
+                     & rf["Buildup"].isin(["Short buildup", "Long unwinding"])))
+    picks = rf[with_money].copy()
+    picks["Side"] = np.where(picks["Chg %"] > 0, "BUY / CE", "SELL / PE")
+    return picks.groupby("Sector", sort=False).head(3).head(10)
 
 
 def page_indices():
@@ -1633,10 +1755,11 @@ def page_fno():
             st.write(", ".join(s.replace(".NS", "") for s in missing))
 
 
-def page_market(group: str, title: str, tiles_n: int = 5, note: str = ""):
+def page_market(group: str, title: str, tiles_n: int = 5, note: str = "", bare: bool = False):
     tiles_n = 2 if MOBILE else tiles_n
-    status_strip()
-    st.header(title)
+    if not bare:
+        status_strip()
+        st.header(title)
     syms = tuple(U.GROUPS[group])
     t, err = safe(build_table, syms)
     if t is None or t.empty:
@@ -1667,16 +1790,26 @@ def page_market(group: str, title: str, tiles_n: int = 5, note: str = ""):
     return t
 
 
+def page_global():
+    status_strip()
+    st.header("Global markets")
+    pick = st.segmented_control("Market", ["Commodities", "Currency (INR)", "Forex", "Crypto"], default="Commodities",
+                                key="global_pick", label_visibility="collapsed") or "Commodities"
+    {"Crypto": page_crypto, "Forex": page_forex, "Currency (INR)": page_currency,
+     "Commodities": page_commodities}[pick]()
+
+
 def page_crypto():
-    page_market("Crypto", "Crypto", note="Prices in US dollars, live around the clock.")
+    page_market("Crypto", "Crypto", note="Prices in US dollars, live around the clock.", bare=True)
 
 
 def page_forex():
-    page_market("Forex", "Forex", note="Major and cross pairs. Forex trades Monday to Friday, around the clock.")
+    page_market("Forex", "Forex", note="Major and cross pairs. Forex trades Monday to Friday, around the clock.",
+                bare=True)
 
 
 def page_currency():
-    t = page_market("Currency (INR)", "Currency (INR)", note="Rupee value of one unit of each currency.")
+    t = page_market("Currency (INR)", "Currency (INR)", note="Rupee value of one unit of each currency.", bare=True)
     if t is None or t.empty:
         return
     st.subheader("Converter")
@@ -1691,7 +1824,8 @@ def page_currency():
 
 
 def page_commodities():
-    page_market("Commodities", "Commodities", note="Futures prices in US dollars (COMEX, NYMEX, CBOT, ICE).")
+    page_market("Commodities", "Commodities", note="Futures prices in US dollars (COMEX, NYMEX, CBOT, ICE).",
+                bare=True)
 
 
 TIMEFRAMES = {
@@ -2338,9 +2472,7 @@ def page_oi():
 # ---------------------------------------------------------------- trade setups (validated in research/)
 
 
-def page_setups():
-    status_strip()
-    st.header("Trade setups")
+def setups_body():
     st.caption("Rules found in Omnipuls research on 14 years of NSE data, tested year by year with costs. "
                "They decide at 9:15 from the opening gap. Past results don't guarantee future ones; size so a run of "
                "losses is survivable.")
@@ -2375,19 +2507,8 @@ def page_setups():
                      "sector_gap": sec_gap.get(SECTOR_INDEX.get(r["Sector"]), np.nan)})
     g = SU.gap_table(rows)
     sig = SU.signals(g, nifty_gap)
-    last_bar = pd.Timestamp(t["Last bar"].max()).date() if "Last bar" in t else None
-    live_today = last_bar == datetime.now(IST).date()
-    m = st.columns(4)
-    m[0].metric("Session", f"{last_bar:%a %d %b}" if last_bar else "—", "today" if live_today else "last session",
-                delta_color="off", border=True)
-    m[1].metric("Nifty gap at open", f"{nifty_gap * 100:+.2f}%" if nifty_gap is not None else "—",
-                "panic day" if nifty_gap is not None and nifty_gap <= -0.005 else None, delta_color="off", border=True)
-    m[2].metric("F&O stocks gapping 3%+", int((g["abs_gap"] >= 0.03).sum()) if not g.empty else 0, border=True)
-    m[3].metric("Gap-downs / gap-ups 3%+", f"{int((g['gap'] <= -0.03).sum())} / {int((g['gap'] >= 0.03).sum())}"
-                if not g.empty else "—", border=True)
-    if not live_today:
-        st.info("The market hasn't opened today yet, so these are the last session's signals. Today's appear at "
-                "9:15 once opening prices are in.", icon=":material/schedule:")
+    if not g.empty:
+        st.caption(f"F&O stocks gapping 3%+: {int((g['gap'] <= -0.03).sum())} down, {int((g['gap'] >= 0.03).sum())} up.")
     for key, meta in SU.SETUPS.items():
         st.subheader(meta["name"])
         st.markdown(f"**Rule:** {meta['rule']}  \n<span class='muted'>{meta['stats']}</span>", unsafe_allow_html=True)
@@ -2401,16 +2522,6 @@ def page_setups():
                              "Status": np.where(df["stopped"], "Stopped", "Open")})
         data_table(view.drop(columns=["Symbol"]), f"setup_{key}", signed=("Gap %", "P&L now %"), name_col="Stock",
                    height=150)
-    st.subheader("BTC trend filter")
-    bdata, _ = safe(fetch_daily, ("BTC-USD",))
-    bt = SU.btc_trend(bdata["BTC-USD"]["Close"]) if bdata and "BTC-USD" in bdata else {}
-    if bt:
-        st.metric("BTC vs 100-day average", f"${bt['price']:,.0f}", f"{bt['distance%']:+.1f}% · "
-                  + ("LONG allowed" if bt["long"] else "STAY FLAT"), delta_color="normal" if bt["long"] else "inverse")
-        st.caption("Rule: hold BTC (or trade it long only) while the daily close is above its 100-day average; "
-                   "stay flat below. 2021-2026: 31%/yr with a -38% worst drawdown, vs 19%/yr and -77% for buy and hold.")
-    else:
-        st.caption("BTC prices didn't load.")
 
 
 # ---------------------------------------------------------------- scanners (intraday research, Oct 2026)
@@ -2445,7 +2556,7 @@ def scan_universe(choice: str) -> tuple:
 
 def page_scanners():
     status_strip()
-    st.header("Scanners")
+    st.header("Setups & scanners")
     st.caption("Intraday scanners from the Omnipuls research. They run on all F&O stocks; the backtests behind "
                "them used 5-minute data for the Nifty 100 stocks, Feb 2015 to Apr 2026, after 0.12% costs on shares "
                "and 2% of premium on options. Each tab shows today's signals, how each trade is doing, and what the "
@@ -2503,29 +2614,21 @@ def scanner_body(svc, uni):
                     f"<br><span class='muted'>{note}</span>", unsafe_allow_html=True)
 
     signed = ("P&L %", "Gap %", "Change by 10:00 %")
-    tabs = st.tabs(["Research summary", "Gap fade", "Version 3 breakout", "Momentum radar"])
+    tabs = st.tabs(["Opening setups", "Momentum radar", "Breakout (V3)", "Research"])
     with tabs[0]:
+        setups_body()
+    with tabs[3]:
         rs = pd.DataFrame([{"Setup": r[0], "Verdict": SC.VERDICT_LABEL[r[2]], "Trade with": r[1],
                             "Shares / trade": r[3], "Options / trade": r[4], "Years +": r[5], "Notes": r[6]}
                            for r in SC.RESEARCH])
         data_table(rs, "scan_research", name_col="Setup", height=520)
         st.markdown(
             "**What to trade:** the gap fade, entered at the opening price with a pre-open order on the cash shares "
-            "(9:00-9:08), 0.75-1% stop, exit 15:20. The Trade Setups page lists it each morning too.  \n"
+            "(9:00-9:08), 0.75-1% stop, exit 15:20. The Opening setups tab lists it each morning.  \n"
             "**For stock options:** nothing tested holds up from 9:20 onward. Run "
             "`research/intraday/gapfade_options_dhan.py` to see whether options bought at 9:15-9:16 still catch the "
             "gap fade on real Dhan option prices.  \n"
             "**Before real money:** paper-trade for 3-4 weeks.")
-    with tabs[1]:
-        head(0)
-        st.caption("Rule: the 2 F&O stocks with the biggest opening gap of 3%+. Buy gap-downs, short gap-ups at the "
-                   "open. Stop 1% from entry. Exit 15:20. Panic days (Nifty opens 0.5%+ lower) are the strongest for "
-                   "the buy side. '9:15 candle reversed' = the first candle already moved against the gap.")
-        g = SC.gap_fade(S, nifty_gap)
-        if g.empty:
-            st.caption("No stock gapped 3% or more " + ("today." if live_today else "that session."))
-        else:
-            data_table(g, "scan_gap", signed=signed, name_col="Stock", height=200)
     with tabs[2]:
         head(4)
         st.caption("Rule: at 9:30 rank stocks by ATR%, 9:15-9:30 range, RVOL and gap size; take the top 2. Entry when "
@@ -2540,7 +2643,7 @@ def scanner_body(svc, uni):
         with st.expander("Top-ranked stocks at 9:30"):
             if not ranked.empty:
                 data_table(ranked, "scan_v3_rank", signed=("Gap %",), name_col="Stock", height=380)
-    with tabs[3]:
+    with tabs[1]:
         head(5)
         st.caption("Each stock 1%+ from yesterday's close, compared with the same time window on its last sessions: "
                    "volume since the open and in the last 30 minutes, range, move vs ATR, futures OI change (near + "
@@ -3330,7 +3433,7 @@ def sector_flow_table() -> pd.DataFrame:
 
 def page_apex():
     status_strip()
-    st.header("Index build-up & smart-money sectors")
+    st.header("Index build-up")
     if not DHAN_DATA:
         need_dhan()
         return
@@ -3342,8 +3445,12 @@ def page_apex():
     index = c1.selectbox("Index", list(AP.INDICES), key="apex_idx")
     strikes = c2.slider("Strikes each side of the money", 2, 10, 5, key="apex_strikes")
     try:
-        with st.spinner("Loading 1-minute OI for the index options and future (about 30 s on first load)…"):
-            bars, info = apex_data(index, strikes)
+        box = apex_live(_dhan_sig()) if index == "NIFTY" and strikes == 5 else {}
+        if box.get("bars") is not None:
+            bars, info = box["bars"], box["info"]
+        else:
+            with st.spinner("Loading 1-minute OI for the index options and future (about 30 s on first load)…"):
+                bars, info = apex_data(index, strikes)
     except D.DhanError as e:
         st.error(e.friendly)
         return
@@ -3457,14 +3564,7 @@ def smart_money_body(svc):
     if rf.empty:
         st.caption("Stock bars are still loading.")
     else:
-        flow = sf.set_index("Sector")["Flow"]
-        bull_b, bear_b = ("Long buildup", "Short covering"), ("Short buildup", "Long unwinding")
-        sec_flow = rf["Sector"].map(flow)
-        with_money = (((sec_flow == "Bullish") & (rf["Chg %"] > 0) & rf["Buildup"].isin(bull_b)) |
-                      ((sec_flow == "Bearish") & (rf["Chg %"] < 0) & rf["Buildup"].isin(bear_b)))
-        picks = rf[with_money].copy()
-        picks["Side"] = np.where(picks["Chg %"] > 0, "BUY / CE", "SELL / PE")
-        picks = picks.groupby("Sector", sort=False).head(3).head(10)
+        picks = best_picks(rf, sf)
         if picks.empty:
             st.caption("No stock is moving with a bullish or bearish sector yet.")
         else:
@@ -3500,19 +3600,15 @@ def _sign_out():
 
 PAGE_DEFS = [  # (url, function, menu title, icon)
     ("dashboard", page_dashboard, "Dashboard", ":material/dashboard:"),
-    ("indices", page_indices, "NSE Indices & Sectors", ":material/account_balance:"),
-    ("setups", page_setups, "Trade Setups", ":material/target:"),
-    ("scanners", page_scanners, "Scanners", ":material/radar:"),
-    ("sectors", page_sectors, "Sector Performance", ":material/donut_small:"),
-    ("fno", page_fno, "F&O Stocks", ":material/candlestick_chart:"),
-    ("oi", page_oi, "OI Analysis", ":material/stacked_bar_chart:"),
-    ("options", page_option_chain, "Option Chain", ":material/table_chart:"),
     ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
     ("smart", page_smart_money, "Smart Money Sectors", ":material/insights:"),
-    ("crypto", page_crypto, "Crypto", ":material/currency_bitcoin:"),
-    ("forex", page_forex, "Forex", ":material/currency_exchange:"),
-    ("currency", page_currency, "Currency (INR)", ":material/currency_rupee:"),
-    ("commodities", page_commodities, "Commodities", ":material/oil_barrel:"),
+    ("scanners", page_scanners, "Setups & Scanners", ":material/radar:"),
+    ("options", page_option_chain, "Option Chain", ":material/table_chart:"),
+    ("fno", page_fno, "F&O Stocks", ":material/candlestick_chart:"),
+    ("oi", page_oi, "OI Analysis", ":material/stacked_bar_chart:"),
+    ("sectors", page_sectors, "Sector Performance", ":material/donut_small:"),
+    ("indices", page_indices, "NSE Indices", ":material/account_balance:"),
+    ("global", page_global, "Global Markets", ":material/public:"),
     ("mcx", page_mcx, "MCX Commodities", ":material/diamond:"),
     ("cdsfut", page_cdsfut, "Currency Futures", ":material/payments:"),
     ("portfolio", page_portfolio, "Portfolio", ":material/account_balance_wallet:"),
@@ -3528,8 +3624,8 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "dashboard"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({
-    "Markets": [P["dashboard"], P["setups"], P["scanners"], P["indices"], P["sectors"], P["fno"], P["oi"], P["options"], P["apex"], P["smart"], P["crypto"], P["forex"], P["currency"],
-                P["commodities"]],
+    "Trade": [P["dashboard"], P["apex"], P["smart"], P["scanners"], P["options"]],
+    "Markets": [P["fno"], P["oi"], P["sectors"], P["indices"], P["global"]],
     "Dhan": [P["mcx"], P["cdsfut"]] + ([P["portfolio"], P["dhan"]] if IS_ADMIN else []),
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["account"]],
 })
