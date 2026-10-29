@@ -433,3 +433,44 @@ def option_writing(chain: pd.DataFrame, spot: float, side: int, strikes: int = 3
     out["Options confirm"] = "Yes" if (side > 0 and bull) or (side < 0 and bear) else \
         ("Against" if (side > 0 and bear) or (side < 0 and bull) else "")
     return out
+
+
+SMART_WEIGHT = {"Long buildup": 1.0, "Short covering": 0.5, "Short buildup": -1.0, "Long unwinding": -0.5}
+
+
+def sector_smart_money(fut: pd.DataFrame, min_stocks: int = 3) -> pd.DataFrame:
+    """Rank sectors by fresh futures positions, not by price or volume.
+
+    Per stock, the rupee value of the OI change in its near-month future (OI added or closed x price), signed by
+    its buildup: long buildup counts fully bullish, short covering half bullish (shorts leaving, no new buyers),
+    short buildup fully bearish, long unwinding half bearish. Summed per sector, in Rs crore.
+    """
+    need = {"Stock", "Sector", "Fut LTP", "Fut Chg %", "OI", "OI Chg %", "Buildup"}
+    if fut is None or fut.empty or not need <= set(fut.columns):
+        return pd.DataFrame()
+    d = fut.dropna(subset=["Fut LTP", "OI", "OI Chg %"]).copy()
+    d = d[d["Sector"] != "Other"]
+    prev = d["OI"] / (1 + d["OI Chg %"] / 100)
+    d["oi_cr"] = (d["OI"] - prev).abs() * d["Fut LTP"] / 1e7
+    d["flow"] = d["oi_cr"] * d["Buildup"].map(SMART_WEIGHT).fillna(0)
+    d["bull"] = d["Buildup"].isin(["Long buildup", "Short covering"])
+    d["bear"] = d["Buildup"].isin(["Short buildup", "Long unwinding"])
+    rows = []
+    for sec, g in d.groupby("Sector"):
+        if len(g) < min_stocks:
+            continue
+        gross = g["oi_cr"].sum()
+        top = g.loc[g["flow"].abs().idxmax()] if len(g) else None
+        rows.append({"Sector": sec, "Stocks": len(g), "Smart money (Rs cr)": round(g["flow"].sum(), 1),
+                     "Bias %": round(100 * g["flow"].sum() / gross, 0) if gross > 0 else np.nan,
+                     "Long buildup": int((g["Buildup"] == "Long buildup").sum()),
+                     "Short covering": int((g["Buildup"] == "Short covering").sum()),
+                     "Short buildup": int((g["Buildup"] == "Short buildup").sum()),
+                     "Long unwinding": int((g["Buildup"] == "Long unwinding").sum()),
+                     "Price move %": round(g["Fut Chg %"].mean(), 2),
+                     "Biggest position": f"{top['Stock']} ({top['Buildup'].lower()})" if top is not None else ""})
+    if not rows:
+        return pd.DataFrame()
+    out = pd.DataFrame(rows).sort_values("Smart money (Rs cr)", ascending=False).reset_index(drop=True)
+    out["Flow"] = np.where(out["Bias %"] >= 30, "Bullish", np.where(out["Bias %"] <= -30, "Bearish", "Mixed"))
+    return out

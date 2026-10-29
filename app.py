@@ -42,6 +42,7 @@ import scan_service as SS
 import scanners as SC
 import setups as SU
 import universe as U
+import apex as AP
 
 IST = timezone(timedelta(hours=5, minutes=30))
 UP, DOWN, GOLD = "#26A69A", "#EF5350", "#E8B33A"
@@ -2548,6 +2549,8 @@ def scanner_body(svc, uni):
         asof = c2.radio("Window up to", ["Now", "10:30 (tested time)"], horizontal=True, key="rad_at")
         oi = svc.oi() if hasattr(svc, "oi") else {}
         rd = SC.radar(S, oi, at=SC.dtime(10, 30) if asof.startswith("10:30") else None, lookback=lookback)
+        if not rd.empty and DHAN_DATA:
+            rd = with_sector_money(rd)
         if svc.source == "dhan" and getattr(svc, "oi_status", "") not in ("ready", "off"):
             st.caption(f"Futures OI: {svc.oi_status}")
         if rd.empty:
@@ -2561,7 +2564,7 @@ def scanner_body(svc, uni):
             else:
                 if DHAN_DATA:
                     fit = with_option_flow(fit, session)
-                data_table(fit, "scan_radar_fit", signed=("Move %", "From open %", "Sector move %", "OI chg %",
+                data_table(fit, "scan_radar_fit", signed=("Move %", "From open %", "Sector move %", "OI chg %", "Sector money (Rs cr)",
                                                           "Put OI chg %", "Call OI chg %"), name_col="Stock", height=230)
                 if DHAN_DATA:
                     st.caption("Option writing: OI change vs yesterday on the 3 strikes each side of the money, "
@@ -2569,17 +2572,35 @@ def scanner_body(svc, uni):
                                "sellers expect the stock to hold up; calls written = they expect it to stay down. "
                                "'Options confirm' when that backs the stock's direction; TradeFinder skips stocks "
                                "where it starts late. Not backtested: there is no option-chain history.")
+                    st.caption("Sector money: the sector's fresh futures positions today (see Index Build-up). "
+                               "'Money favours' Yes when it backs the stock's side; TradeFinder picks stocks from the "
+                               "sector the money favours.")
             st.caption("Checked on 360 of their verified trades (Dec 2024 - Oct 2026): at 10:30 this top 5 held their "
                        "stock on about 27% of days, the top 10 on about 37%. Their pick then ran a further 3% on "
                        "average; the rest of the shortlist usually does not. Use it to narrow the field, then apply "
                        "your own confirmation (5-minute candle, OI build-up) and a small stop.")
             with st.expander(f"All {len(rd)} stocks 1%+ from yesterday's close"):
-                data_table(rd, "scan_radar", signed=("Move %", "From open %", "Sector move %", "OI chg %"),
+                data_table(rd, "scan_radar", signed=("Move %", "From open %", "Sector move %", "OI chg %", "Sector money (Rs cr)"),
                            name_col="Stock", height=520)
         if live_today:
             radar_log_today(S, oi, session)
         with st.expander("Track record of the 10:30 picks (logged daily)"):
             radar_track_record(bars)
+
+
+def with_sector_money(rd: pd.DataFrame) -> pd.DataFrame:
+    """Add the sector's smart-money flow (futures OI build-up, today) and whether it backs the stock's side."""
+    sf = sector_flow_table()
+    if sf.empty:
+        return rd
+    flow = sf.set_index("Sector")
+    rd = rd.copy()
+    rd["Sector money"] = rd["Sector"].map(flow["Flow"]).fillna("—")
+    rd["Sector money (Rs cr)"] = rd["Sector"].map(flow["Smart money (Rs cr)"])
+    buy = rd["Side"].astype(str).str.startswith("BUY")
+    rd["Money favours"] = np.where((buy & (rd["Sector money"] == "Bullish")) | (~buy & (rd["Sector money"] == "Bearish")),
+                                   "Yes", np.where(rd["Sector money"].isin(["Mixed", "—"]), rd["Sector money"], "No"))
+    return rd
 
 
 RADAR_LOG = Path(__file__).with_name("radar_log.csv")
@@ -3291,6 +3312,84 @@ def page_account():
                 st.error(err) if err else st.rerun()
 
 
+@st.cache_data(ttl=150, show_spinner=False)
+def apex_data(index: str, strikes: int):
+    return AP.buildup(index, strikes, 3, DCFG)
+
+
+def sector_flow_table() -> pd.DataFrame:
+    res, _ = safe(oi_data, True)
+    return SC.sector_smart_money(res[0]) if res else pd.DataFrame()
+
+
+def page_apex():
+    status_strip()
+    st.header("Index build-up & smart-money sectors")
+    if not DHAN_DATA:
+        need_dhan()
+        return
+    st.caption("Who is building positions, from the change in open interest every 3 minutes (not volume). Green: puts "
+               "written, calls closed, futures long build-up or short covering. Red: calls written, puts closed, "
+               "futures short build-up or long unwinding. Options: the strikes each side of the money, nearest "
+               "expiry. Refreshes about every 2.5 minutes.")
+    c1, c2 = st.columns([2, 3])
+    index = c1.selectbox("Index", list(AP.INDICES), key="apex_idx")
+    strikes = c2.slider("Strikes each side of the money", 2, 10, 5, key="apex_strikes")
+    try:
+        with st.spinner("Loading 1-minute OI for the index options and future (about 30 s on first load)…"):
+            bars, info = apex_data(index, strikes)
+    except D.DhanError as e:
+        st.error(e.friendly)
+        return
+    except Exception as e:
+        st.error(f"Could not load the build-up: {e}")
+        return
+    m = st.columns(4)
+    for col, (label, until) in zip(m, [("Up to 9:45", "09:45"), ("Up to 10:15", "10:15"), ("Up to 10:30", "10:30"),
+                                       ("Whole session", None)]):
+        share, text = AP.dominance(bars, until)
+        col.metric(label, text, f"{share:.0f}% bullish" if pd.notna(share) else None,
+                   delta_color="normal" if pd.isna(share) or share >= 50 else "inverse")
+    st.caption(f"{info['index']} · {info['session']:%a %d %b} · expiry {pd.Timestamp(info['expiry']):%d %b} · strikes "
+               f"{info['strikes'][0]:g}-{info['strikes'][-1]:g} · updated {info['updated']}")
+    from plotly.subplots import make_subplots
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.55, 0.45], vertical_spacing=0.03)
+    x = bars.index.strftime("%H:%M")
+    fig.add_trace(go.Candlestick(x=x, open=bars["Open"], high=bars["High"], low=bars["Low"], close=bars["Close"],
+                                 increasing_line_color=UP, decreasing_line_color=DOWN, name=index), 1, 1)
+    fig.add_trace(go.Bar(x=x, y=bars["bull"], marker_color=UP, name="Bullish build-up"), 2, 1)
+    fig.add_trace(go.Bar(x=x, y=-bars["bear"], marker_color=DOWN, name="Bearish build-up"), 2, 1)
+    fig.update_layout(template=plot_template(), height=620, barmode="relative", showlegend=False,
+                      margin=dict(l=10, r=10, t=10, b=10), xaxis_rangeslider_visible=False)
+    fig.update_xaxes(type="category", nticks=14)
+    fig.update_yaxes(title_text="Lots", row=2, col=1)
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    with st.expander("Bar data"):
+        t = bars.reset_index(names="Time")
+        t["Time"] = t["Time"].dt.strftime("%H:%M")
+        data_table(t[["Time", "Close", "opt_bull", "opt_bear", "fut_bull", "fut_bear", "net", "cum"]].round(1),
+                   "apex_bars", labels={"opt_bull": "Options bull", "opt_bear": "Options bear", "fut_bull":
+                                        "Futures bull", "fut_bear": "Futures bear", "net": "Net", "cum": "Cumulative"},
+                   signed=("net", "cum"), height=360)
+    st.caption("How TradeFinder uses it: trade the index in the direction that dominates the first 30-60 minutes, "
+               "wait for the shakeout against it, trail the stop. Not backtested here: Dhan keeps no option OI history "
+               "for expired contracts, so only the latest session can be shown.")
+
+    st.subheader("Sectors by smart money")
+    st.caption("Rupee value of fresh positions in each sector's stock futures today (near month, OI change x price): "
+               "long build-up counts fully bullish, short covering half, short build-up fully bearish, long "
+               "unwinding half. Stocks are picked from the sector the money favours.")
+    sf = sector_flow_table()
+    if DSTAT.get("hist_left_oi", 0):
+        st.info(f"Loading previous-day open interest: {DSTAT['hist_left_oi']} contracts to go, so sectors are still "
+                "filling in.", icon="⏳")
+    if sf.empty:
+        st.caption("No futures OI data yet.")
+    else:
+        data_table(sf, "apex_sectors", signed=("Smart money (Rs cr)", "Bias %", "Price move %"), name_col="Sector",
+                   height=520)
+
+
 def _sign_out():
     for k in list(st.session_state.keys()):
         del st.session_state[k]
@@ -3304,6 +3403,7 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("fno", page_fno, "F&O Stocks", ":material/candlestick_chart:"),
     ("oi", page_oi, "OI Analysis", ":material/stacked_bar_chart:"),
     ("options", page_option_chain, "Option Chain", ":material/table_chart:"),
+    ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
     ("crypto", page_crypto, "Crypto", ":material/currency_bitcoin:"),
     ("forex", page_forex, "Forex", ":material/currency_exchange:"),
     ("currency", page_currency, "Currency (INR)", ":material/currency_rupee:"),
@@ -3323,7 +3423,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "dashboard"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({
-    "Markets": [P["dashboard"], P["setups"], P["scanners"], P["indices"], P["sectors"], P["fno"], P["oi"], P["options"], P["crypto"], P["forex"], P["currency"],
+    "Markets": [P["dashboard"], P["setups"], P["scanners"], P["indices"], P["sectors"], P["fno"], P["oi"], P["options"], P["apex"], P["crypto"], P["forex"], P["currency"],
                 P["commodities"]],
     "Dhan": [P["mcx"], P["cdsfut"]] + ([P["portfolio"], P["dhan"]] if IS_ADMIN else []),
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["account"]],
