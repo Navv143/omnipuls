@@ -314,6 +314,45 @@ st.session_state.setdefault("detail_pick", "^NSEI")
 # ---------------------------------------------------------------- Dhan connection
 
 DCFG = D.load_config()
+TOKEN_CODES = ("DH-901", "401", "807", "808", "809")
+
+
+@st.cache_resource(show_spinner=False)
+def _auto_token() -> dict:
+    import threading
+    return {"token": None, "expiry": None, "error": None, "made": None, "tried": 0.0, "lock": threading.Lock()}
+
+
+def ensure_auto_token(force: bool = False):
+    """With the Dhan PIN and TOTP secret in Secrets, keep a valid token with no daily step: a new one is made when
+    there is none, when it has under an hour left, or when Dhan rejects it (force). Shared by every visitor; at most
+    one attempt every 2 minutes."""
+    if not D.can_auto_token(DCFG):
+        return
+    box = _auto_token()
+    now = datetime.now(IST)
+    with box["lock"]:
+        fresh = bool(box["token"] and box["expiry"] and box["expiry"] - now > timedelta(hours=1))
+        if not fresh and not force:
+            try:
+                exp = datetime.fromisoformat(str(DCFG.get("token_expiry")))
+            except ValueError:
+                exp = None
+            if DCFG.get("access_token") and exp and exp - now > timedelta(hours=1):
+                box.update(token=DCFG["access_token"], expiry=exp)  # still valid from this computer's last run
+                fresh = True
+        if (force or not fresh) and time.time() - box["tried"] > 120:
+            box["tried"] = time.time()
+            try:
+                tok, exp = D.generate_token(DCFG)
+                box.update(token=tok, expiry=exp, error=None, made=now)
+            except Exception as e:
+                box["error"] = f"{now:%d %b %H:%M}: {getattr(e, 'friendly', e)}"
+        if box["token"]:
+            DCFG["access_token"] = box["token"]
+
+
+ensure_auto_token()
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -336,8 +375,10 @@ if D.configured(DCFG):
     try:
         DS = dhan_status(_dhan_sig())
         sec_tok = DCFG.get("_secret_token")
-        if not DS["ok"] and DS.get("code") in ("DH-901", "401", "807", "808", "809") and sec_tok \
-                and sec_tok != DCFG.get("access_token"):
+        if not DS["ok"] and DS.get("code") in TOKEN_CODES and D.can_auto_token(DCFG):
+            ensure_auto_token(force=True)  # rejected (expired, or replaced by a token made elsewhere): make a new one
+            DS = dhan_status(_dhan_sig())
+        elif not DS["ok"] and DS.get("code") in TOKEN_CODES and sec_tok and sec_tok != DCFG.get("access_token"):
             DCFG["access_token"] = sec_tok  # the token pasted in the app expired; Secrets has a different one
             DS = dhan_status(_dhan_sig())
     except Exception as _e:
@@ -354,7 +395,10 @@ def _renew_attempts() -> dict:
 
 
 def auto_renew_token():
-    """A token can only be renewed while it is still valid: do it in its last 3 hours, so the app keeps working."""
+    """A token can only be renewed while it is still valid: do it in its last 3 hours, so the app keeps working.
+    Not needed (and not used) when tokens are made automatically from the PIN and TOTP."""
+    if D.can_auto_token(DCFG):
+        return
     try:
         valid = datetime.strptime(str(DS["profile"].get("tokenValidity", "")), "%d/%m/%Y %H:%M").replace(tzinfo=IST)
     except Exception:
@@ -3189,6 +3233,10 @@ def page_dhan():
         k[1].metric("Data API plan", str(p.get("dataPlan") or "—"))
         k[2].metric("Data plan valid until", str(p.get("dataValidity") or "—")[:16])
         k[3].metric("Segments", str(p.get("activeSegment") or "—")[:40])
+        if D.can_auto_token(DCFG):
+            box = _auto_token()
+            st.caption("Automatic token: on (PIN + TOTP). A new 24-hour token is made when the current one has under an "
+                       "hour left or is rejected." + (f" Last made {box['made']:%d %b %H:%M}." if box["made"] else ""))
         if not DS.get("data"):
             st.warning("Your Data API plan is not active, so prices come from Yahoo. Portfolio pages still work. "
                        "To get Dhan live data, option chain, MCX and currency futures, subscribe to Data APIs "
@@ -3197,6 +3245,8 @@ def page_dhan():
         st.error(DS["error"])
     else:
         st.info("Not connected. Follow the steps below.", icon=":material/link_off:")
+    if D.can_auto_token(DCFG) and _auto_token()["error"]:
+        st.warning(f"Automatic token failed: {_auto_token()['error']}", icon=":material/error:")
 
     st.subheader("Connect")
     st.markdown(
@@ -3228,11 +3278,15 @@ def page_dhan():
     if env:
         st.caption("The DHAN_ACCESS_TOKEN environment variable is set, so it is used instead of the saved token.")
     if PUBLIC:
-        st.info("**On Streamlit Cloud, keep your Dhan details in Secrets.** A token pasted above works until the app "
-                f"restarts. To keep it, add these lines in **{SECRETS_HELP}** with your own values:", icon=":material/key:")
-        st.code('[dhan]\nclient_id = "your client ID"\naccess_token = "your access token"', language="toml")
-        st.caption("Dhan tokens expire after 24 hours, so update access_token there each day (or paste the new one "
-                   "above for the day). Never put the token in your GitHub files.")
+        st.info("**No daily token: let the app make its own.** In **" + SECRETS_HELP + "** put your Client ID, your "
+                "6-digit Dhan PIN and your TOTP secret. The app then creates a fresh 24-hour token by itself whenever "
+                "one is needed, so nothing has to be pasted again.", icon=":material/key:")
+        st.code('[dhan]\nclient_id = "your client ID"\npin = "your 6-digit Dhan PIN"\n'
+                'totp_secret = "the TOTP secret key from Dhan"', language="toml")
+        st.caption("To get the TOTP secret: web.dhan.co → DhanHQ Trading APIs → Setup TOTP → confirm the OTP. When the "
+                   "QR code shows, choose to see the code/key instead and copy it (add the same key to Google "
+                   "Authenticator too). These stay only in Secrets: never in GitHub files or dhan_config.json. "
+                   "A token pasted above still works for the day if you prefer the manual way.")
     else:
         st.caption("Your token is saved only in dhan_config.json inside the app folder on this computer. Don't share "
                    "that file. The token expires after 24 hours; renew it below while it is still valid, or paste a "

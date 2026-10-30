@@ -100,12 +100,16 @@ class DhanError(Exception):
 # ---------------------------------------------------------------- config
 
 
+SECRET_KEYS = ("client_id", "access_token", "pin", "totp_secret")
+NEVER_SAVED = ("pin", "totp_secret")  # kept only in Secrets / environment, never written to dhan_config.json
+
+
 def secrets_config() -> dict:
-    """[dhan] client_id / access_token from Streamlit secrets (kept out of the code and across restarts)."""
+    """[dhan] client_id / access_token (or pin + totp_secret for automatic tokens) from Streamlit secrets."""
     try:
         import streamlit as st
         sec = st.secrets.get("dhan")
-        return {k: str(v) for k, v in dict(sec or {}).items() if k in ("client_id", "access_token") and v}
+        return {k: str(v) for k, v in dict(sec or {}).items() if k in SECRET_KEYS and v}
     except Exception:
         return {}
 
@@ -122,11 +126,15 @@ def load_config() -> dict:
         cfg["client_id"] = os.environ["DHAN_CLIENT_ID"]
     if os.environ.get("DHAN_ACCESS_TOKEN"):
         cfg["access_token"] = os.environ["DHAN_ACCESS_TOKEN"]
+    for key, env in (("pin", "DHAN_PIN"), ("totp_secret", "DHAN_TOTP_SECRET")):
+        if os.environ.get(env):
+            cfg[key] = os.environ[env]
     return cfg
 
 
 def save_config(cfg: dict):
-    CONFIG.write_text(json.dumps({k: v for k, v in cfg.items() if not k.startswith("_")}, indent=2))
+    CONFIG.write_text(json.dumps({k: v for k, v in cfg.items() if not k.startswith("_") and k not in NEVER_SAVED},
+                                 indent=2))
 
 
 def configured(cfg: dict | None = None) -> bool:
@@ -219,6 +227,49 @@ def renew_token(cfg=None) -> str | None:
         cfg["renewed_at"] = datetime.now(IST).isoformat(timespec="seconds")
         save_config(cfg)
     return token
+
+
+def can_auto_token(cfg: dict) -> bool:
+    """Client ID, Dhan PIN and the TOTP secret are set, so tokens can be made without a daily login."""
+    return bool(cfg.get("client_id") and cfg.get("pin") and cfg.get("totp_secret"))
+
+
+def totp_now(secret: str, at: float | None = None, step: int = 30, digits: int = 6) -> str:
+    """RFC 6238 code, the same one an authenticator app shows for this secret."""
+    import base64
+    import hashlib
+    import hmac
+    import struct
+    import time as _time
+    key = base64.b32decode(secret.replace(" ", "").upper() + "=" * (-len(secret.replace(" ", "")) % 8))
+    msg = struct.pack(">Q", int((at if at is not None else _time.time()) // step))
+    h = hmac.new(key, msg, hashlib.sha1).digest()
+    o = h[-1] & 0x0F
+    return str((struct.unpack(">I", h[o:o + 4])[0] & 0x7FFFFFFF) % 10 ** digits).zfill(digits)
+
+
+def generate_token(cfg: dict) -> tuple[str, datetime]:
+    """A fresh 24-hour access token from Client ID + PIN + TOTP (Dhan's generateAccessToken). Returns (token, expiry)."""
+    params = {"dhanClientId": str(cfg["client_id"]), "pin": str(cfg["pin"]), "totp": totp_now(str(cfg["totp_secret"]))}
+    _throttle("other")
+    resp = requests.post("https://auth.dhan.co/app/generateAccessToken", params=params, timeout=20)
+    try:
+        body = resp.json()
+    except ValueError:
+        body = {}
+    token = body.get("accessToken") if isinstance(body, dict) else None
+    if not resp.ok or not token:
+        msg = (body.get("message") or body.get("errorMessage") or body.get("remarks")) if isinstance(body, dict) else ""
+        raise DhanError("TOTP", f"Dhan did not issue a token ({resp.status_code}): {msg or str(body)[:200]}. "
+                                "Check the PIN and TOTP secret in Secrets, and that this PC's clock is correct.")
+    try:
+        expiry = datetime.fromisoformat(str(body.get("expiryTime"))[:19]).replace(tzinfo=IST)
+    except ValueError:
+        expiry = datetime.now(IST) + timedelta(hours=23)
+    cfg["access_token"] = token
+    cfg["token_expiry"] = expiry.isoformat(timespec="seconds")
+    save_config(cfg)
+    return token, expiry
 
 
 def holdings(cfg=None) -> list:
