@@ -217,6 +217,9 @@ def gap_fade(S: dict, nifty_gap: float | None, gap_min=0.03, top=2, stop_pct=0.0
 
 # ---------------------------------------------------------------- 2. Version 3 opening-range breakout
 
+BLOCK_RVOL = 20.0  # opening volume this many times the usual: likely a block deal
+
+
 def version3(S: dict, nifty: Stock | None, top=2, vol_mult=1.5, until=dtime(12, 0), stop_atr=0.5, trail_atr=1.0,
              filters=True) -> tuple[pd.DataFrame, pd.DataFrame]:
     rank = []
@@ -232,6 +235,9 @@ def version3(S: dict, nifty: Stock | None, top=2, vol_mult=1.5, until=dtime(12, 
     r = pd.DataFrame(rank)
     if r.empty:
         return pd.DataFrame(), pd.DataFrame()
+    # 20x+ the usual opening volume is almost always a block deal (one negotiated trade), not traders piling in;
+    # flag it rather than drop it: the backtest ranked on raw RVOL, and percentile ranks already cap its pull
+    r["block"] = r["rvol"] >= BLOCK_RVOL
     for c in ("atr", "orr", "rvol", "gap"):
         r[c + "_pr"] = r[c].rank(pct=True) * 100
     r["score"] = r[[c + "_pr" for c in ("atr", "orr", "rvol", "gap")]].sum(axis=1)
@@ -264,10 +270,12 @@ def version3(S: dict, nifty: Stock | None, top=2, vol_mult=1.5, until=dtime(12, 
             rows.append(_row(s, side, ts, et, entry, entry - side * stop_atr * s.atr,
                              {"Score": p.score, "Volume x": b["Volume"] / avg if avg and avg > 0 else np.nan,
                               "Nifty OK": "Yes" if nifty_ok else "No", "A+": "Yes" if a_plus else "",
+                              "Block deal?": "Yes" if p.block else "",
                               "Gap %": s.gap * 100}, trail=trail_atr * s.atr))
             break
     ranked = pd.DataFrame({"Stock": [x.sym for x in r["s"]], "Score": r["score"].round(0), "ATR %": r["atr"] * 100,
-                           "9:15-9:30 range %": r["orr"] * 100, "RVOL": r["rvol"], "Gap %": [x.gap * 100 for x in r["s"]]})
+                           "9:15-9:30 range %": r["orr"] * 100, "RVOL": r["rvol"], "Gap %": [x.gap * 100 for x in r["s"]],
+                           "Block deal?": np.where(r["block"], "Yes", "")})
     return pd.DataFrame(rows), ranked.head(10)
 
 

@@ -2687,6 +2687,9 @@ def scanner_body(svc, uni):
         with st.expander("Top-ranked stocks at 9:30"):
             if not ranked.empty:
                 data_table(ranked, "scan_v3_rank", signed=("Gap %",), name_col="Stock", height=380)
+                st.caption("Block deal? = opening volume 20x+ its 20-day usual: almost always one large negotiated "
+                           "trade at the open, not traders piling in. Its RVOL is real but says little about follow-"
+                           "through; treat that stock's rank with care.")
     with tabs[1]:
         head(5)
         st.caption("Each stock 1%+ from yesterday's close, compared with the same time window on its last sessions: "
