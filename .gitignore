@@ -30,3 +30,5 @@ research/results/bigbars_events.csv.gz
 research/results/*_trades.csv.gz
 research/results/volume_spikes_*.csv.gz
 research/results/selftest_*
+research/results/open1pct_events.csv.gz
+research/results/*_log.txt

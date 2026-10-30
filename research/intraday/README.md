@@ -121,3 +121,46 @@ the rebuild uses next week's / next month's contract, a proxy for the live page.
   loses in the first half. Too few days to trust either.
 - Use: direction filter (trade only with strong bars and the day's build-up), not a stand-alone signal. Re-run weekly:
   results/apex_history.csv.gz keeps every rebuilt day, so the sample grows past Dhan's one-month window.
+
+## Broad re-search, 31 Oct 2026: index intraday, positional, relative weakness
+
+**Index intraday for option buyers** (`research/index_setups.py`, Dhan 5-minute Nifty and Bank Nifty, Nov 2021 - Oct
+2026, 1,224 days): 23 rules (opening drive follow/fade, gap fade/follow, 15/30/60-min ORB incl. NR7 days, VWAP+open
+trend at 11:00/12:00/13:30, yesterday's high/low break, first-candle follow/fade, 14:00 trend follow/fade). The index
+move itself is about zero for every rule (-0.06% to +0.05% after futures cost); after an ATM option buyer's cost and
+time decay every rule loses on both indices in every year (-0.02% to -0.27% of the index per trade). Mechanical
+intraday index option buying has no edge here.
+
+**Positional on F&O stocks** (`research/swing_daily.py`, `research/momentum_robust.py`, daily 2013-2026): 12-1 month
+momentum top 10% looked like +13.5%/yr over the equal-weight list, 13/14 years; restricted to the 100 most traded
+stocks on each decision date (removing most of the survivorship of today's F&O list) it is +4%/yr (top 10: +8%/yr,
+10/14 years) with -41% drawdowns. Short-term reversal, 52-week high, low volatility, RSI(2) pullback, sector momentum:
+0 to +5%/yr over the benchmark, inconsistent. Nothing here beats simply holding the liquid universe by enough.
+
+**Short stocks 1.5-3% down at 9:30 while Nifty is up** (the lead from momentum_dhan.py): +0.18% per trade after 0.12%
+costs with a 1% stop, positive every year 2021-2026 (2025 +0.10%, 2026 +0.12%), Nifty-down control loses. But trades
+on the same day move together: as a daily book +0.07% a day, 43% green days, t 1.4. At 9:45 +0.05%, at 10:00 -0.06%:
+only the 9:30 entry works. Small, needs futures/cash shorts at 9:30, paper-trade first.
+
+Still the strongest: the opening-price setups (gap fade, panic gap-down buy, sector overreaction) in research/README.md.
+
+## "World's smallest stop loss": lowest-volume opposite candle entry (YouTube b0D4mvFZa5k, 31 Oct 2026)
+
+`research/lowvol_entry.py`, Dhan 5-minute bars, 206 F&O stocks, Nov 2021 - Oct 2026, the video's rules: side from
+Nifty advances/declines at 9:25, the sector moving most that way, its top 2 F&O stocks (under 5%), skip the first 3
+candles, then an opposite-colour candle with the day's lowest volume so far: stop order beyond it, stop at its other
+end, order moved to newer such candles, exits half at 1:2 + rest to cost (video), all at 1:2, hold to close, 10-EMA
+trail. 2,300 trades (2 a day, median entry 10:00, median risk 0.34% of price). Before costs about zero (-0.03% per
+trade); after 0.12% costs -0.14% to -0.18% per trade for every exit, 28% winners, -0.5R per trade, negative in every
+year 2021-2026, longs and shorts, top 1 or 2, small or large risk. The tiny stop makes costs about a third of the
+risk on each trade, and the low-volume candle does not mark where the move resumes. Rejected.
+
+## Quiet open (gap under 1%), then a 1% move from the open (31 Oct 2026)
+
+`research/open1pct.py`, Dhan 5-minute bars, 206 F&O stocks, Nov 2021 - Oct 2026: 161,383 events (135 a day; median
+trigger 9:50). Entry at the next candle, in the move's way or against it. After the 1% the next 15/30/60 minutes
+average +0.006% / +0.005% / +0.012% before costs, +0.04% to the close: a coin flip (20% go a further 1%+, 19% reverse
+1%). After 0.12% costs every exit loses (follow -0.06% to -0.08%, fade -0.10% to -0.13%), at every trigger time.
+725 filter/exit combinations (time, gap, volume, trigger-candle volume, Nifty, sector, yesterday's high/low, ATR,
+side; 150+ trades each): none positive in both halves and 2025-26. Best tilt: volume 2x + Nifty + sector all the same
+way, +0.04% per trade on 1,681 trades (about 1 a day), not significant. The 1% move from a quiet open carries no edge.
