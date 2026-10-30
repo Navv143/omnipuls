@@ -85,7 +85,11 @@ def secret_users() -> dict:
 def load() -> dict:
     users = secret_users()
     for uid, u in _read(USERS_FILE).items():
-        users[uid] = {**users.get(uid, {}), **u, "source": "app"}
+        sec = users.get(uid, {})
+        # same password and role already in Secrets: the account survives restarts, so say so
+        saved = bool(sec) and sec.get("salt") == u.get("salt") and sec.get("hash") == u.get("hash") \
+            and sec.get("role") == u.get("role", sec.get("role"))
+        users[uid] = {**sec, **u, "source": "secrets" if saved else "app"}
     state = _read(STATE_FILE)
     for uid, u in users.items():
         u.update({"last_login": state.get(uid, {}).get("last_login"), "prefs": state.get(uid, {}).get("prefs", {})})
