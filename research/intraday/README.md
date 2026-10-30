@@ -106,3 +106,18 @@ its top 5 on ~27% of days.
 `lvc.py`, `run_lvc.py`, `run_lvc2.py`. About 5-8 signals a day, 2015-2026. All 8 basic variants lose after costs
 (-0.01% to -0.05% per share trade, -1.2% to -1.9% per option trade). Best subset: stocks already 2%+ from the open
 by 10:00, fresh break, 0.5 ATR stop: +0.08% per share trade (8/12 years), but still -0.2% per option trade.
+
+## Index build-up bars (Option Apex style) for scalping (31 Oct 2026)
+
+`research/apex_backtest.py`. 3-minute bars of option (5 strikes each side) + futures OI build-up, rebuilt from Dhan
+1-minute OI of contracts still live: Nifty 27 days, Bank Nifty 23, Fin Nifty 3 (Sep-Oct 2026). Before the last expiry
+the rebuild uses next week's / next month's contract, a proxy for the live page. Index points, signed in the bar's way.
+
+- Weak bars (under half a typical bar) say nothing. Strong bars point the right way, modestly: Nifty bars 1-2x typical
+  +3.2 pts next 15 min (54% hit); Bank Nifty bars 2x+ +14.6 pts (58%), 4x+ +29 pts (68%, 31 bars).
+- Fading a strong bar loses on every index (Bank Nifty -15 pts a trade, t -2.4): never trade against one.
+- No mechanical scalp holds up after costs with a 1:3 stop and 30-min exit: the best (Nifty 3-bar streak with the day's
+  cumulative build-up, +3.1 pts, t 1.45, both halves positive) loses on Bank Nifty; Bank Nifty's 3x burst (+16 pts)
+  loses in the first half. Too few days to trust either.
+- Use: direction filter (trade only with strong bars and the day's build-up), not a stand-alone signal. Re-run weekly:
+  results/apex_history.csv.gz keeps every rebuilt day, so the sample grows past Dhan's one-month window.

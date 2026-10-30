@@ -2791,7 +2791,8 @@ def with_option_flow(df: pd.DataFrame, session) -> pd.DataFrame:
         side = 1 if str(r["Side"]).startswith("BUY") else -1
         f = stock_option_flow(r["Stock"], side)
         key = (f"{session:%Y-%m-%d}", r["Stock"], side)
-        if f.get("Options confirm") == "Yes":
+        # only during that session's market hours: a time stamped after the close or the next day is meaningless
+        if f.get("Options confirm") == "Yes" and session.date() == datetime.now(IST).date() and SS.market_hours():
             seen.setdefault(key, now)
         rows.append({**f, "Confirmed since": seen.get(key, "")})
     extra = pd.DataFrame(rows, index=df.index)
