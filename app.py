@@ -63,26 +63,30 @@ def _process_start() -> float:
         return time.time()
 
 
-def _stale(mod, started: float) -> bool:
-    """True when the module's file changed after the copy in memory was loaded. A running Streamlit server re-reads
-    only app.py after a code update (git pull on Streamlit Cloud); imported modules stay old until reloaded."""
-    try:
-        mtime = os.path.getmtime(mod.__file__)
-    except Exception:
-        return False
-    loaded = getattr(mod, "_omni_mtime", None)
-    return mtime > started + 1 if loaded is None else mtime != loaded
-
-
 def _reload_changed():
+    """A running Streamlit server re-reads only app.py after a code update (git pull on Streamlit Cloud); imported
+    modules can stay old. Reload any module whose file changed, once per file version (remembered per process in
+    sys, which survives reruns and cache clears). If a reload fails (Streamlit may be swapping the same module), drop
+    it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
     mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW]  # dependencies before the modules that use them
-    started = _process_start()
-    stale = any(_stale(m, started) for m in mods)
+    seen = sys.__dict__.setdefault("_omni_seen", {})
+    started = None
+    stale = []
+    for m in mods:
+        try:
+            mt = os.path.getmtime(m.__file__)
+        except Exception:
+            continue
+        prev = seen.get(m.__name__)
+        if prev is None:  # first look in this process: stale only if the file changed after the process started
+            started = _process_start() if started is None else started
+            if mt > started + 1:
+                stale.append(m)
+        elif mt != prev:
+            stale.append(m)
+        seen[m.__name__] = mt
     if not stale:
-        for m in mods:
-            if getattr(m, "_omni_mtime", None) is None:
-                m._omni_mtime = os.path.getmtime(m.__file__)
         return
     for m in (SS, F):  # stop the old background loaders and feeds; the reloaded modules start new ones
         for old in list(getattr(m, "INSTANCES", [])):
@@ -90,10 +94,19 @@ def _reload_changed():
                 old.stop()
             except Exception:
                 pass
+    failed = False
     for m in mods:
-        importlib.reload(m)
-        m._omni_mtime = os.path.getmtime(m.__file__)
+        try:
+            if sys.modules.get(m.__name__) is m:
+                importlib.reload(m)
+            else:
+                failed = True  # already replaced in sys.modules: the next run imports the new one
+        except Exception:
+            sys.modules.pop(m.__name__, None)
+            failed = True
     st.cache_resource.clear()  # cached loaders, feeds and data were built by the old code
+    if failed:
+        st.rerun()
 
 
 _reload_changed()
