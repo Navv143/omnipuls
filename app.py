@@ -48,6 +48,7 @@ import activity as A
 import indices as IX
 import trend_alert as TA
 import desk as DK
+import twelve as TW
 
 
 def _process_start() -> float:
@@ -75,7 +76,7 @@ def _stale(mod, started: float) -> bool:
 
 def _reload_changed():
     import importlib
-    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK]  # dependencies before the modules that use them
+    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW]  # dependencies before the modules that use them
     started = _process_start()
     stale = any(_stale(m, started) for m in mods)
     if not stale:
@@ -807,13 +808,36 @@ def fetch_daily(symbols: tuple) -> dict:
             except Exception as e:
                 DSTAT["error"] = f"Dhan: {getattr(e, 'friendly', e)}"
     rest = tuple(s for s in symbols if s not in out and not s.startswith(("MCX:", "CDS:", "FUT:")))
-    if rest:
+    err = None
+    if rest and time.time() >= YAHOO_STATE["down_until"]:
         try:
-            out.update(_yahoo_daily(rest))
-        except Exception:
-            if not out:
-                raise
+            got = _yahoo_daily(rest)
+            out.update(got)
+            if not got:
+                raise RuntimeError("No data returned")
+        except Exception as e:
+            err = e
+            YAHOO_STATE.update(down_until=time.time() + 900, error=str(e)[:200])  # skip Yahoo 15 min, don't wait on it
+    missing = tuple(s for s in rest if s not in out)
+    if missing and _twelve_key():
+        out.update(TW.daily(missing, _twelve_key()))
+    if rest and not out and err is not None:
+        raise err
+    if rest and not out and time.time() < YAHOO_STATE["down_until"]:
+        raise RuntimeError("Yahoo is not answering from this server" +
+                           ("" if _twelve_key() else "; add a Twelve Data key in Secrets as the fallback"))
     return out
+
+
+YAHOO_STATE = {"down_until": 0.0, "error": ""}
+
+
+def _twelve_key() -> str:
+    try:
+        k = (st.secrets.get("twelvedata") or {}).get("api_key")
+    except Exception:
+        k = None
+    return str(k or os.environ.get("TWELVEDATA_API_KEY") or "")
 
 
 @st.cache_data(ttl=20, show_spinner=False)
@@ -881,11 +905,14 @@ def resolved(specs_list) -> dict:
             found[label] = hit
         else:
             pending.append((label, tuple(cs)))
-    if pending:
+    if pending and time.time() >= YAHOO_STATE["down_until"]:
         try:
             found.update(resolve(tuple(pending)))
-        except Exception:
-            pass
+        except Exception as e:
+            YAHOO_STATE.update(down_until=time.time() + 900, error=str(e)[:200])  # don't re-probe on every run
+    for label, cs in pending:  # Yahoo down: the first candidate Twelve Data covers, else the first one
+        if label not in found:
+            found[label] = next((c for c in cs if TW.td_symbol(c)), cs[0])
     return {label: found[label] for label, _ in specs_list if label in found}
 
 
@@ -1563,7 +1590,13 @@ def page_dashboard():
     check_alerts(dict(zip(t["Symbol"], t["Price"])))
 
 
-_SCAN_CACHE: dict = {}
+@st.cache_resource(show_spinner=False)
+def _memo(name: str) -> dict:
+    """A dict that survives reruns (app.py runs top to bottom on every page load; plain module dicts don't)."""
+    return {}
+
+
+_SCAN_CACHE = _memo("scan")
 
 
 def _scan_now(svc):
@@ -1573,8 +1606,7 @@ def _scan_now(svc):
         return None
     key = (id(svc), svc.last_pass, len(bars))
     if _SCAN_CACHE.get("k") != key:
-        session = SC.session_of(nifty_df)
-        S = SC.prepare(bars, session)
+        S, session = _prepared(svc)
         N = SC.Stock("NIFTY 50", nifty_df, session)
         rd = SC.radar(S, svc.oi())
         v3, _ = SC.version3(S, N if N.ok else None)
@@ -3888,7 +3920,7 @@ def sector_flow_table() -> pd.DataFrame:
 
 # ---------------------------------------------------------------- unusual activity (smart score)
 
-_ACT_CACHE: dict = {}
+_ACT_CACHE = _memo("activity")
 
 
 def _activity_data(svc):
@@ -4409,6 +4441,20 @@ def page_apex():
     st.page_link(P["smart"], label="Smart money sectors and their best R-factor stocks", icon=":material/insights:")
 
 
+_PREP_CACHE = _memo("prepared")
+
+
+def _prepared(svc):
+    """Per-stock day statistics for the loader's latest bars, built once per loader pass and shared by the radar,
+    breakout and R-factor (each rebuild walks every stock's history)."""
+    bars, nifty_df = svc.bars()
+    key = (id(svc), svc.last_pass, len(bars))
+    if _PREP_CACHE.get("k") != key:
+        session = SC.session_of(nifty_df)
+        _PREP_CACHE.update(k=key, v=(SC.prepare(bars, session), session))
+    return _PREP_CACHE["v"]
+
+
 def smart_money_stocks(svc) -> tuple[pd.DataFrame, object]:
     """Every F&O stock with its live price, today's futures buildup and rupee flow, and its R-factor."""
     res, _ = safe(oi_data, True)
@@ -4416,9 +4462,11 @@ def smart_money_stocks(svc) -> tuple[pd.DataFrame, object]:
     bars, nifty_df = svc.bars()
     if not bars or nifty_df is None or nifty_df.empty:
         return pd.DataFrame(), None
-    session = SC.session_of(nifty_df)
-    S = SC.prepare(bars, session)
-    rf = SC.r_factor(S, svc.oi() if hasattr(svc, "oi") else {})
+    S, session = _prepared(svc)
+    key = ("rf", id(svc), svc.last_pass, len(bars))
+    if _PREP_CACHE.get("rf_k") != key:
+        _PREP_CACHE.update(rf_k=key, rf=SC.r_factor(S, svc.oi() if hasattr(svc, "oi") else {}))
+    rf = _PREP_CACHE["rf"].copy()
     if rf.empty:
         return rf, session
     rf = rf.drop(columns=["Buildup", "OI chg %", "Side", "Sector"], errors="ignore")
