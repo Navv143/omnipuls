@@ -1,7 +1,7 @@
 """Daily log of the Trading Desk (verdict, index plans, CE / PE focus with their OI readings) so the parts with no
 history (futures buildup, sector futures money) can be judged after a few weeks.
 
-Saved twice a day (10:30 and 12:00 IST, the first desk view after each) to desk_log.csv next to the app, and, when
+Saved four times a day (9:20, 9:45, 10:30 and 12:00 IST, the first desk view after each) to desk_log.csv next to the app, and, when
 Secrets has [github] token (+ optional repo / branch), appended to desk_log/<YYYY-MM>.csv on the `logs` branch of the
 private repo: Streamlit Cloud forgets local files on every restart, and it deploys only `main`, so writing to
 `logs` never restarts the app. research/desk_log_eval.py scores the logged picks.
@@ -20,7 +20,7 @@ import requests
 
 HERE = Path(__file__).resolve().parent
 LOCAL = HERE / "desk_log.csv"
-CHECKS = ("10:30", "12:00")
+CHECKS = ("09:20", "09:45", "10:30", "12:00")
 FIELDS = ["date", "check", "logged_at", "kind", "name", "side", "price", "chg_pct", "score", "why", "extra"]
 _lock = threading.Lock()
 STATUS = {"last": "", "error": ""}

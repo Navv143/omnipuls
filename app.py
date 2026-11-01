@@ -1782,7 +1782,7 @@ def _github_cfg() -> dict:
 
 
 def _log_desk(snaps: dict, verdict: dict, plans: list, ce, pe):
-    """Record the desk at 10:30 and 12:00 on market days (only from today's live data), once per checkpoint."""
+    """Record the desk at 9:20, 9:45, 10:30 and 12:00 on market days (only from today's live data), once per checkpoint."""
     now = datetime.now(IST).replace(tzinfo=None)
     n = snaps.get("NIFTY")
     if not n or n["closes"].empty or n["closes"].index.max().date() != now.date():
@@ -4675,7 +4675,7 @@ def page_research():
     st.caption("Only admins see this page, the Research tab, the 'How it works' tabs and the method notes under "
                "each scanner. Other users see the signals and tables only.")
     gh = _github_cfg()
-    st.caption(f"Desk log (10:30 and 12:00 on market days): last saved {DL.STATUS['last'] or 'not yet in this run'}; "
+    st.caption(f"Desk log (9:20, 9:45, 10:30, 12:00 on market days): last saved {DL.STATUS['last'] or 'not yet in this run'}; "
                + ("copies to GitHub branch `logs`." if gh.get("token") else
                   "**GitHub copy off**: add `[github]` `token = \"…\"` in Secrets, or the log is lost on restart.")
                + (f" Last GitHub error: {DL.STATUS['error']}" if DL.STATUS["error"] else ""))
