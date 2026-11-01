@@ -153,3 +153,12 @@ def star_row(now: datetime, sg: dict, final: bool) -> list[dict]:
              "kind": "5star_final" if final else "5star", "name": "BANKNIFTY", "side": "CE" if sg["side"] > 0 else "PE",
              "price": round(sg["entry"], 2), "chg_pct": "", "score": round(sg["pts"], 1) if final else "",
              "why": sg["state"] if final else f"stop {sg['stop0']:.1f}", "extra": f"exit {sg['exit']}" if final else ""}]
+
+
+def fade_row(now: datetime, tr: dict, final: bool) -> list[dict]:
+    """Bank Nifty failed-break fade paper trade: when it fires, and its result once closed (points before cost)."""
+    return [{"date": now.strftime("%Y-%m-%d"), "check": tr["time"], "logged_at": now.strftime("%H:%M"),
+             "kind": "fade_final" if final else "fade", "name": "BANKNIFTY", "side": "CE" if tr["side"] > 0 else "PE",
+             "price": round(tr["entry"], 2), "chg_pct": "", "score": round(tr["pts"], 1) if final else "",
+             "why": tr["state"] if final else f"stop {tr['stop']:.1f} target {tr['target']:.1f}",
+             "extra": f"{tr['level']}; exit {tr['exit']:.1f} at {tr['exit_time']}" if final else tr["level"]}]

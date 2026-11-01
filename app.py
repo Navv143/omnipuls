@@ -53,6 +53,7 @@ import desk_log as DL
 import five_star as FIVE
 import chain_log as CL
 import trade_odds as TO
+import fade as FADE
 
 
 def _process_start() -> float:
@@ -80,7 +81,7 @@ def _reload_changed():
     sys, which survives reruns and cache clears). If a reload fails (Streamlit may be swapping the same module), drop
     it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
-    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE, CL, TO]  # dependencies before the modules that use them
+    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE, CL, TO, FADE]  # dependencies before the modules that use them
     seen = sys.__dict__.setdefault("_omni_seen", {})
     started = None
     stale = []
@@ -1825,6 +1826,14 @@ def _log_paper(svc, idx_b: dict, og, now: datetime):
         if sg and sg["state"] != "open" and (day, "5star_final") not in done:
             done.add((day, "5star_final"))
             rows += DL.star_row(now, sg, final=True)
+        for tr in FADE.evaluate(bn, now).get("trades", []):
+            key = (day, "fade", tr["time"])
+            if key not in done:
+                done.add(key)
+                rows += DL.fade_row(now, tr, final=False)
+            if tr["state"] != "open" and key + ("final",) not in done:
+                done.add(key + ("final",))
+                rows += DL.fade_row(now, tr, final=True)
     if rows:
         DL.save(rows, _github_cfg())
 
@@ -3257,15 +3266,17 @@ def scanner_body(svc, uni):
 
     signed = ("P&L %", "Gap %", "Change by 10:00 %")
     tabs = st.tabs(["Opening setups", "Momentum radar", "Breakout (V3)", "Index trend-day + OI (options)",
-                    "Bank Nifty 5-STAR"] + (["Research"] if IS_ADMIN else []))
+                    "Bank Nifty 5-STAR", "BN failed-break fade"] + (["Research"] if IS_ADMIN else []))
     with tabs[3]:
         index_trend_tab(svc)
     with tabs[4]:
         five_star_tab(svc)
+    with tabs[5]:
+        fade_tab(svc)
     with tabs[0]:
         setups_body()
     if IS_ADMIN:
-        with tabs[5]:
+        with tabs[6]:
             rs = pd.DataFrame([{"Setup": r[0], "Verdict": SC.VERDICT_LABEL[r[2]], "Trade with": r[1],
                                 "Shares / trade": r[3], "Options / trade": r[4], "Years +": r[5], "Notes": r[6]}
                                for r in SC.RESEARCH])
@@ -4523,6 +4534,55 @@ def _five_star_data(svc):
     return memo["v"]
 
 
+def fade_tab(svc):
+    note_md(f"{_badge('ok')}&nbsp; **Bank Nifty failed-break fade:** +26 pts a trade after 5 pts cost (Dec 2021 - "
+            "Oct 2026), 58 trades a year, 49% wins, positive in both halves and in all 36 tried stop / window / exit "
+            "mixes. Best before 11:00 (+43). Wide stop (0.4 x daily ATR, about 250 pts): size by it. Paper-trade first.",
+            unsafe_allow_html=True)
+    if IS_ADMIN:
+        with st.expander("Rules"):
+            st.markdown(FADE.__doc__.split("\n", 3)[3])
+    bn = svc.idx_bars().get("BANKNIFTY")
+    if bn is None or bn.empty:
+        st.info("Waiting for Bank Nifty 5-minute bars from the loader.", icon=":material/hourglass_top:")
+        return
+    r = FADE.evaluate(bn, datetime.now(IST).replace(tzinfo=None))
+    if r.get("status") != "ok":
+        st.caption(f"Not ready: {r.get('status')}.")
+        return
+    sess = pd.Timestamp(r["session"])
+    live_today = sess.date() == datetime.now(IST).date()
+    m = st.columns(4)
+    m[0].metric("Yesterday's high", f"{r['pdh']:,.1f}", f"{r['last'] - r['pdh']:+,.0f} from it now", delta_color="off")
+    m[1].metric("Yesterday's low", f"{r['pdl']:,.1f}", f"{r['last'] - r['pdl']:+,.0f} from it now", delta_color="off")
+    m[2].metric("Bank Nifty", f"{r['last']:,.1f}", f"candle {r['last_time']}", delta_color="off")
+    m[3].metric("Stop distance", f"{r['risk']:,.0f} pts", f"0.4 x ATR {r['atr']:,.0f}", delta_color="off")
+    if not live_today:
+        st.caption(f"Market closed: showing {sess:%a %d %b}.")
+    for tr in r["trades"]:
+        col = UP if tr["side"] > 0 else DOWN
+        with st.container(border=True):
+            st.markdown(f"<div style='font-size:1.5rem;font-weight:800;color:{col}'>"
+                        f"{'BUY' if tr['side'] > 0 else 'SELL'} Bank Nifty · {tr['time']}</div>"
+                        f"<span class='muted'>{tr['level']} broke at {tr['break_time']} and closed back inside</span>",
+                        unsafe_allow_html=True)
+            k = st.columns(5)
+            k[0].metric("Entry", f"{tr['entry']:,.1f}")
+            k[1].metric("Stop", f"{tr['stop']:,.1f}", f"{tr['risk']:,.0f} pts", delta_color="off")
+            k[2].metric("Target (2R)", f"{tr['target']:,.1f}", f"{2 * tr['risk']:,.0f} pts", delta_color="off")
+            k[3].metric("Points", f"{tr['pts']:+,.0f}", tr["state"], delta_color="normal" if tr["pts"] >= 0 else "inverse")
+            k[4].metric("Exit", f"{tr['exit']:,.1f}" if tr["exit"] else "—", tr["exit_time"] or "15:10 close if nothing hits",
+                        delta_color="off")
+    if not r["trades"]:
+        st.markdown("<div style='font-size:1.3rem;font-weight:700;color:#94A3B8'>No fade "
+                    f"{'yet' if live_today else 'that session'}</div>", unsafe_allow_html=True)
+    st.markdown("**Each level now**")
+    for sd in r["sides"]:
+        st.markdown(f"- **{sd['level']} {sd['price']:,.1f}**: {sd['state']}")
+    st.caption("5-minute index candles, closed candles only; refreshes with the page. Trade the future or an option "
+               "and check its price before entering.")
+
+
 def five_star_tab(svc):
     note_md(f"{_badge('ok')}&nbsp; **Bank Nifty futures:** +29 pts a trade after 12 pts cost (2015-2026), 72 trades a "
             "year, 50% wins, 9 of 12 years positive; last 12 months on Dhan data +13 pts. Profit comes from a few wide "
@@ -4945,6 +5005,17 @@ def _paper_results(L: pd.DataFrame) -> pd.DataFrame:
     for _, r in opened.iterrows():
         out.append({"Date": r["date"], "Setup": "Bank Nifty 5-STAR", "Stock": "BANKNIFTY",
                     "Side": "BUY" if r["side"] == "CE" else "SELL", "Entry": r["price"], "Note": "result not logged yet"})
+    ff = L[L["kind"] == "fade_final"]
+    done_f = set(zip(ff["date"], ff["check"]))
+    for _, r in ff.iterrows():
+        out.append({"Date": r["date"], "Setup": "Bank Nifty failed-break fade", "Stock": "BANKNIFTY",
+                    "Side": "BUY" if r["side"] == "CE" else "SELL", "Entry": r["price"],
+                    "Result pts": float(r["score"]) - FADE.COST, "Note": f"{r['why']} ({r['extra']})"})
+    for _, r in L[(L["kind"] == "fade")].iterrows():
+        if (r["date"], r["check"]) not in done_f:
+            out.append({"Date": r["date"], "Setup": "Bank Nifty failed-break fade", "Stock": "BANKNIFTY",
+                        "Side": "BUY" if r["side"] == "CE" else "SELL", "Entry": r["price"],
+                        "Note": "result not logged yet"})
     return pd.DataFrame(out)
 
 
@@ -5137,7 +5208,8 @@ def page_desk_review():
     P_ = _paper_results(L)
     if P_.empty:
         st.caption("No paper trades logged yet: the gap fade / panic gap-down / sector overreaction picks are saved "
-                   "after 9:20 and Bank Nifty 5-STAR when it fires, while the Trading Desk is open.")
+                   "after 9:20, Bank Nifty 5-STAR and the failed-break fade when they fire, while the Trading Desk "
+                   "is open.")
     else:
         summ = []
         for setup, g in P_.groupby("Setup"):
@@ -5152,7 +5224,7 @@ def page_desk_review():
             data_table(P_.sort_values("Date", ascending=False).round(2), "dr_paper", name_col="Stock",
                        signed=tuple(c for c in ("Result %", "Result pts") if c in P_), height=420)
         st.caption("History to beat: gap fade +0.66% a trade, panic gap-down +1.36%, sector overreaction +0.71%, "
-                   "5-STAR +29 pts. A few weeks of trades are needed before comparing.")
+                   "5-STAR +29 pts, failed-break fade +26 pts. A few weeks of trades are needed before comparing.")
 
     st.subheader("All logged days")
     allf = L[L["kind"] == "focus"]
