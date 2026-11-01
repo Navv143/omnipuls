@@ -55,6 +55,35 @@ RESEARCH = [
      "~27% of days."),
     ("Swing calls: 20-day breakout on 2x volume, hold 10 days", "—", "weak", "+1.36%", "+16.5%", "8/12",
      "Random stocks held the same way made +9.6%: mostly bull market and today's-index bias."),
+    # ---- added 1 Nov 2026 (index option study, videos, small caps, dip-buying)
+    ("Index trend-day + OI (Scanners tab): move >= 0.6-1.0 ATR from open by 10:30-13:00, future on the VWAP side, "
+     "futures OI above yesterday; ATM option, stop -30%, trail 30% off peak after +30%", "Index options (buy)", "ok",
+     "—", "BN +4.1%, Nifty +1.9% a trade (fixed times)", "5-7/8",
+     "Bank Nifty profitable in 19 of 20 time x threshold cells, Nifty 14/19; OI rising is the key ingredient (without "
+     "it the edge halves / vanishes). Beats random-time buys by ~+8-9 pts of premium under both option models. "
+     "10-20 trades a year per index, t ~1-1.7: paper-trade, size small. Real-price check: dhan_index_options.py."),
+    ("Index option discovery study: 60+ readings per 5-min bar (CVD, OI buildup, RSI, MACD, VWAP, EMA, Bollinger, "
+     "levels, sweeps), walk-forward ML", "—", "no", "futures +0.05-0.08% an hour", "BN ~0 to +1%, Nifty -2%", "—",
+     "Direction is slightly predictable but too little for option premium on 60-minute trades. Indicators fire "
+     "together at CVD flips because they all measure momentum."),
+    ("Intraday option SELLING (09:20 straddle / strangle / iron fly) on modelled premiums", "—", "weak", "—",
+     "model-dependent", "0-12/12",
+     "Trading-time model: wins 12/12 years; calendar-time model: loses 12/12. Undecided until tested on real prices "
+     "(research/index_options/dhan_index_options.py on this PC)."),
+    ("EMA 9 / VWAP crossover on 3-min (video), incl. first pullback", "—", "no", "-0.00% to -0.03% (futures)",
+     "-2% to -5%", "0-3/8", "Real 3-min Nifty / Bank Nifty futures 2015-2023; win rate 17-29%."),
+    ("9 / 15 EMA crossover (3/5/15-min) and The Trade Room 9/15 EMA scalping", "—", "no", "about 0",
+     "-0.3% to -5%", "0-1/8", "Only Bank Nifty with a very steep EMA9 slope shows a small futures edge (+0.03-0.07%), "
+     "too thin for options."),
+    ("Fibonacci retracement of the first-hour impulse (38.2/50/61.8)", "—", "no", "best +0.02% (noise)",
+     "-1% to -10%", "—", "48 variants."),
+    ("'Fri high < Thu high -> Monday visits Fri low (24/25)'", "—", "no", "~0% as a trade", "—", "—",
+     "Real hit rate 55-58% vs 45% unconditional; Mon/Wed -> Thu 52% vs 46%."),
+    ("Small caps: Bollinger(35,1.5) close outside + breakout with volume, 3-4 month hold", "Cash", "weak",
+     "+5-7% vs +3-6% random", "—", "7-10/15", "Volume confirmation makes it worse; median trade -5% to -7%."),
+    ("Dip-buying RSI(3)<22 / Triple RSI(5) (quantifiedstrategies)", "Cash", "weak",
+     "F&O stocks +0.19% / +0.57%; small caps -0.6% to +0.3%", "—", "—",
+     "Win 55-70% but only ~+0.1% better than random holds; Nifty index loses; small-cap portfolios -6% to -21% a year."),
 ]
 VERDICT_LABEL = {"best": "Use", "ok": "Small edge", "weak": "Weak", "no": "Rejected"}
 

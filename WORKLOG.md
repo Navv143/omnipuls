@@ -67,8 +67,37 @@ What was built, fixed and tested, day by day, with the commit for each change. R
 **Still the strongest:** the opening-price setups (gap fade, panic gap-down buy, sector overreaction) in the
 Opening setups tab.
 
+## 31 Oct - 1 Nov 2026: unusual activity, money flow, index flow, trend-day alert, big research round (chat "Navv")
+
+**Built and shipped**
+- F&O Stocks -> **Unusual activity**: smart score for every F&O stock, candle by candle, vs the same time of day over
+  the last 20 sessions (time-based volume / turnover / range, candle volume and range, gap vs usual, futures OI change,
+  order-book buy/sell quantity, RSI, VWAP, move from open in ATRs). Tabs: ranking, unusual candles feed, stock candle
+  by candle, how the score works. (`activity.py`)
+- F&O Stocks -> **Money flow**: inflow / outflow / net flow per stock and sector (turnover split by where each candle
+  closes), whole day or last 60/30/15 min, sector rotation (from -> to) Sankey, sector x time heatmap, futures OI value
+  change; **Scope** selector for Nifty 50, Bank Nifty, Fin Nifty, Sensex, Midcap Select with weights, index points
+  contributed, weighted flow and flow vs the index through the day. (`indices.py`, weights 29 Oct 2026 + NSE live)
+- Setups & scanners -> **Index trend-day + OI (options)** tab: move >= threshold x ATR from open, index future on the
+  VWAP side, futures OI above yesterday, 10:30-13:00; ATM option with -30% stop and trailing exit. (`trend_alert.py`)
+- Loader (scan_service v3): order-book snapshots every minute (saved to activity_history/), index bars incl. India VIX,
+  nearest index futures with OI (NSE + BSE Sensex). Fixed: today's refresh no longer wipes a stock's saved history
+  (stocks could drop out of scanners mid-session).
+- Live feed picks up an automatically renewed token without a restart.
+
+**Researched** (details in research/FINAL_SETUPS.md)
+- Index option discovery (260k bars, 60+ readings, walk-forward ML): only trend days with futures OI rising pay an
+  option buyer (BN +4.1%, Nifty +1.9% a trade; beats random-time buys by ~+8-9 pts under both premium models).
+- Option premium model warning: intraday selling flips from 12/12 years up to 12/12 down depending on the theta model.
+  Real-price test: `research/index_options/dhan_index_options.py --years 1` (then 5) on this PC.
+- Rejected: EMA9/VWAP 3-min, 9/15 EMA, Trade Room 9/15 scalping, Fibonacci retracement, Thu/Fri weekly pattern,
+  small-cap Bollinger breakout, RSI(3) / Triple RSI dip-buying (cash and small caps).
+- Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
+  persists slightly), not stand-alone signals.
+
 ## Open items
 - Put `pin` and `totp_secret` in the cloud app's Secrets (only there, not on this PC: Dhan may allow one token).
 - Re-run `research/apex_backtest.py` weekly with a valid token on this PC to grow the build-up history.
+- Run research/index_options/dhan_index_options.py (real expired-option prices) and send the summary back.
 - Candidates for next: Morning plan card (opening setups + 9:30 relative-weakness short), daily option-chain logging
   to test hedged option selling, cash-futures arbitrage scanner.

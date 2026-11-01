@@ -29,6 +29,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 import yfinance as yf
 
@@ -43,6 +44,9 @@ import scanners as SC
 import setups as SU
 import universe as U
 import apex as AP
+import activity as A
+import indices as IX
+import trend_alert as TA
 
 IST = timezone(timedelta(hours=5, minutes=30))
 UP, DOWN, GOLD = "#26A69A", "#EF5350", "#E8B33A"
@@ -1198,6 +1202,25 @@ COLSPEC = {
     "Range vs usual": ("Range × usual", "ratio", None), "Move / ATR": ("Move / ATR", "ratio", None),
     "Broke yday high/low": ("Broke yday H/L", "text", None), "Big-money bars": ("Big bars", "int", None),
     "Side": ("Side", "text", None),
+    # unusual activity
+    "Smart": ("Smart score", "signed0", None), "Peak Smart": ("Peak today", "signed0", None),
+    "Activity": ("Activity", "num0", None), "Direction": ("Direction", "signed", None),
+    "Candle": ("Candle", "badge", None), "Time": ("Candle at", "text", None),
+    "Vol x (time)": ("Vol × avg (time)", "ratio", None), "Turnover x (time)": ("Turnover × avg (time)", "ratio", None),
+    "Range x (time)": ("Range × avg (time)", "ratio", None), "Candle Vol x": ("Candle vol ×", "ratio", None),
+    "Candle Range x": ("Candle range ×", "ratio", None), "Candle OI x": ("Candle OI ×", "ratio", None),
+    "Gap x": ("Gap × usual", "ratio", None), "ATR used %": ("ATR used %", "num0", None),
+    "vs VWAP %": ("vs VWAP %", "pct", None), "From open %": ("From open %", "pct", None),
+    "Buy/Sell": ("Buy ÷ sell qty", "ratio", None), "Candle Turnover Cr": ("Candle ₹ Cr", "num", None),
+    # money flow
+    "Inflow Cr": ("Inflow ₹ Cr", "num", None), "Outflow Cr": ("Outflow ₹ Cr", "num", None),
+    "Net Flow Cr": ("Net flow ₹ Cr", "signed", None), "Buy share %": ("Buying %", "pctu", None),
+    "Window Turnover Cr": ("Turnover in window ₹ Cr", "num", None), "Flow % of usual": ("Flow % of usual day", "pct", None),
+    "OI Value Chg Cr": ("Futures OI ₹ Cr chg", "signed", None), "Avg Chg %": ("Avg chg %", "pct", None),
+    "Stocks": ("Stocks", "int", None), "Stocks with inflow": ("With inflow", "int", None),
+    "Top inflow stock": ("Top inflow", "text", None), "Top outflow stock": ("Top outflow", "text", None),
+    "Weight %": ("Index weight %", "pctu", None), "Contribution pts": ("Index pts today", "signed", None),
+    "Weighted flow": ("Weighted flow", "signed", None),
 }
 FILTER_COLS = ["Sector", "Market", "Trend", "Buildup", "Rating", "Supertrend"]
 
@@ -1706,9 +1729,12 @@ FNO_COLS = ["Stock", "Sector", "Price", "Chg", "Chg %", "Spark", "Open", "Day Hi
 def page_fno():
     status_strip()
     st.header("F&O stocks")
-    view = st.segmented_control("View", ["Live prices", "Full analytics"], key="fno_view",
-                                default="Live prices" if FEED is not None else "Full analytics",
+    view = st.segmented_control("View", ["Live prices", "Full analytics", "Unusual activity", "Money flow"],
+                                key="fno_view", default="Live prices" if FEED is not None else "Full analytics",
                                 label_visibility="collapsed") or "Full analytics"
+    if view in ("Unusual activity", "Money flow"):
+        page_activity(view)
+        return
     if view == "Live prices":
         res, err = safe(fno_table)
         if res is None or res[0].empty:
@@ -2612,6 +2638,7 @@ def page_scanners():
     source = "dhan" if src.startswith("Dhan") else "yahoo"
     svc = get_scan_service(source, _dhan_sig() if source == "dhan" else ("yahoo",), SS.VERSION)
     svc.set_universe(scan_universe(uni))
+    svc.set_indices({**{k: d["id"] for k, d in index_defs().items()}, "INDIAVIX": 21})
     svc.touch()
     scanner_body(svc, uni)
 
@@ -2658,10 +2685,12 @@ def scanner_body(svc, uni):
                     f"<br><span class='muted'>{note}</span>", unsafe_allow_html=True)
 
     signed = ("P&L %", "Gap %", "Change by 10:00 %")
-    tabs = st.tabs(["Opening setups", "Momentum radar", "Breakout (V3)", "Research"])
+    tabs = st.tabs(["Opening setups", "Momentum radar", "Breakout (V3)", "Index trend-day + OI (options)", "Research"])
+    with tabs[3]:
+        index_trend_tab(svc)
     with tabs[0]:
         setups_body()
-    with tabs[3]:
+    with tabs[4]:
         rs = pd.DataFrame([{"Setup": r[0], "Verdict": SC.VERDICT_LABEL[r[2]], "Trade with": r[1],
                             "Shares / trade": r[3], "Options / trade": r[4], "Years +": r[5], "Notes": r[6]}
                            for r in SC.RESEARCH])
@@ -3487,6 +3516,469 @@ def apex_data(index: str, strikes: int):
 def sector_flow_table() -> pd.DataFrame:
     res, _ = safe(oi_data, True)
     return SC.sector_smart_money(res[0]) if res else pd.DataFrame()
+
+
+# ---------------------------------------------------------------- unusual activity (smart score)
+
+_ACT_CACHE: dict = {}
+
+
+def _activity_data(svc):
+    """Scores for every stock, recomputed only when the background loader has new bars or snapshots."""
+    bars, nifty_df = svc.bars()
+    if not bars:
+        return None
+    session = SC.session_of(nifty_df) if nifty_df is not None and not nifty_df.empty else \
+        max(df.index.normalize().max() for df in bars.values() if not df.empty)
+    key = (id(svc), svc.last_pass, svc.last_snap, len(bars), session)
+    hit = _ACT_CACHE.get("k") == key
+    if not hit:
+        R, E, per = A.rank({s: SC.clean(df) for s, df in bars.items()}, session, svc.oi(), svc.snapshots(),
+                           U.FNO_SECTOR_OF)
+        if not R.empty:
+            R["Symbol"] = R["Stock"] + ".NS"
+            R["Side"] = np.where(R["Smart"] >= 25, "Bullish", np.where(R["Smart"] <= -25, "Bearish", ""))
+        if not E.empty:
+            E["Symbol"] = E["Stock"] + ".NS"
+            E["Candle"] = np.where(E["Candle"] == "Green", "Bullish", "Bearish")
+        _ACT_CACHE.clear()
+        _ACT_CACHE.update(k=key, v=(R, E, per, session))
+    return _ACT_CACHE["v"]
+
+
+def page_activity(view: str = "Unusual activity"):
+    src_opts = (["Dhan (live)"] if DHAN_DATA else []) + ["Yahoo (delayed)"]
+    c1, c2 = st.columns([1, 3], vertical_alignment="bottom")
+    src = c1.selectbox("Data source", src_opts, key="act_src")
+    source = "dhan" if src.startswith("Dhan") else "yahoo"
+    if source == "yahoo":
+        c2.caption("Yahoo has no open interest or order-book quantities, so those parts of the score are left out.")
+    svc = get_scan_service(source, _dhan_sig() if source == "dhan" else ("yahoo",), SS.VERSION)
+    idx = index_defs()
+    svc.set_universe(tuple(sorted(set(scan_universe("All F&O stocks")) |
+                                  {m for d in idx.values() for m in d["w"]})))
+    svc.set_indices({**{k: d["id"] for k, d in idx.items()}, "INDIAVIX": 21})
+    svc.touch()
+    (flow_body if view == "Money flow" else activity_body)(svc)
+
+
+@st.fragment(run_every=30)
+def activity_body(svc):
+    done, total = svc.progress()
+    fresh = svc.freshness()
+    info = st.columns([3, 1], vertical_alignment="center")
+    if done < total:
+        info[0].progress(done / max(total, 1), text=f"Loading the last 40 sessions of 5-minute bars: {done} of {total} "
+                         "stocks (needed for the time-of-day averages). Scores fill in as stocks arrive; after the "
+                         "first load of the day this is instant.")
+    else:
+        upd = (f"bars updated {int(fresh)}s ago" if fresh is not None and SS.market_hours()
+               else "market closed: showing the latest session")
+        n_fut = sum(1 for v in svc.oi().values() if not v.empty)
+        info[0].caption(f"{done} stocks · {upd} · futures OI for {n_fut} stocks · "
+                        f"order-book snapshots: {len(svc.snaps)} · status: {svc.status}")
+    if info[1].button("Refresh view", icon=":material/refresh:", width="stretch", key="act_refresh"):
+        svc.touch()
+    res = _activity_data(svc)
+    if res is None or res[0].empty:
+        st.info("Waiting for the first data… (" + svc.status + ")", icon=":material/hourglass_top:")
+        return
+    R, E, per, session = res
+    live_today = session is not None and pd.Timestamp(session).date() == datetime.now(IST).date()
+    last_bar = R["Time"].max()
+    m = st.columns(5)
+    m[0].metric("Session", f"{pd.Timestamp(session):%a %d %b}", "today" if live_today else "last session",
+                delta_color="off", border=True)
+    m[1].metric("Last candle", last_bar, border=True)
+    m[2].metric("Bullish unusual", int((R["Smart"] >= 40).sum()), "smart score 40+", delta_color="off", border=True)
+    m[3].metric("Bearish unusual", int((R["Smart"] <= -40).sum()), "smart score -40 or less", delta_color="off",
+                border=True)
+    m[4].metric("Unusual candles today", len(E), border=True)
+
+    tabs = st.tabs(["Smart score ranking", "Unusual candles", "Stock candle by candle", "How the score works"])
+    with tabs[0]:
+        f1, f2, f3 = st.columns([1, 1, 2])
+        side = f1.segmented_control("Side", ["All", "Bullish", "Bearish"], default="All", key="act_side") or "All"
+        min_act = f2.slider("Minimum activity", 0, 100, 0, 5, key="act_min",
+                            help="Activity 0 = normal for the time of day; 50+ = clearly unusual; 80+ = extreme.")
+        secs = f3.multiselect("Sector", sorted(x for x in R["Sector"].unique() if x), key="act_sec")
+        d = R[R["Activity"] >= min_act]
+        if side == "Bullish":
+            d = d[d["Smart"] > 0].sort_values("Smart", ascending=False)
+        elif side == "Bearish":
+            d = d[d["Smart"] < 0].sort_values("Smart")
+        if secs:
+            d = d[d["Sector"].isin(secs)]
+        show_table(d, ["Stock", "Sector", "Price", "Chg %", "Smart", "Side", "Activity", "Direction", "Peak Smart",
+                       "Gap %", "Gap x", "Vol x (time)", "Turnover x (time)", "Turnover Cr", "Range x (time)",
+                       "ATR used %", "Candle Vol x", "Candle Range x", "From open %", "vs VWAP %", "RSI", "Buy/Sell",
+                       "OI Chg %", "Candle OI x", "Buildup", "Signals", "Time"], "act_rank", height=720)
+        st.caption("Sorted by the strength of the smart score (either side). Every '× avg' compares with the same time "
+                   "of day over the last 20 sessions. Click a name for its chart; the 'Stock candle by candle' tab "
+                   "shows how the score built up.")
+    with tabs[1]:
+        if E.empty:
+            st.info("No unusual candles yet today.")
+        else:
+            w = st.segmented_control("Show", ["Last 30 minutes", "All day"], default="All day", key="act_ev_win") or "All day"
+            ev = E
+            if w == "Last 30 minutes":
+                cut = (pd.Timestamp(f"2000-01-01 {last_bar}") - pd.Timedelta(minutes=30)).strftime("%H:%M")
+                ev = E[E["Time"] > cut]
+            show_table(ev, ["Time", "Stock", "Candle", "Candle Vol x", "Candle Range x", "Candle OI x",
+                            "Candle Turnover Cr", "Price", "Chg %", "Vol x (time)", "Smart"], "act_events", height=640)
+            st.caption("Candles with volume 3× or more, range 2.5× or more, or an OI change 4× or more of what is "
+                       "usual for that candle (same time of day, last 20 sessions). Newest first. In the history a "
+                       "single big candle often snaps back: it shows where activity is, not which way it will go.")
+    with tabs[2]:
+        opts = R["Stock"].tolist()
+        sym = st.selectbox("Stock", opts, key="act_stock")
+        c = per.get(sym)
+        if c is not None and not c.empty:
+            fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.5, 0.25, 0.25],
+                                subplot_titles=("Price and VWAP", "Candle volume ÷ usual for that time",
+                                                "Smart score and futures OI change %"),
+                                specs=[[{}], [{}], [{"secondary_y": True}]])
+            fig.add_trace(go.Candlestick(x=c["Time"], open=c["Open"], high=c["High"], low=c["Low"], close=c["Close"],
+                                         increasing_line_color=UP, decreasing_line_color=DOWN, name="Price"), 1, 1)
+            fig.add_trace(go.Scatter(x=c["Time"], y=c["VWAP"], name="VWAP", line=dict(color=GOLD, width=1.5)), 1, 1)
+            fig.add_trace(go.Bar(x=c["Time"], y=c["Candle Vol x"], name="Candle vol ×",
+                                 marker_color=np.where(c["Close"] >= c["Open"], UP, DOWN),
+                                 marker_opacity=np.where(c["Candle Vol x"] >= 3, 1.0, 0.45)), 2, 1)
+            fig.add_hline(y=1, line_dash="dot", line_color="grey", row=2, col=1)
+            fig.add_trace(go.Scatter(x=c["Time"], y=c["Smart"], name="Smart score", line=dict(width=2)), 3, 1)
+            if c["OI Chg %"].notna().any():
+                fig.add_trace(go.Scatter(x=c["Time"], y=c["OI Chg %"], name="OI chg %",
+                                         line=dict(width=1.5, dash="dot", color=GOLD)), 3, 1, secondary_y=True)
+            fig.update_layout(height=720, template=plot_template(), showlegend=False, xaxis_rangeslider_visible=False,
+                              margin=dict(l=10, r=10, t=30, b=10))
+            st.plotly_chart(fig, width="stretch", key="act_chart")
+            cols = ["Time", "Close", "Chg %", "Smart", "Activity", "Direction", "Candle Vol x", "Vol x (time)",
+                    "Turnover Cr", "Candle Range x", "Range x (time)", "ATR used %", "RSI", "vs VWAP %", "Buy Qty",
+                    "Sell Qty", "Buy/Sell", "OI", "OI Chg %", "Candle OI x", "Buildup"]
+            t = c[[x for x in cols if x in c]].iloc[::-1].round(2)
+            data_table(t, f"act_c_{sym}", name_col="Time", height=480,
+                       signed=("Chg %", "Smart", "Direction", "vs VWAP %", "OI Chg %"))
+    with tabs[3]:
+        st.markdown(A.HOW)
+        st.caption("Order-book quantities (total buy and sell quantity waiting in the market depth) are recorded from "
+                   "live quotes about once a minute while this page's loader runs, and saved daily so they can be "
+                   "compared with the usual reading over time. Near futures expiry, OI falls as positions roll to the "
+                   "next month, so 'long unwinding' readings in the last few days are less meaningful.")
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def index_defs() -> dict:
+    return IX.load()
+
+
+FLOW_WINDOWS = {"Whole day": None, "Last 60 min": 60, "Last 30 min": 30, "Last 15 min": 15}
+
+
+@st.fragment(run_every=30)
+def flow_body(svc):
+    done, total = svc.progress()
+    if done < total:
+        st.progress(done / max(total, 1), text=f"Loading 5-minute history: {done} of {total} stocks…")
+    res = _activity_data(svc)
+    if res is None or res[0].empty:
+        st.info("Waiting for the first data… (" + svc.status + ")", icon=":material/hourglass_top:")
+        return
+    R, E, per, session = res
+    last_bar = R["Time"].max()
+    idx = index_defs()
+    scopes = ["All F&O"] + [d["name"] for d in idx.values()]
+    scope = st.segmented_control("Scope", scopes, default="All F&O", key="flow_scope") or "All F&O"
+    c1, c2 = st.columns([2, 3], vertical_alignment="bottom")
+    win = c1.segmented_control("Period", list(FLOW_WINDOWS), default="Whole day", key="flow_win") or "Whole day"
+    mins = FLOW_WINDOWS[win]
+    start = None if mins is None else (pd.Timestamp(f"2000-01-01 {last_bar}") - pd.Timedelta(minutes=mins - 5)).strftime("%H:%M")
+    c2.caption(f"Session {pd.Timestamp(session):%a %d %b} · last candle {last_bar}"
+               + (f" · window {start}–{last_bar}" if start else "") + " · ₹ crore, F&O stocks")
+    stocks = A.flow_window(per, start)
+    if stocks.empty:
+        st.info("No candles in this window yet.")
+        return
+    if scope != "All F&O":
+        key = next(k for k, d in idx.items() if d["name"] == scope)
+        index_flow(svc, per, stocks, idx, key, start)
+        return
+    stocks = stocks[stocks["Stock"].isin(set(fno_universe()[0]) | set(SC.NIFTY100)) |
+                    ~stocks["Stock"].isin({m for d in idx.values() for m in d["w"]})]
+    stocks["Sector"] = stocks["Stock"].map(U.FNO_SECTOR_OF).fillna("Other")
+    stocks["Symbol"] = stocks["Stock"] + ".NS"
+    sec = A.sector_flow(stocks)
+    tot_in, tot_out = stocks["Inflow Cr"].sum(), stocks["Outflow Cr"].sum()
+    m = st.columns(5)
+    m[0].metric("Turnover", f"₹{tot_in + tot_out:,.0f} Cr", border=True)
+    m[1].metric("Net flow, all F&O", f"₹{tot_in - tot_out:+,.0f} Cr", f"{tot_in / (tot_in + tot_out) * 100:.1f}% buying",
+                delta_color="off", border=True)
+    m[2].metric("Sectors with inflow", f"{int((sec['Net Flow Cr'] > 0).sum())} of {len(sec)}", border=True)
+    m[3].metric("Most inflow", sec.iloc[0]["Sector"], f"₹{sec.iloc[0]['Net Flow Cr']:+,.0f} Cr", border=True)
+    m[4].metric("Most outflow", sec.iloc[-1]["Sector"], f"₹{sec.iloc[-1]['Net Flow Cr']:+,.0f} Cr", border=True)
+
+    tabs = st.tabs(["Sectors", "Rotation: from → to", "Through the day", "Stocks", "How it works"])
+    with tabs[0]:
+        sb = sec.sort_values("Net Flow Cr")
+        fig = go.Figure()
+        fig.add_trace(go.Bar(y=sb["Sector"], x=-sb["Outflow Cr"], orientation="h", name="Outflow",
+                             marker_color=DOWN, opacity=0.35, hovertemplate="%{y}: outflow ₹%{customdata:,.0f} Cr",
+                             customdata=sb["Outflow Cr"]))
+        fig.add_trace(go.Bar(y=sb["Sector"], x=sb["Inflow Cr"], orientation="h", name="Inflow",
+                             marker_color=UP, opacity=0.35, hovertemplate="%{y}: inflow ₹%{x:,.0f} Cr"))
+        fig.add_trace(go.Scatter(y=sb["Sector"], x=sb["Net Flow Cr"], mode="markers+text", name="Net",
+                                 marker=dict(size=11, color=np.where(sb["Net Flow Cr"] >= 0, UP, DOWN), symbol="diamond"),
+                                 text=[f"{v:+,.0f}" for v in sb["Net Flow Cr"]], textposition="middle right"))
+        fig.update_layout(barmode="overlay", height=34 * len(sb) + 90, template=plot_template(),
+                          margin=dict(l=10, r=40, t=10, b=10), xaxis=dict(title="₹ crore"),
+                          legend=dict(orientation="h", y=1.04))
+        st.plotly_chart(fig, width="stretch", key="flow_sec_chart")
+        st.caption("Pale bars: total buying (right) and selling (left) turnover in each sector. Diamond: net flow.")
+        show_table(sec.rename(columns={"Sector": "Stock"}).assign(Sector=lambda d: d["Stock"]),
+                   ["Stock", "Net Flow Cr", "Inflow Cr", "Outflow Cr", "Buy share %", "Avg Chg %", "Stocks",
+                    "Stocks with inflow", "OI Value Chg Cr", "Top inflow stock", "Top outflow stock"],
+                   "flow_sectors", height=480, search_hint="Search sector…")
+    with tabs[1]:
+        links = A.rotation_links(sec)
+        if not links:
+            st.info("Every sector is moving the same way in this window, so there is no rotation to show.")
+        else:
+            srcs = list(dict.fromkeys(a for a, _, _ in links)); dsts = list(dict.fromkeys(b for _, b, _ in links))
+            labels = [f"{x} (out)" for x in srcs] + [f"{x} (in)" for x in dsts]
+            fig = go.Figure(go.Sankey(
+                node=dict(label=labels, pad=18, thickness=16,
+                          color=[DOWN] * len(srcs) + [UP] * len(dsts)),
+                link=dict(source=[srcs.index(a) for a, _, _ in links],
+                          target=[len(srcs) + dsts.index(b) for _, b, _ in links],
+                          value=[v for _, _, v in links], color="rgba(150,150,150,0.25)",
+                          hovertemplate="%{source.label} → %{target.label}: ₹%{value:,.0f} Cr<extra></extra>")))
+            fig.update_layout(height=520, template=plot_template(), margin=dict(l=10, r=10, t=10, b=10))
+            st.plotly_chart(fig, width="stretch", key="flow_sankey")
+            st.caption("Left: sectors with net outflow. Right: sectors with net inflow. Exchanges don't report who "
+                       "sold to whom, so each outflow is shared across the inflow sectors in proportion to their size: "
+                       "read it as 'money is leaving these and arriving in these'.")
+        cc = st.columns(2)
+        with cc[0]:
+            st.markdown("**Biggest outflow stocks**")
+            data_table(stocks.nsmallest(10, "Net Flow Cr")[["Stock", "Sector", "Net Flow Cr", "Chg %"]].round(2),
+                       "flow_out10", signed=("Net Flow Cr", "Chg %"), height=380)
+        with cc[1]:
+            st.markdown("**Biggest inflow stocks**")
+            data_table(stocks.nlargest(10, "Net Flow Cr")[["Stock", "Sector", "Net Flow Cr", "Chg %"]].round(2),
+                       "flow_in10", signed=("Net Flow Cr", "Chg %"), height=380)
+    with tabs[2]:
+        bucket = st.segmented_control("Bucket", ["15 min", "30 min", "60 min"], default="30 min", key="flow_bucket") or "30 min"
+        tl = A.sector_timeline(per, U.FNO_SECTOR_OF, int(bucket.split()[0]))
+        if tl.empty:
+            st.info("No data yet.")
+        else:
+            order = tl.sum().sort_values().index
+            z = tl[order].T
+            lim = float(np.nanmax(np.abs(z.values))) or 1
+            fig = go.Figure(go.Heatmap(z=z.values, x=z.columns, y=z.index, colorscale=[[0, DOWN], [0.5, "#f5f5f5"], [1, UP]],
+                                       zmin=-lim, zmax=lim, text=np.round(z.values).astype("float"),
+                                       texttemplate="%{text:+,.0f}", hovertemplate="%{y} %{x}: ₹%{z:+,.0f} Cr<extra></extra>",
+                                       colorbar=dict(title="₹ Cr")))
+            fig.update_layout(height=34 * len(z) + 80, template=plot_template(), margin=dict(l=10, r=10, t=10, b=10))
+            st.plotly_chart(fig, width="stretch", key="flow_heat")
+            st.caption("Net flow per sector in each time bucket: watch for a sector turning from red to green (money "
+                       "arriving) or the reverse.")
+            cum = tl.fillna(0).cumsum()
+            top = list(cum.iloc[-1].abs().sort_values(ascending=False).index[:6])
+            fig2 = go.Figure([go.Scatter(x=cum.index, y=cum[c], name=c, mode="lines+markers") for c in top])
+            fig2.add_hline(y=0, line_dash="dot", line_color="grey")
+            fig2.update_layout(height=380, template=plot_template(), margin=dict(l=10, r=10, t=30, b=10),
+                               yaxis=dict(title="cumulative net flow ₹ Cr"), title="Running total, six biggest movers")
+            st.plotly_chart(fig2, width="stretch", key="flow_cum")
+    with tabs[3]:
+        f1, f2 = st.columns([1, 2])
+        side = f1.segmented_control("Show", ["All", "Inflow", "Outflow"], default="All", key="flow_side") or "All"
+        secs = f2.multiselect("Sector", sorted(stocks["Sector"].unique()), key="flow_secs")
+        d = stocks
+        if side == "Inflow":
+            d = d[d["Net Flow Cr"] > 0].sort_values("Net Flow Cr", ascending=False)
+        elif side == "Outflow":
+            d = d[d["Net Flow Cr"] < 0].sort_values("Net Flow Cr")
+        else:
+            d = d.sort_values("Net Flow Cr", key=lambda x: x.abs(), ascending=False)
+        if secs:
+            d = d[d["Sector"].isin(secs)]
+        show_table(d, ["Stock", "Sector", "Price", "Chg %", "Net Flow Cr", "Flow % of usual", "Inflow Cr", "Outflow Cr",
+                       "Buy share %", "Window Turnover Cr", "Turnover Cr", "Turnover x (time)", "OI Value Chg Cr",
+                       "Buildup", "Smart"], "flow_stocks", height=680)
+        st.caption("Flow % of usual day: net flow ÷ the stock's normal full-day turnover, so small and large stocks "
+                   "can be compared. Futures OI ₹ Cr: new money in (+) or out (−) of the nearest future.")
+    with tabs[4]:
+        st.markdown(A.FLOW_HOW)
+
+
+def _index_stats(stocks: pd.DataFrame, d: dict, prev_close: float | None) -> tuple[pd.DataFrame, dict]:
+    w = d["w"]
+    m = stocks[stocks["Stock"].isin(w)].copy()
+    m["Weight %"] = m["Stock"].map(w)
+    m["Symbol"] = m["Stock"] + ".NS"
+    m["Sector"] = m["Stock"].map(U.FNO_SECTOR_OF).fillna("Other")
+    m["Contribution pts"] = m["Weight %"] / 100 * m["Chg %"] / 100 * (prev_close or np.nan)
+    m["Weighted flow"] = m["Weight %"] / 100 * m["Flow % of usual"]
+    tin, tout = m["Inflow Cr"].sum(), m["Outflow Cr"].sum()
+    st_ = {"net": tin - tout, "buy": tin / (tin + tout) * 100 if tin + tout else np.nan,
+           "n_in": int((m["Net Flow Cr"] > 0).sum()), "n": len(m), "wflow": m["Weighted flow"].sum(),
+           "missing": sorted(set(w) - set(m["Stock"])),
+           "pts_up": m.loc[m["Contribution pts"] > 0, "Contribution pts"].sum(),
+           "pts_dn": m.loc[m["Contribution pts"] < 0, "Contribution pts"].sum()}
+    return m, st_
+
+
+def _idx_level(svc, key):
+    df = svc.idx_bars().get(key)
+    if df is None or df.empty:
+        return None, None, None
+    df = SC.clean(df)
+    d = df.index.normalize()
+    today = df[d == d.max()]
+    prev = df[d < d.max()]
+    pc = float(prev["Close"].iloc[-1]) if not prev.empty else None
+    return today, pc, (float(today["Close"].iloc[-1]) if not today.empty else None)
+
+
+def index_flow(svc, per: dict, stocks: pd.DataFrame, idx: dict, key: str, start):
+    # strip: all five indices
+    cols = st.columns(len(idx))
+    for col, (k, d) in zip(cols, idx.items()):
+        _, pc, lvl = _idx_level(svc, k)
+        _, s_ = _index_stats(stocks, d, pc)
+        chg = f"{(lvl / pc - 1) * 100:+.2f}%" if lvl and pc else "—"
+        col.metric(d["name"], f"₹{s_['net']:+,.0f} Cr", f"index {chg} · {s_['buy']:.0f}% buying",
+                   delta_color="off", border=True)
+    d = idx[key]
+    today, pc, lvl = _idx_level(svc, key)
+    m, s_ = _index_stats(stocks, d, pc)
+    if m.empty:
+        st.info("No constituent data yet.")
+        return
+    st.markdown(f"#### {d['name']}")
+    c = st.columns(5)
+    c[0].metric("Index", f"{lvl:,.2f}" if lvl else "—", f"{(lvl / pc - 1) * 100:+.2f}%" if lvl and pc else None,
+                border=True)
+    c[1].metric("Net flow, constituents", f"₹{s_['net']:+,.0f} Cr", f"{s_['buy']:.1f}% buying", delta_color="off",
+                border=True)
+    c[2].metric("Stocks with inflow", f"{s_['n_in']} of {s_['n']}", border=True)
+    c[3].metric("Weighted flow", f"{s_['wflow']:+.2f}%",
+                help="Each stock's net flow as % of its usual day's turnover, weighted by its index weight. Shows "
+                     "buying/selling pressure in the index independent of stock size: above 0 = net buying.",
+                border=True)
+    c[4].metric("Points up / down today", f"{s_['pts_up']:+,.0f} / {s_['pts_dn']:+,.0f}" if pc else "—", border=True)
+
+    t1, t2, t3 = st.tabs(["Stocks: inflow vs outflow", "Through the day", "Table"])
+    with t1:
+        b = m.sort_values("Net Flow Cr")
+        fig = make_subplots(rows=1, cols=2, shared_yaxes=True, column_widths=[0.6, 0.4], horizontal_spacing=0.03,
+                            subplot_titles=("Net flow ₹ Cr", "Index points contributed today"))
+        fig.add_trace(go.Bar(y=b["Stock"], x=b["Net Flow Cr"], orientation="h",
+                             marker_color=np.where(b["Net Flow Cr"] >= 0, UP, DOWN),
+                             text=[f"{v:+,.0f}  ({w:.1f}%)" for v, w in zip(b["Net Flow Cr"], b["Weight %"])],
+                             textposition="outside", cliponaxis=False,
+                             hovertemplate="%{y}: ₹%{x:+,.1f} Cr<extra></extra>"), 1, 1)
+        if b["Contribution pts"].notna().any():
+            fig.add_trace(go.Bar(y=b["Stock"], x=b["Contribution pts"], orientation="h",
+                                 marker_color=np.where(b["Contribution pts"] >= 0, UP, DOWN), opacity=0.6,
+                                 hovertemplate="%{y}: %{x:+,.1f} pts<extra></extra>"), 1, 2)
+        fig.update_layout(height=max(360, 24 * len(b) + 80), template=plot_template(), showlegend=False,
+                          margin=dict(l=10, r=40, t=30, b=10))
+        st.plotly_chart(fig, width="stretch", key=f"idxflow_{key}")
+        st.caption("Bars: net money flow into each constituent (label: flow and index weight). Right: how many index "
+                   "points each stock added or removed today (weight × its % change). A heavyweight with big outflow "
+                   "is what drags the index.")
+    with t2:
+        parts = []
+        for sym, w in d["w"].items():
+            cdf = per.get(sym)
+            if cdf is None or cdf.empty:
+                continue
+            usual = cdf["Usual Day Turnover Cr"].iloc[-1]
+            parts.append(pd.DataFrame({"net": cdf["Net Flow Cr"].values,
+                                       "wf": (w / 100 * cdf["Net Flow Cr"] / usual * 100).values}, index=cdf["Time"]))
+        if parts:
+            agg = pd.concat(parts).groupby(level=0).sum().sort_index().cumsum()
+            fig = make_subplots(specs=[[{"secondary_y": True}]])
+            fig.add_trace(go.Bar(x=agg.index, y=agg["net"], name="Cumulative net flow ₹ Cr",
+                                 marker_color=np.where(agg["net"] >= 0, UP, DOWN), opacity=0.5))
+            if today is not None and not today.empty:
+                fig.add_trace(go.Scatter(x=today.index.strftime("%H:%M"), y=today["Close"], name=d["name"],
+                                         line=dict(color=GOLD, width=2)), secondary_y=True)
+            fig.update_layout(height=420, template=plot_template(), margin=dict(l=10, r=10, t=30, b=10),
+                              legend=dict(orientation="h", y=1.08))
+            fig.update_yaxes(title_text="₹ Cr", secondary_y=False)
+            st.plotly_chart(fig, width="stretch", key=f"idxday_{key}")
+            st.caption("Running total of money flowing into the index's stocks (bars) against the index itself (line). "
+                       "Watch for the line rising while flow turns down (weak rally) or the reverse.")
+    with t3:
+        show_table(m.sort_values("Weight %", ascending=False),
+                   ["Stock", "Weight %", "Price", "Chg %", "Contribution pts", "Net Flow Cr", "Flow % of usual",
+                    "Weighted flow", "Inflow Cr", "Outflow Cr", "Buy share %", "Turnover Cr", "Turnover x (time)",
+                    "OI Value Chg Cr", "Buildup", "Smart"], f"idxtbl_{key}", height=640)
+    st.caption(f"Weights: {d['src']}." + (f" No data yet for: {', '.join(s_['missing'])}." if s_["missing"] else "")
+               + (" Flow is for the selected period; index points are for the whole day." if start else ""))
+
+
+TREND_NAMES = {"NIFTY": "Nifty 50", "BANKNIFTY": "Bank Nifty", "FINNIFTY": "Fin Nifty", "SENSEX": "Sensex",
+               "MIDCPNIFTY": "Midcap Select"}
+
+
+def index_trend_tab(svc):
+    st.markdown(f"{_badge('ok')}&nbsp; **Index options (buy):** +4.1% of premium a trade on Bank Nifty, +1.9% on Nifty "
+                "(fixed check times); 10-20 trades a year per index · win ~40-47%<br><span class='muted'>"
+                "Trend established by mid-morning AND futures OI rising (new positions behind the move) is the only "
+                "pattern in the index study where buying options paid. Noisy on its own: paper-trade first, size small."
+                "</span>", unsafe_allow_html=True)
+    with st.expander("Rules"):
+        st.markdown(TA.__doc__.split("\n", 2)[2])
+    thr_cols = st.columns(len(TREND_NAMES))
+    thr = {k: c.number_input(f"{TREND_NAMES[k]} threshold (ATR)", 0.3, 2.0, TA.DEFAULT_THR[k], 0.1, key=f"ta_thr_{k}")
+           for c, k in zip(thr_cols, TREND_NAMES)}
+    idx_b, fut_b = svc.idx_bars(), svc.ifut_bars()
+    vix = idx_b.get("INDIAVIX")
+    if svc.source != "dhan":
+        st.warning("This alert needs Dhan (index futures OI and volume). Switch the data source to Dhan.")
+    cards = st.columns(len(TREND_NAMES))
+    rows = []
+    for col, k in zip(cards, TREND_NAMES):
+        spot = idx_b.get(k)
+        r = TA.evaluate(k, spot, fut_b.get(k), vix, thr[k],
+                        TA.days_to_expiry(k, spot.index.max() if spot is not None and not spot.empty else datetime.now(IST)))
+        with col.container(border=True):
+            st.markdown(f"**{TREND_NAMES[k]}**")
+            if r["status"] in ("no data", "need 15 earlier sessions"):
+                st.caption(r["status"])
+                continue
+            if r["status"] == "SIGNAL":
+                st.markdown(f"{_badge('best')}&nbsp; **BUY {r['side']} {r['strike']:,.0f}** at {r['sig_time']}",
+                            unsafe_allow_html=True)
+                st.caption(f"Index {r['sig_px']:,.1f} → {r['last']:,.1f} ({r['idx_move']:+,.1f} pts) · est. option "
+                           f"{r['opt_now'] * 100:+.0f}% (best {r['opt_peak'] * 100:+.0f}%) · {r['trade_state']}")
+            else:
+                st.markdown(f"<span class='muted'>{r['status']}</span>", unsafe_allow_html=True)
+            st.metric("Move from open", f"{r['move_atr']:+.2f} ATR", f"needs ±{r['thr']:.1f}", delta_color="off")
+            for name, ok in r.get("checks", {}).items():
+                st.markdown(("✅ " if ok else "▫️ ") + name)
+            oi = r.get("oi_chg")
+            st.caption(f"Futures OI vs yesterday: {oi:+.2f}%" if pd.notna(oi) else "Futures OI: —")
+        rows.append(r)
+    sig = [r for r in rows if r.get("status") == "SIGNAL"]
+    if sig:
+        fig = go.Figure()
+        for r in sig:
+            p = r.get("opt_path") or []
+            if p:
+                fig.add_trace(go.Scatter(x=[a for a, _ in p], y=[b * 100 for _, b in p], mode="lines",
+                                         name=f"{TREND_NAMES[r['key']]} {r['side']}"))
+        fig.add_hline(y=-30, line_dash="dot", line_color=DOWN)
+        fig.add_hline(y=30, line_dash="dot", line_color=UP)
+        fig.update_layout(height=320, template=plot_template(), margin=dict(l=10, r=10, t=30, b=10),
+                          yaxis=dict(title="est. option P&L %"), title="Today's signals: estimated option P&L")
+        st.plotly_chart(fig, width="stretch", key="ta_chart")
+    st.caption("Option P&L is an estimate (Black-Scholes with India VIX, ATM strike, days to expiry from the current "
+               "expiry calendar); check the real premium in the option chain. Checks run on 5-minute closes.")
 
 
 def page_apex():

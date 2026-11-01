@@ -5,6 +5,9 @@
   about 5 data requests a second, so a full pass over ~210 stocks takes about 50 seconds). The page never waits:
   it shows whatever is ready and says how fresh it is.
 - Yahoo (no Dhan): one batch download for all stocks every few minutes.
+- Unusual activity / money flow / index trend alert (Dhan only, added 1 Nov 2026): a snapshot of every stock's live
+  quote (order-book buy/sell quantity, volume) about once a minute, saved daily to activity_history/; 5-minute bars of
+  the indices (Nifty, Bank Nifty, Fin Nifty, Midcap Select, Sensex, India VIX) and of the nearest index futures (OI).
 """
 from __future__ import annotations
 
@@ -20,8 +23,9 @@ import dhan as D
 
 IST = timezone(timedelta(hours=5, minutes=30))
 CACHE = Path(__file__).with_name("scan_cache")
+SNAP_HIST = Path(__file__).with_name("activity_history")
 NIFTY = "__NIFTY__"
-VERSION = 2  # bump when ScanService changes, so a running app replaces its old loader
+VERSION = 3  # bump when ScanService changes, so a running app replaces its old loader
 INSTANCES: list = []
 
 
@@ -81,6 +85,17 @@ class ScanService:
         self.oi_status = "off" if source != "dhan" else "starting"
         self._fut: dict = {}
         self._oi_day = None
+        # order-book snapshots, index bars and index futures (unusual activity, money flow, index trend alert)
+        self.snaps: list[dict] = []
+        self.last_snap = 0.0
+        self._snap_saved = 0.0
+        self.idx_ids: dict = {}
+        self.idx_hist: dict[str, pd.DataFrame] = {}
+        self.idx_today: dict[str, pd.DataFrame] = {}
+        self.ifut_ids: dict = {}
+        self.ifut_hist: dict[str, pd.DataFrame] = {}
+        self.ifut_today: dict[str, pd.DataFrame] = {}
+        self._ifut_tried = False
         self.thread = threading.Thread(target=self._run, name="scan-service", daemon=True)
         self.thread.start()
         if source == "dhan":
@@ -126,6 +141,90 @@ class ScanService:
             raw = {s: dict(v) for s, v in self.oi_raw.items()}
         return {s: combine_oi(list(v.values())) for s, v in raw.items() if v}
 
+    def set_indices(self, ids: dict):
+        with self._lock:
+            self.idx_ids = dict(ids)
+
+    def idx_bars(self) -> dict:
+        out = {}
+        with self._lock:
+            keys = list(self.idx_ids)
+        for k in keys:
+            parts = [x for x in (self.idx_hist.get(k), self.idx_today.get(k)) if x is not None and not x.empty]
+            if parts:
+                df = pd.concat(parts)
+                out[k] = df[~df.index.duplicated(keep="last")]
+        return out
+
+    def ifut_bars(self) -> dict:
+        """{index key: nearest index future 5-min bars with OI (history + today)}."""
+        out = {}
+        for k in list(self.ifut_ids):
+            parts = [x for x in (self.ifut_hist.get(k), self.ifut_today.get(k)) if x is not None and not x.empty]
+            if parts:
+                df = pd.concat(parts)
+                out[k] = df[~df.index.duplicated(keep="last")]
+        return out
+
+    def _ifut_refresh(self, day, full: bool):
+        if self.source != "dhan":
+            return
+        if not self._ifut_tried:
+            self._ifut_tried = True
+            ids = {}
+            for seg, names in (("NSE_FNO", ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"]), ("BSE_FNO", ["SENSEX"])):
+                try:
+                    for u, v in D.nearest_futures(seg, "FUTIDX", names, cfg=self.cfg).items():
+                        ids[u] = (seg, v["id"])
+                except Exception as e:
+                    self.error = f"index futures {seg}: {e}"
+            self.ifut_ids = ids
+        for k, (seg, sid) in list(self.ifut_ids.items()):
+            if self._stop or (full and k in self.ifut_hist) or (not full and k not in self.ifut_hist):
+                continue
+            try:
+                df = _naive(D.intraday(seg, sid, "FUTIDX", 5, 14 if full else 1, self.cfg))
+                if df.empty:
+                    if full:
+                        self.ifut_hist[k] = pd.DataFrame()
+                    continue
+                d = df.index.normalize()
+                h, t = df[d < pd.Timestamp(day)], df[d >= pd.Timestamp(day)]
+                with self._lock:
+                    if not h.empty or k not in self.ifut_hist:
+                        self.ifut_hist[k] = h
+                    if not t.empty:
+                        self.ifut_today[k] = t
+            except Exception as e:
+                self.error = f"index future {k}: {e}"
+
+    def _idx_refresh(self, day, full: bool):
+        with self._lock:
+            ids = dict(self.idx_ids)
+        for k, sid in ids.items():
+            if self._stop or (not full and k not in self.idx_hist):
+                continue
+            if full and k in self.idx_hist:
+                continue
+            try:
+                df = _naive(D.intraday("IDX_I", sid, "INDEX", 5, 40 if full else 1, self.cfg))
+                if df.empty:
+                    continue
+                d = df.index.normalize()
+                h, t = df[d < pd.Timestamp(day)], df[d >= pd.Timestamp(day)]
+                with self._lock:
+                    if not h.empty or k not in self.idx_hist:
+                        self.idx_hist[k] = h
+                    if not t.empty:
+                        self.idx_today[k] = t
+            except Exception as e:
+                self.error = f"index {k}: {e}"
+
+    def snapshots(self) -> pd.DataFrame:
+        with self._lock:
+            rows = list(self.snaps)
+        return pd.DataFrame(rows)
+
     def freshness(self) -> float | None:
         """Seconds since the oldest 'today' update among loaded stocks (None outside market hours)."""
         if not self.today_at:
@@ -153,6 +252,14 @@ class ScanService:
         self._eod_done = False
         with self._lock:
             self.hist, self.today, self.today_at = {}, {}, {}
+            self.snaps, self.idx_hist, self.idx_today, self.ifut_hist, self.ifut_today = [], {}, {}, {}, {}
+        self.ifut_ids, self._ifut_tried = {}, False
+        try:
+            f = self._cache_dir(day) / "snaps.pkl"
+            if f.exists():
+                self.snaps = pickle.loads(f.read_bytes())
+        except Exception:
+            pass
         try:
             for p in CACHE.glob(f"{self.source}_*"):
                 if p.name != f"{self.source}_{day:%Y%m%d}":
@@ -168,7 +275,8 @@ class ScanService:
         d = df.index.normalize()
         hist, today = df[d < pd.Timestamp(day)], df[d >= pd.Timestamp(day)]
         with self._lock:
-            self.hist[sym] = hist
+            if not hist.empty or sym not in self.hist:  # today-only refreshes must not wipe the saved history
+                self.hist[sym] = hist
             if not today.empty:
                 self.today[sym] = today
                 self.today_at[sym] = time.time()
@@ -212,6 +320,58 @@ class ScanService:
                 self.error = f"{s}: {e}"
             self.status = f"loading history {sum(1 for x in want if x in self.hist)}/{len(want)}"
         return all(s in self.hist for s in want)
+
+    def _snapshot(self, force=False):
+        """One quote call for every stock + its future: order-book quantities, volume, OI."""
+        if not force and time.time() - self.last_snap < 60:
+            return
+        self.last_snap = time.time()
+        with self._lock:
+            want = list(self.syms)
+        pairs, back = [], {}
+        for s in want:
+            sid = self._ids.get(s.upper())
+            if sid is not None:
+                pairs.append(("NSE_EQ", sid)); back[("NSE_EQ", int(sid))] = (s, "eq")
+            fc = self._fut.get(s.upper()) if isinstance(self._fut, dict) else None
+            fid = fc[0]["id"] if fc else None
+            if fid is not None:
+                pairs.append(("NSE_FNO", fid)); back[("NSE_FNO", int(fid))] = (s, "fut")
+        if not pairs:
+            return
+        try:
+            q = D.quotes(pairs, self.cfg)
+        except Exception as e:
+            self.error = f"quotes: {e}"
+            return
+        ts = pd.Timestamp(datetime.now(IST).replace(tzinfo=None))
+        rows = {}
+        for key, qq in q.items():
+            s, kind = back.get(key, (None, None))
+            if s is None:
+                continue
+            r = rows.setdefault(s, {"ts": ts, "sym": s})
+            if kind == "eq":
+                r.update(ltp=qq.get("last_price"), vol=qq.get("volume"), bq=qq.get("buy_quantity"),
+                         sq=qq.get("sell_quantity"), avg=qq.get("average_price"))
+            else:
+                r.update(foi=qq.get("oi"), fltp=qq.get("last_price"), fbq=qq.get("buy_quantity"),
+                         fsq=qq.get("sell_quantity"))
+        with self._lock:
+            self.snaps.extend(rows.values())
+        if time.time() - self._snap_saved > 300:
+            self._save_snaps(ts.date())
+
+    def _save_snaps(self, day):
+        self._snap_saved = time.time()
+        try:
+            with self._lock:
+                data = list(self.snaps)
+            (self._cache_dir(day) / "snaps.pkl").write_bytes(pickle.dumps(data))
+            SNAP_HIST.mkdir(exist_ok=True)
+            pd.DataFrame(data).to_pickle(SNAP_HIST / f"snaps_{day:%Y%m%d}.pkl")
+        except Exception:
+            pass
 
     def _yahoo_pass(self, day):
         import yfinance as yf
@@ -324,6 +484,8 @@ class ScanService:
                     continue
                 if not self._load_history(day):
                     continue
+                self._idx_refresh(day, full=True)
+                self._ifut_refresh(day, full=True)
                 active = time.time() - self.touched < 15 * 60
                 after_close = now.weekday() < 5 and now.time() > dtime(15, 35)
                 if (market_hours(now) and active) or (after_close and not self._eod_done):
@@ -332,6 +494,8 @@ class ScanService:
                     with self._lock:
                         want = [NIFTY] + list(self.syms)
                     for i, s in enumerate(want, 1):
+                        if market_hours(now) and i % 20 == 0:
+                            self._snapshot()
                         if self._stop or s not in self.hist or (s != NIFTY and self.hist[s].empty):
                             continue
                         if after_close and s in self.today and self.today_at.get(s, 0) > \
@@ -344,6 +508,12 @@ class ScanService:
                         except Exception as e:
                             self.error = f"{s}: {e}"
                         self.status = f"updating today's bars {i}/{len(want)}"
+                    self._idx_refresh(day, full=False)
+                    self._ifut_refresh(day, full=False)
+                    if market_hours(now):
+                        self._snapshot()
+                    if after_close and self.snaps:
+                        self._save_snaps(day)
                     self.last_pass, self.pass_secs = time.time(), time.time() - t0
                     self._eod_done = self._eod_done or after_close
                     self.status = "ready"

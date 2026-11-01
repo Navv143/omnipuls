@@ -1,0 +1,15 @@
+index,setup,trades/yr,win%,pts gross,net pts,t,2015-21,2022-26,yrs +,total pts,max DD,options %
+NIFTY 50,"always in, reverse on cross | filter: none",506,34.7,5.1,-0.9,-1.16,-1.5,0.1,4/12,-5183,-9341,-2.7
+NIFTY 50,"stop at cross candle, 2R target | filter: none",501,34.0,1.0,-5.0,-15.89,-5.4,-4.2,0/12,-27859,-27873,-2.1
+NIFTY 50,"stop at cross candle, 2R target | filter: 1.5x volume + net volume with trade",43,42.0,7.4,1.4,0.68,-0.6,5.6,3/12,670,-927,0.6
+NIFTY 50,"stop at cross candle, 2R target | filter: + RSI 65/35 + momentum candle",13,51.0,14.0,8.0,1.59,5.9,11.5,7/12,1148,-362,4.6
+NIFTY 50,"stop at cross candle, exit on opposite cross | filter: none",501,17.4,2.6,-3.4,-6.32,-4.0,-2.3,2/12,-19255,-19321,-2.1
+NIFTY 50,"stop at cross candle, exit on opposite cross | filter: 1.5x volume + net volume with trade",43,28.4,8.0,2.0,0.7,-0.2,6.6,5/12,959,-906,-0.2
+NIFTY 50,"stop at cross candle, exit on opposite cross | filter: + RSI 65/35 + momentum candle",13,42.0,10.3,4.3,0.84,4.7,3.7,6/12,617,-376,1.8
+NIFTY BANK,"always in, reverse on cross | filter: none",523,31.5,7.6,-4.4,-1.94,-4.2,-4.6,4/12,-25687,-30992,-1.5
+NIFTY BANK,"stop at cross candle, 2R target | filter: none",520,31.3,-0.4,-12.4,-13.84,-12.9,-11.5,0/12,-72364,-73492,-2.2
+NIFTY BANK,"stop at cross candle, 2R target | filter: 1.5x volume + net volume with trade",46,35.4,5.4,-6.6,-1.29,-11.1,6.2,3/12,-3400,-5022,-1.8
+NIFTY BANK,"stop at cross candle, 2R target | filter: + RSI 65/35 + momentum candle",10,45.3,28.6,16.6,1.1,6.5,40.3,9/12,1946,-927,0.9
+NIFTY BANK,"stop at cross candle, exit on opposite cross | filter: none",520,16.2,1.6,-10.4,-6.97,-9.4,-12.1,1/12,-60372,-63991,-2.0
+NIFTY BANK,"stop at cross candle, exit on opposite cross | filter: 1.5x volume + net volume with trade",46,24.3,7.5,-4.5,-0.64,-13.7,21.6,5/12,-2322,-6000,-1.9
+NIFTY BANK,"stop at cross candle, exit on opposite cross | filter: + RSI 65/35 + momentum candle",10,41.0,21.4,9.4,0.58,-1.0,33.9,9/12,1101,-1255,0.0

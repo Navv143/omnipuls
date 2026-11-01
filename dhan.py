@@ -447,6 +447,7 @@ _COLMAP = {
 _SEG_FILTER = {  # segment -> (exchange, segment letter, instruments) for filtering the full master
     "IDX_I": (None, None, {"INDEX"}), "NSE_EQ": ("NSE", "E", None), "NSE_FNO": ("NSE", "D", None),
     "NSE_CURRENCY": ("NSE", "C", None), "MCX_COMM": ("MCX", "M", None), "BSE_EQ": ("BSE", "E", None),
+    "BSE_FNO": ("BSE", "D", None),
 }
 
 

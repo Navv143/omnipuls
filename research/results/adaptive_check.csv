@@ -1,0 +1,17 @@
+portfolio,avg trades/day,% per month,months +,years +,sharpe,max DD %,2016-21 %/mo,2022-26 %/mo
+"[all 26] last 6m, top 3, sharpe | FUTURES/CASH",2.4,1.78,63%,9/11,1.37,-17.6,2.56,0.7
+"[all 26] last 6m, top 3, sharpe | OPTIONS (% of premium)",2.4,-0.52,48%,4/11,-0.02,-1650.1,14.64,-21.51
+"[all 26] last 12m, top 5, sharpe | FUTURES/CASH",3.34,2.11,73%,11/11,1.93,-12.2,2.79,1.16
+"[all 26] last 12m, top 5, sharpe | OPTIONS (% of premium)",3.34,20.22,56%,7/11,0.73,-496.9,29.07,7.96
+"[all 26] last 12m, top 3, return | FUTURES/CASH",3.48,3.4,67%,11/11,1.78,-18.3,4.3,2.17
+"[all 26] last 12m, top 3, return | OPTIONS (% of premium)",3.48,-12.73,40%,2/11,-0.44,-1833.1,-8.99,-17.9
+"[all 26] last 6m, top all+, return | FUTURES/CASH",9.72,1.0,61%,8/11,1.15,-22.5,1.52,0.27
+"[all 26] last 6m, top all+, return | OPTIONS (% of premium)",9.72,-22.66,31%,1/11,-0.95,-2941.4,-14.62,-33.78
+"[22 generic (no tuned momentum)] last 6m, top 3, sharpe | FUTURES/CASH",3.44,2.58,65%,9/11,1.59,-25.6,3.69,1.04
+"[22 generic (no tuned momentum)] last 6m, top 3, sharpe | OPTIONS (% of premium)",3.44,-14.19,45%,2/11,-0.42,-2795.3,6.89,-43.38
+"[22 generic (no tuned momentum)] last 12m, top 5, sharpe | FUTURES/CASH",4.97,2.43,66%,10/11,1.81,-16.2,3.24,1.31
+"[22 generic (no tuned momentum)] last 12m, top 5, sharpe | OPTIONS (% of premium)",4.97,-22.75,34%,3/11,-0.8,-2994.5,-8.66,-42.26
+"[22 generic (no tuned momentum)] last 12m, top 3, return | FUTURES/CASH",3.63,3.42,67%,11/11,1.77,-18.3,4.28,2.22
+"[22 generic (no tuned momentum)] last 12m, top 3, return | OPTIONS (% of premium)",3.63,-18.72,38%,2/11,-0.63,-2584.1,-12.41,-27.45
+"[22 generic (no tuned momentum)] last 6m, top all+, return | FUTURES/CASH",8.76,1.11,60%,8/11,1.01,-32.7,1.71,0.27
+"[22 generic (no tuned momentum)] last 6m, top all+, return | OPTIONS (% of premium)",8.76,-44.76,26%,1/11,-1.79,-5678.5,-34.79,-58.56

@@ -1,0 +1,49 @@
+setup,trades/day,% / month,months +,years +,sharpe (monthly→yr),max DD %,last 12m %
+"last 6m, top 10, sharpe",0.72,0.07,49%,5/7,0.25,-5.5,-2.2
+"last 12m, top 10, sharpe, max 2 per family",0.68,0.06,53%,4/7,0.23,-6.3,-3.9
+"last 6m, top 1, sharpe",0.7,0.05,43%,6/7,0.12,-8.0,-0.8
+"last 6m, top 1, sharpe, max 2 per family",0.7,0.05,43%,6/7,0.12,-8.0,-0.8
+"last 6m, top 5, sharpe",0.71,0.03,40%,5/7,0.11,-6.8,-1.9
+"last 6m, top 1, return",1.49,0.05,43%,4/7,0.09,-14.6,-10.6
+"last 6m, top 1, return, max 2 per family",1.49,0.05,43%,4/7,0.09,-14.6,-10.6
+"last 6m, top 3, sharpe",0.7,0.02,43%,4/7,0.06,-6.3,-0.6
+"last 6m, top 3, sharpe, max 2 per family",0.73,0.02,50%,4/7,0.06,-5.9,-0.3
+"last 6m, top 5, sharpe, max 2 per family",0.75,0.02,40%,4/7,0.06,-5.1,-1.6
+"last 12m, top 10, return, max 2 per family",1.01,0.02,43%,3/7,0.05,-10.7,-4.5
+"last 12m, top 3, sharpe, max 2 per family",0.64,0.01,50%,4/7,0.03,-9.5,-7.9
+"last 6m, top 10, sharpe, max 2 per family",0.77,-0.0,49%,4/7,-0.0,-5.6,-3.8
+"last 12m, top 5, return, max 2 per family",1.15,-0.0,43%,3/7,-0.0,-14.3,-6.5
+"last 12m, top 5, sharpe, max 2 per family",0.65,-0.0,50%,3/7,-0.0,-8.5,-6.9
+"last 6m, top 10, return, max 2 per family",1.17,-0.04,38%,2/7,-0.11,-10.6,-7.6
+"last 12m, top 5, sharpe",0.63,-0.04,51%,2/7,-0.13,-10.5,-8.0
+"last 12m, top 5, return",1.22,-0.06,43%,2/7,-0.14,-14.6,-5.5
+"last 12m, top 10, sharpe",0.62,-0.05,49%,2/7,-0.15,-10.7,-7.2
+"last 12m, top 1, sharpe, max 2 per family",0.64,-0.06,49%,4/7,-0.16,-13.4,-10.3
+"last 12m, top 1, sharpe",0.64,-0.06,49%,4/7,-0.16,-13.4,-10.3
+"last 12m, top 3, sharpe",0.66,-0.05,49%,3/7,-0.16,-9.5,-7.5
+"last 12m, top 10, return",1.11,-0.08,40%,2/7,-0.19,-13.7,-7.1
+"last 12m, top 3, return, max 2 per family",1.3,-0.1,43%,2/7,-0.19,-16.6,-4.0
+"last 12m, top 3, return",1.32,-0.12,43%,1/7,-0.22,-16.8,-5.5
+"last 6m, top 5, return",1.42,-0.13,33%,3/7,-0.27,-16.9,-7.0
+"last 6m, top 3, return",1.42,-0.15,32%,3/7,-0.28,-19.2,-8.3
+"last 6m, top 5, return, max 2 per family",1.32,-0.14,33%,2/7,-0.29,-13.8,-7.9
+"last 12m, top 1, return",1.42,-0.2,39%,2/7,-0.31,-19.5,-8.0
+"last 12m, top 1, return, max 2 per family",1.42,-0.2,39%,2/7,-0.31,-19.5,-8.0
+"last 6m, top 10, return",1.35,-0.14,35%,2/7,-0.33,-15.3,-6.3
+"last 6m, top 3, return, max 2 per family",1.43,-0.22,31%,2/7,-0.41,-20.0,-9.3
+"last 3m, top 3, sharpe, max 2 per family",1.1,-0.16,36%,2/7,-0.45,-13.4,-2.3
+"last 3m, top 1, sharpe",1.2,-0.2,42%,2/7,-0.47,-19.2,-5.5
+"last 3m, top 1, sharpe, max 2 per family",1.2,-0.2,42%,2/7,-0.47,-19.2,-5.5
+"last 3m, top 3, sharpe",1.1,-0.16,38%,2/7,-0.48,-12.1,-1.9
+"last 3m, top 10, sharpe",1.07,-0.16,40%,1/7,-0.53,-12.0,-3.6
+"last 3m, top 5, sharpe",1.1,-0.17,38%,2/7,-0.55,-13.4,-4.1
+"last 3m, top 5, sharpe, max 2 per family",1.1,-0.19,35%,2/7,-0.63,-14.6,-3.1
+"last 3m, top 10, sharpe, max 2 per family",1.08,-0.24,32%,2/7,-1.05,-17.2,-3.3
+"last 3m, top 10, return",1.52,-0.45,28%,1/7,-1.09,-32.4,-9.2
+"last 3m, top 10, return, max 2 per family",1.38,-0.38,35%,1/7,-1.11,-28.0,-8.5
+"last 3m, top 5, return",1.59,-0.55,32%,1/7,-1.15,-38.4,-12.0
+"last 3m, top 3, return",1.7,-0.63,36%,1/7,-1.16,-44.6,-15.5
+"last 3m, top 1, return, max 2 per family",2.03,-0.86,38%,0/7,-1.27,-65.3,-13.7
+"last 3m, top 1, return",2.03,-0.86,38%,0/7,-1.27,-65.3,-13.7
+"last 3m, top 3, return, max 2 per family",1.65,-0.68,36%,0/7,-1.32,-48.2,-14.8
+"last 3m, top 5, return, max 2 per family",1.52,-0.6,25%,1/7,-1.44,-42.1,-11.9

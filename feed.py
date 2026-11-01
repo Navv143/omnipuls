@@ -242,6 +242,14 @@ class DhanFeed:
         while not self._stop:
             self.attempts += 1
             try:
+                try:  # pick up a token renewed automatically while the feed was running
+                    import dhan as _D
+                    _c = _D.load_config()
+                    if _c.get("access_token") and str(_c.get("client_id")) == self.client_id:
+                        if _c["access_token"] != self.token:
+                            self.token, self.fatal, self.error = _c["access_token"], False, ""
+                except Exception:
+                    pass
                 url = FEED_URL.format(token=self.token, cid=self.client_id)
                 async with websockets.connect(url, max_size=2 ** 22, ping_interval=None, open_timeout=20) as ws:
                     self._ws, self.connected, self.error = ws, True, ""
@@ -279,7 +287,14 @@ class DhanFeed:
             if self._stop:
                 break
             if self.fatal:
-                await asyncio.sleep(300)  # don't hammer Dhan with a bad token; Restart live feed retries now
+                for _ in range(30):  # don't hammer Dhan with a bad token; retry early if a new token is saved
+                    await asyncio.sleep(10)
+                    try:
+                        import dhan as _D
+                        if _D.load_config().get("access_token") != self.token:
+                            break
+                    except Exception:
+                        pass
                 continue
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 60 if "805" in self.error else 30)

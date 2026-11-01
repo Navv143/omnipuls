@@ -1,0 +1,125 @@
+month,pick 1,pick 2,pick 3,pick 4,pick 5
+2016-01,NIFTY 15-min ORB follow,STOCKS gap fade at 9:20,BANKNIFTY 15-min ORB follow,BANKNIFTY level break follow,STOCKS top-movers ORB follow
+2016-02,NIFTY 15-min ORB follow,STOCKS gap fade at 9:20,BANKNIFTY 15-min ORB follow,"NIFTY 5-STAR raw trail, 3/day","NIFTY 5-STAR + volume + net vol, 3/day"
+2016-03,NIFTY 15-min ORB follow,STOCKS gap fade at 9:20,BANKNIFTY 15-min ORB follow,BANKNIFTY level break follow,STOCKS top-movers ORB follow
+2016-04,NIFTY 15-min ORB follow,BANKNIFTY 15-min ORB follow,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY level break follow + volume
+2016-05,STOCKS gap fade at 9:20,NIFTY 15-min ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY 15-min ORB follow,BANKNIFTY level break follow + volume
+2016-06,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,NIFTY 15-min ORB follow,STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow
+2016-07,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,NIFTY 15-min ORB follow,BANKNIFTY level break follow + volume
+2016-08,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY 15-min ORB follow,BANKNIFTY 15-min ORB follow
+2016-09,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,BANKNIFTY 15-min ORB follow,NIFTY 15-min ORB follow
+2016-10,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,NIFTY 15-min ORB follow,BANKNIFTY 15-min ORB follow
+2016-11,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,NIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day"
+2016-12,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow
+2017-01,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow
+2017-02,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY 15-min ORB follow
+2017-03,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,BANKNIFTY 15-min ORB follow
+2017-04,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY 15-min ORB follow
+2017-05,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap-and-go at 9:20
+2017-06,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,BANKNIFTY 15-min ORB follow,STOCKS prev-day high/low break follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day"
+2017-07,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow,STOCKS prev-day high/low break follow,
+2017-08,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow,STOCKS gap-and-go at 9:20,
+2017-09,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow,STOCKS gap-and-go at 9:20,
+2017-10,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,,,
+2017-11,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,STOCKS gap-and-go at 9:20,,
+2017-12,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,STOCKS gap-and-go at 9:20,,
+2018-01,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,STOCKS gap-and-go at 9:20,,
+2018-02,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,,,
+2018-03,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,,,
+2018-04,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,STOCKS prev-day high/low break fade,STOCKS gap-and-go at 9:20,
+2018-05,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,NIFTY sweep fade + volume,STOCKS prev-day high/low break fade,
+2018-06,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,NIFTY sweep fade + volume,,
+2018-07,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,NIFTY sweep fade + volume,,
+2018-08,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,,,
+2018-09,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,NIFTY sweep fade + volume,"BANKNIFTY 5-STAR + volume + net vol, 3/day",
+2018-10,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap-and-go at 9:20,
+2018-11,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,NIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade
+2018-12,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,STOCKS prev-day high/low break fade
+2019-01,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,NIFTY 15-min ORB follow
+2019-02,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,NIFTY 15-min ORB follow
+2019-03,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,STOCKS gap-and-go at 9:20
+2019-04,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,STOCKS gap-and-go at 9:20
+2019-05,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,"NIFTY 5-STAR + volume + net vol, 3/day"
+2019-06,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day"
+2019-07,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day"
+2019-08,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day"
+2019-09,STOCKS gap fade at 9:20,STOCKS prev-day high/low break fade,"BANKNIFTY 5-STAR + volume + net vol, 3/day","NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow
+2019-10,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,STOCKS prev-day high/low break fade,"NIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY 15-min ORB follow
+2019-11,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,STOCKS prev-day high/low break fade,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow
+2019-12,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow
+2020-01,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,STOCKS prev-day high/low break fade,"NIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY 15-min ORB follow
+2020-02,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY 15-min ORB follow
+2020-03,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,"NIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY 15-min ORB follow,STOCKS gap fade at 9:20
+2020-04,"NIFTY 5-STAR + volume + net vol, 3/day","BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,STOCKS gap fade at 9:20,BANKNIFTY 15-min ORB follow
+2020-05,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,"NIFTY 5-STAR raw trail, 3/day","BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade
+2020-06,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,"NIFTY 5-STAR raw trail, 3/day"
+2020-07,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow
+2020-08,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow
+2020-09,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow
+2020-10,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day","BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,BANKNIFTY sweep fade + volume
+2020-11,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow
+2020-12,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day","BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow
+2021-01,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow
+2021-02,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day","BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow
+2021-03,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day","BANKNIFTY 5-STAR raw trail, 3/day"
+2021-04,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day","NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,BANKNIFTY sweep fade + volume
+2021-05,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade
+2021-06,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow
+2021-07,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY level break follow + volume,STOCKS prev-day high/low break fade,STOCKS top-movers ORB follow
+2021-08,STOCKS gap fade at 9:20,BANKNIFTY level break follow + volume,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,NIFTY sweep fade + volume
+2021-09,STOCKS gap fade at 9:20,BANKNIFTY level break follow + volume,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break fade,BANKNIFTY level break follow
+2021-10,STOCKS gap fade at 9:20,BANKNIFTY level break follow + volume,"BANKNIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY level break follow,NIFTY sweep fade + volume
+2021-11,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,NIFTY sweep fade + volume,BANKNIFTY level break follow + volume,BANKNIFTY 15-min ORB follow
+2021-12,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,BANKNIFTY level break follow + volume,NIFTY sweep fade + volume,BANKNIFTY level break follow
+2022-01,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,NIFTY sweep fade + volume,BANKNIFTY level break follow + volume,BANKNIFTY 15-min ORB follow
+2022-02,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY sweep fade + volume,BANKNIFTY level break follow + volume
+2022-03,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY sweep fade + volume,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day"
+2022-04,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day","NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY sweep fade + volume
+2022-05,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day","NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,
+2022-06,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day","NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,
+2022-07,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day","NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY 15-min ORB follow
+2022-08,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day","NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY 15-min ORB follow
+2022-09,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day","NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY 15-min ORB follow
+2022-10,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow
+2022-11,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day","BANKNIFTY 5-STAR raw trail, 3/day"
+2022-12,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day"
+2023-01,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY 15-min ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day"
+2023-02,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY 15-min ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day"
+2023-03,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY 15-min ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day"
+2023-04,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,BANKNIFTY 15-min ORB follow
+2023-05,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,BANKNIFTY 15-min ORB follow
+2023-06,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow
+2023-07,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,BANKNIFTY 15-min ORB follow,NIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day"
+2023-08,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,NIFTY 15-min ORB follow,,
+2023-09,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",,
+2023-10,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",,
+2023-11,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY level break follow + volume,"NIFTY 5-STAR + volume + net vol, 3/day"
+2023-12,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",
+2024-01,STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS prev-day high/low break follow
+2024-02,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day","BANKNIFTY 5-STAR + volume + net vol, 3/day",
+2024-03,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day","BANKNIFTY 5-STAR + volume + net vol, 3/day",
+2024-04,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",
+2024-05,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,,
+2024-06,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,"BANKNIFTY 5-STAR + volume + net vol, 3/day",
+2024-07,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,STOCKS gap fade at 9:20
+2024-08,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20
+2024-09,"NIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,STOCKS top-movers ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20
+2024-10,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY 15-min ORB follow,BANKNIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day"
+2024-11,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY 15-min ORB follow,BANKNIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day"
+2024-12,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS top-movers ORB follow,NIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY 15-min ORB follow
+2025-01,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY 15-min ORB follow
+2025-02,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",BANKNIFTY 15-min ORB follow
+2025-03,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,NIFTY sweep fade + volume,"NIFTY 5-STAR raw trail, 3/day"
+2025-04,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,NIFTY sweep fade + volume,
+2025-05,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",NIFTY 15-min ORB follow,"BANKNIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20
+2025-06,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,NIFTY sweep fade + volume,NIFTY 15-min ORB follow
+2025-07,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day",,
+2025-08,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",STOCKS gap fade at 9:20,,
+2025-09,STOCKS top-movers ORB follow,"NIFTY 5-STAR + volume + net vol, 3/day",,,
+2025-10,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,"NIFTY 5-STAR + volume + net vol, 3/day",,
+2025-11,STOCKS top-movers ORB follow,STOCKS gap fade at 9:20,,,
+2025-12,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,,,
+2026-01,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,,,
+2026-02,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,,,
+2026-03,STOCKS gap fade at 9:20,STOCKS top-movers ORB follow,STOCKS prev-day high/low break fade,,
+2026-04,STOCKS top-movers ORB follow,STOCKS prev-day high/low break fade,STOCKS gap fade at 9:20,,

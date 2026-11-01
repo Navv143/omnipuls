@@ -1,0 +1,145 @@
+setup,trades,per_yr,win,fut_pct,fut_t,fut_1H,fut_2H,yrs_pos,opt_pct,opt_win,opt_1H,opt_2H,bars
+BANKNIFTY 5m slope>=0.0ATR body>=0.5 cross/pullback,4878,610,0.39,-0.014,-2.8,-0.012,-0.017,1/8,-2.0,0.37,-1.5,-2.5,7.7
+BANKNIFTY 5m slope>=0.0ATR body>=0.5 cross/pullback +other idx,4208,526,0.38,-0.016,-2.7,-0.017,-0.014,1/8,-2.2,0.37,-2.0,-2.4,7.7
+BANKNIFTY 5m slope>=0.0ATR body>=0.5 any close above,7206,901,0.4,-0.005,-1.1,-0.006,-0.005,3/8,-1.4,0.38,-1.2,-1.5,8.1
+BANKNIFTY 5m slope>=0.0ATR body>=0.5 any close above +other idx,6524,816,0.39,-0.007,-1.4,-0.008,-0.006,2/8,-1.6,0.38,-1.5,-1.6,8.2
+BANKNIFTY 5m slope>=0.0ATR body>=0.7 cross/pullback,3198,400,0.38,-0.021,-3.1,-0.02,-0.022,1/8,-2.4,0.37,-2.1,-2.6,8.4
+BANKNIFTY 5m slope>=0.0ATR body>=0.7 cross/pullback +other idx,2730,341,0.38,-0.021,-2.8,-0.022,-0.021,1/8,-2.5,0.36,-2.3,-2.7,8.3
+BANKNIFTY 5m slope>=0.0ATR body>=0.7 any close above,5120,640,0.39,-0.009,-1.5,-0.009,-0.009,1/8,-1.7,0.38,-1.5,-1.8,8.9
+BANKNIFTY 5m slope>=0.0ATR body>=0.7 any close above +other idx,4628,579,0.39,-0.009,-1.4,-0.008,-0.009,1/8,-1.8,0.38,-1.5,-2.0,8.9
+BANKNIFTY 5m slope>=0.1ATR body>=0.5 cross/pullback,2443,306,0.38,-0.017,-1.9,-0.015,-0.019,1/8,-2.6,0.36,-2.2,-3.0,10.0
+BANKNIFTY 5m slope>=0.1ATR body>=0.5 cross/pullback +other idx,2159,270,0.38,-0.016,-1.8,-0.021,-0.013,1/8,-2.5,0.36,-2.2,-2.8,9.8
+BANKNIFTY 5m slope>=0.1ATR body>=0.5 any close above,5429,679,0.39,-0.004,-0.6,-0.007,-0.001,2/8,-1.5,0.38,-1.5,-1.5,9.1
+BANKNIFTY 5m slope>=0.1ATR body>=0.5 any close above +other idx,5022,628,0.39,-0.003,-0.6,-0.006,-0.001,3/8,-1.5,0.38,-1.4,-1.5,9.0
+BANKNIFTY 5m slope>=0.1ATR body>=0.7 cross/pullback,1604,201,0.38,-0.025,-2.2,-0.019,-0.031,1/8,-2.9,0.35,-2.3,-3.4,10.6
+BANKNIFTY 5m slope>=0.1ATR body>=0.7 cross/pullback +other idx,1404,176,0.38,-0.026,-2.2,-0.024,-0.028,1/8,-2.9,0.35,-2.3,-3.5,10.3
+BANKNIFTY 5m slope>=0.1ATR body>=0.7 any close above,3884,486,0.39,-0.008,-1.1,-0.006,-0.01,2/8,-1.7,0.38,-1.3,-2.1,9.9
+BANKNIFTY 5m slope>=0.1ATR body>=0.7 any close above +other idx,3581,448,0.39,-0.007,-0.9,-0.004,-0.009,1/8,-1.7,0.38,-1.1,-2.2,9.7
+BANKNIFTY 5m slope>=0.2ATR body>=0.5 cross/pullback,530,67,0.44,0.02,0.9,0.038,0.001,5/8,-0.2,0.41,1.1,-1.4,13.2
+BANKNIFTY 5m slope>=0.2ATR body>=0.5 cross/pullback +other idx,481,60,0.45,0.026,1.1,0.038,0.013,6/8,0.2,0.42,1.6,-1.2,12.9
+BANKNIFTY 5m slope>=0.2ATR body>=0.5 any close above,3420,428,0.41,0.01,1.2,0.006,0.013,6/8,-0.6,0.39,-0.7,-0.5,10.1
+BANKNIFTY 5m slope>=0.2ATR body>=0.5 any close above +other idx,3275,410,0.41,0.008,0.9,0.007,0.008,5/8,-0.7,0.39,-0.7,-0.7,10.0
+BANKNIFTY 5m slope>=0.2ATR body>=0.7 cross/pullback,356,45,0.46,0.041,1.4,0.044,0.038,5/8,1.0,0.43,1.4,0.5,14.3
+BANKNIFTY 5m slope>=0.2ATR body>=0.7 cross/pullback +other idx,321,40,0.46,0.042,1.4,0.041,0.044,5/8,1.1,0.43,1.9,0.1,13.9
+BANKNIFTY 5m slope>=0.2ATR body>=0.7 any close above,2417,302,0.42,0.013,1.3,0.015,0.012,7/8,-0.5,0.4,-0.3,-0.6,11.1
+BANKNIFTY 5m slope>=0.2ATR body>=0.7 any close above +other idx,2319,290,0.42,0.012,1.2,0.016,0.009,7/8,-0.5,0.4,-0.2,-0.9,10.8
+BANKNIFTY 5m slope>=0.3ATR body>=0.5 cross/pullback,58,7,0.43,-0.002,-0.0,-0.004,0.002,3/8,1.6,0.41,0.5,3.4,17.8
+BANKNIFTY 5m slope>=0.3ATR body>=0.5 cross/pullback +other idx,56,7,0.45,0.009,0.1,0.003,0.018,3/8,2.2,0.43,0.9,4.3,18.1
+BANKNIFTY 5m slope>=0.3ATR body>=0.5 any close above,1996,250,0.44,0.038,3.4,0.025,0.047,7/8,0.6,0.42,0.1,1.1,11.2
+BANKNIFTY 5m slope>=0.3ATR body>=0.5 any close above +other idx,1944,243,0.44,0.035,3.1,0.027,0.042,7/8,0.4,0.42,0.1,0.6,11.2
+BANKNIFTY 5m slope>=0.3ATR body>=0.7 cross/pullback,45,6,0.42,-0.005,-0.1,0.017,-0.065,3/8,0.2,0.4,2.2,-5.2,18.8
+BANKNIFTY 5m slope>=0.3ATR body>=0.7 cross/pullback +other idx,43,5,0.44,0.009,0.1,0.027,-0.041,3/8,0.9,0.42,2.7,-4.2,19.3
+BANKNIFTY 5m slope>=0.3ATR body>=0.7 any close above,1394,174,0.44,0.038,2.7,0.028,0.045,7/8,0.4,0.42,0.0,0.7,12.3
+BANKNIFTY 5m slope>=0.3ATR body>=0.7 any close above +other idx,1357,170,0.44,0.038,2.6,0.028,0.045,7/8,0.4,0.42,0.1,0.6,12.2
+BANKNIFTY 5m literal slope0.2 RR 1:1.0,542,68,0.54,0.011,0.6,0.022,-0.001,5/8,-0.1,0.54,0.4,-0.7,7.6
+BANKNIFTY 5m literal slope0.2 RR 1:1.5,534,67,0.48,0.023,1.1,0.032,0.013,7/8,0.6,0.46,0.9,0.3,11.1
+BANKNIFTY 5m literal slope0.2 RR 1:3.0,526,66,0.42,0.033,1.3,0.046,0.019,6/8,-0.1,0.39,0.7,-0.8,15.9
+BANKNIFTY 5m literal slope0.2 ATM option,530,67,0.44,0.02,0.9,0.038,0.001,5/8,-0.3,0.39,1.5,-2.2,13.2
+NIFTY 5m slope>=0.0ATR body>=0.5 cross/pullback,4932,617,0.4,-0.009,-2.4,-0.015,-0.002,1/8,-1.8,0.39,-1.7,-2.0,7.6
+NIFTY 5m slope>=0.0ATR body>=0.5 cross/pullback +other idx,4219,528,0.39,-0.011,-2.7,-0.015,-0.006,1/8,-1.8,0.38,-1.5,-2.2,7.5
+NIFTY 5m slope>=0.0ATR body>=0.5 any close above,7555,945,0.39,-0.012,-3.9,-0.01,-0.013,1/8,-2.1,0.39,-1.5,-2.6,7.9
+NIFTY 5m slope>=0.0ATR body>=0.5 any close above +other idx,6744,844,0.39,-0.011,-3.5,-0.009,-0.013,1/8,-2.0,0.38,-1.3,-2.6,8.0
+NIFTY 5m slope>=0.0ATR body>=0.7 cross/pullback,3211,402,0.39,-0.012,-2.5,-0.019,-0.005,1/8,-2.1,0.38,-1.8,-2.3,8.3
+NIFTY 5m slope>=0.0ATR body>=0.7 cross/pullback +other idx,2727,341,0.38,-0.015,-2.8,-0.021,-0.009,1/8,-2.1,0.37,-1.9,-2.3,8.1
+NIFTY 5m slope>=0.0ATR body>=0.7 any close above,5436,680,0.39,-0.01,-2.5,-0.015,-0.005,1/8,-2.1,0.38,-1.7,-2.4,8.6
+NIFTY 5m slope>=0.0ATR body>=0.7 any close above +other idx,4852,607,0.39,-0.009,-2.3,-0.016,-0.004,1/8,-2.0,0.38,-1.7,-2.2,8.6
+NIFTY 5m slope>=0.1ATR body>=0.5 cross/pullback,2448,306,0.38,-0.011,-1.9,-0.016,-0.007,1/8,-2.2,0.37,-1.6,-2.7,9.1
+NIFTY 5m slope>=0.1ATR body>=0.5 cross/pullback +other idx,2152,269,0.38,-0.011,-1.7,-0.013,-0.009,1/8,-2.0,0.37,-1.4,-2.6,8.8
+NIFTY 5m slope>=0.1ATR body>=0.5 any close above,5865,734,0.39,-0.014,-3.7,-0.01,-0.017,0/8,-2.2,0.38,-1.5,-2.9,8.5
+NIFTY 5m slope>=0.1ATR body>=0.5 any close above +other idx,5369,672,0.39,-0.012,-3.0,-0.007,-0.015,0/8,-2.1,0.38,-1.2,-2.8,8.5
+NIFTY 5m slope>=0.1ATR body>=0.7 cross/pullback,1550,194,0.39,-0.009,-1.0,-0.019,0.001,1/8,-2.1,0.37,-2.0,-2.1,10.1
+NIFTY 5m slope>=0.1ATR body>=0.7 cross/pullback +other idx,1351,169,0.38,-0.011,-1.3,-0.018,-0.004,2/8,-2.0,0.36,-1.8,-2.2,9.7
+NIFTY 5m slope>=0.1ATR body>=0.7 any close above,4205,526,0.4,-0.008,-1.8,-0.012,-0.005,1/8,-1.9,0.39,-1.6,-2.3,9.2
+NIFTY 5m slope>=0.1ATR body>=0.7 any close above +other idx,3839,480,0.39,-0.007,-1.4,-0.01,-0.004,1/8,-1.9,0.39,-1.4,-2.2,9.2
+NIFTY 5m slope>=0.2ATR body>=0.5 cross/pullback,516,65,0.42,0.011,0.7,0.006,0.016,5/8,-0.4,0.4,-0.6,-0.3,12.2
+NIFTY 5m slope>=0.2ATR body>=0.5 cross/pullback +other idx,471,59,0.42,0.014,0.8,0.011,0.018,5/8,0.1,0.4,-0.2,0.4,11.8
+NIFTY 5m slope>=0.2ATR body>=0.5 any close above,3693,462,0.39,-0.012,-2.3,-0.01,-0.013,1/8,-2.4,0.38,-2.0,-2.7,9.5
+NIFTY 5m slope>=0.2ATR body>=0.5 any close above +other idx,3489,436,0.39,-0.011,-2.0,-0.009,-0.012,2/8,-2.2,0.38,-1.8,-2.6,9.4
+NIFTY 5m slope>=0.2ATR body>=0.7 cross/pullback,360,45,0.41,0.009,0.4,-0.022,0.045,5/8,-0.8,0.38,-3.0,1.7,13.1
+NIFTY 5m slope>=0.2ATR body>=0.7 cross/pullback +other idx,329,41,0.41,0.012,0.5,-0.017,0.046,5/8,-0.3,0.39,-2.6,2.3,12.6
+NIFTY 5m slope>=0.2ATR body>=0.7 any close above,2634,330,0.39,-0.009,-1.3,-0.019,-0.001,1/8,-2.2,0.38,-2.6,-1.9,10.4
+NIFTY 5m slope>=0.2ATR body>=0.7 any close above +other idx,2486,311,0.39,-0.006,-0.8,-0.017,0.003,1/8,-1.9,0.38,-2.3,-1.6,10.4
+NIFTY 5m slope>=0.3ATR body>=0.5 cross/pullback,71,9,0.44,0.039,0.6,-0.012,0.113,5/7,1.1,0.41,-3.7,8.1,17.4
+NIFTY 5m slope>=0.3ATR body>=0.5 cross/pullback +other idx,65,8,0.45,0.043,0.6,-0.009,0.131,5/7,2.5,0.42,-3.4,12.7,17.0
+NIFTY 5m slope>=0.3ATR body>=0.5 any close above,2062,258,0.4,-0.008,-1.1,-0.017,-0.001,2/8,-2.2,0.39,-2.9,-1.6,10.7
+NIFTY 5m slope>=0.3ATR body>=0.5 any close above +other idx,2001,251,0.4,-0.008,-1.0,-0.016,-0.001,1/8,-2.2,0.39,-2.8,-1.6,10.6
+NIFTY 5m slope>=0.3ATR body>=0.7 cross/pullback,56,7,0.43,0.004,0.1,-0.065,0.129,3/7,-3.2,0.39,-8.0,5.5,18.9
+NIFTY 5m slope>=0.3ATR body>=0.7 cross/pullback +other idx,52,7,0.44,0.01,0.1,-0.063,0.161,4/7,-2.3,0.4,-7.7,8.6,18.3
+NIFTY 5m slope>=0.3ATR body>=0.7 any close above,1466,184,0.39,-0.004,-0.4,-0.019,0.009,2/8,-2.1,0.38,-3.2,-1.3,11.5
+NIFTY 5m slope>=0.3ATR body>=0.7 any close above +other idx,1420,178,0.4,-0.002,-0.2,-0.018,0.01,2/8,-2.1,0.38,-3.1,-1.4,11.4
+NIFTY 5m literal slope0.2 RR 1:1.0,526,66,0.54,-0.002,-0.2,-0.001,-0.004,4/8,-1.0,0.53,-1.0,-0.9,7.5
+NIFTY 5m literal slope0.2 RR 1:1.5,523,66,0.47,0.012,0.8,0.011,0.014,6/8,-0.2,0.45,-0.1,-0.3,10.2
+NIFTY 5m literal slope0.2 RR 1:3.0,511,64,0.38,0.016,0.8,-0.001,0.034,5/8,-0.4,0.36,-1.6,0.7,14.6
+NIFTY 5m literal slope0.2 ATM option,516,65,0.42,0.011,0.7,0.006,0.016,5/8,-1.0,0.38,-0.2,-1.8,12.2
+BANKNIFTY 3m slope>=0.0ATR body>=0.5 cross/pullback,7933,992,0.38,-0.013,-4.0,-0.014,-0.013,1/8,-1.7,0.38,-1.3,-2.0,8.2
+BANKNIFTY 3m slope>=0.0ATR body>=0.5 cross/pullback +other idx,6801,851,0.38,-0.014,-3.7,-0.013,-0.014,1/8,-1.7,0.38,-1.4,-2.1,8.2
+BANKNIFTY 3m slope>=0.0ATR body>=0.5 any close above,11746,1469,0.39,-0.012,-4.2,-0.012,-0.012,0/8,-1.4,0.38,-1.3,-1.4,8.1
+BANKNIFTY 3m slope>=0.0ATR body>=0.5 any close above +other idx,10537,1318,0.39,-0.012,-3.9,-0.013,-0.011,0/8,-1.4,0.38,-1.4,-1.5,8.1
+BANKNIFTY 3m slope>=0.0ATR body>=0.7 cross/pullback,5384,673,0.39,-0.011,-2.7,-0.01,-0.013,2/8,-1.6,0.38,-1.2,-1.9,9.1
+BANKNIFTY 3m slope>=0.0ATR body>=0.7 cross/pullback +other idx,4595,575,0.39,-0.01,-2.1,-0.009,-0.01,1/8,-1.4,0.38,-1.1,-1.8,9.0
+BANKNIFTY 3m slope>=0.0ATR body>=0.7 any close above,8430,1054,0.39,-0.012,-3.5,-0.013,-0.012,1/8,-1.3,0.38,-1.4,-1.3,8.9
+BANKNIFTY 3m slope>=0.0ATR body>=0.7 any close above +other idx,7566,946,0.39,-0.01,-2.5,-0.013,-0.007,1/8,-1.2,0.38,-1.3,-1.1,9.0
+BANKNIFTY 3m slope>=0.1ATR body>=0.5 cross/pullback,3844,481,0.38,-0.013,-2.2,-0.016,-0.011,1/8,-2.1,0.36,-1.9,-2.2,11.5
+BANKNIFTY 3m slope>=0.1ATR body>=0.5 cross/pullback +other idx,3434,430,0.38,-0.011,-1.8,-0.013,-0.01,1/8,-1.9,0.37,-1.6,-2.2,11.3
+BANKNIFTY 3m slope>=0.1ATR body>=0.5 any close above,8517,1065,0.38,-0.012,-3.3,-0.015,-0.01,1/8,-1.5,0.38,-1.5,-1.5,9.4
+BANKNIFTY 3m slope>=0.1ATR body>=0.5 any close above +other idx,7906,989,0.38,-0.01,-2.6,-0.013,-0.008,1/8,-1.4,0.38,-1.4,-1.5,9.3
+BANKNIFTY 3m slope>=0.1ATR body>=0.7 cross/pullback,2580,323,0.38,-0.011,-1.4,-0.016,-0.005,1/8,-1.7,0.37,-1.9,-1.6,12.6
+BANKNIFTY 3m slope>=0.1ATR body>=0.7 cross/pullback +other idx,2310,289,0.39,-0.008,-1.0,-0.015,-0.001,2/8,-1.6,0.37,-1.7,-1.4,12.3
+BANKNIFTY 3m slope>=0.1ATR body>=0.7 any close above,6133,767,0.38,-0.012,-2.6,-0.017,-0.007,1/8,-1.3,0.37,-1.7,-1.0,10.3
+BANKNIFTY 3m slope>=0.1ATR body>=0.7 any close above +other idx,5665,709,0.38,-0.008,-1.8,-0.016,-0.002,3/8,-1.2,0.38,-1.6,-0.8,10.2
+BANKNIFTY 3m slope>=0.2ATR body>=0.5 cross/pullback,886,111,0.4,0.013,0.8,0.021,0.003,4/8,-0.4,0.37,-0.1,-0.8,18.3
+BANKNIFTY 3m slope>=0.2ATR body>=0.5 cross/pullback +other idx,816,102,0.4,0.009,0.6,0.024,-0.007,4/8,-0.6,0.37,0.4,-1.8,18.0
+BANKNIFTY 3m slope>=0.2ATR body>=0.5 any close above,5276,660,0.39,-0.005,-1.0,-0.013,0.002,3/8,-0.9,0.38,-1.6,-0.3,10.7
+BANKNIFTY 3m slope>=0.2ATR body>=0.5 any close above +other idx,5031,629,0.39,-0.002,-0.4,-0.011,0.005,3/8,-0.8,0.38,-1.4,-0.3,10.6
+BANKNIFTY 3m slope>=0.2ATR body>=0.7 cross/pullback,640,80,0.42,0.034,1.7,0.026,0.044,5/8,1.0,0.39,0.3,1.9,19.8
+BANKNIFTY 3m slope>=0.2ATR body>=0.7 cross/pullback +other idx,592,74,0.42,0.027,1.3,0.021,0.034,3/8,0.3,0.39,0.0,0.6,19.2
+BANKNIFTY 3m slope>=0.2ATR body>=0.7 any close above,3734,467,0.39,-0.0,-0.0,-0.01,0.008,3/8,-0.6,0.38,-1.5,0.1,11.7
+BANKNIFTY 3m slope>=0.2ATR body>=0.7 any close above +other idx,3568,446,0.39,0.002,0.3,-0.01,0.012,4/8,-0.6,0.38,-1.6,0.2,11.6
+BANKNIFTY 3m slope>=0.3ATR body>=0.5 cross/pullback,107,14,0.5,0.147,2.3,0.086,0.219,6/8,5.8,0.45,1.1,11.4,26.7
+BANKNIFTY 3m slope>=0.3ATR body>=0.5 cross/pullback +other idx,102,13,0.48,0.127,1.9,0.087,0.174,5/8,3.7,0.43,1.2,6.7,26.0
+BANKNIFTY 3m slope>=0.3ATR body>=0.5 any close above,2852,357,0.42,0.012,1.6,0.007,0.015,6/8,0.3,0.41,-0.1,0.6,11.6
+BANKNIFTY 3m slope>=0.3ATR body>=0.5 any close above +other idx,2787,349,0.42,0.014,1.8,0.009,0.018,6/8,0.3,0.41,-0.1,0.6,11.6
+BANKNIFTY 3m slope>=0.3ATR body>=0.7 cross/pullback,83,11,0.48,0.156,2.0,0.066,0.268,6/8,5.9,0.43,0.1,13.1,27.1
+BANKNIFTY 3m slope>=0.3ATR body>=0.7 cross/pullback +other idx,79,10,0.46,0.125,1.6,0.059,0.212,6/8,2.8,0.41,-0.3,7.0,26.7
+BANKNIFTY 3m slope>=0.3ATR body>=0.7 any close above,1970,247,0.4,0.012,1.2,-0.001,0.022,4/8,0.1,0.4,-0.8,0.8,12.9
+BANKNIFTY 3m slope>=0.3ATR body>=0.7 any close above +other idx,1927,241,0.4,0.014,1.4,-0.001,0.025,5/8,0.1,0.4,-0.8,0.8,12.9
+BANKNIFTY 3m literal slope0.2 RR 1:1.0,917,115,0.53,0.004,0.4,0.009,-0.001,4/8,-1.1,0.52,-0.6,-1.7,10.9
+BANKNIFTY 3m literal slope0.2 RR 1:1.5,901,113,0.45,0.006,0.4,0.006,0.006,3/8,-0.9,0.43,-0.8,-1.0,15.2
+BANKNIFTY 3m literal slope0.2 RR 1:3.0,865,108,0.37,0.019,1.1,0.04,-0.005,4/8,0.1,0.33,1.5,-1.6,22.4
+BANKNIFTY 3m literal slope0.2 ATM option,886,111,0.4,0.013,0.8,0.021,0.003,4/8,-0.3,0.36,0.4,-1.1,18.3
+NIFTY 3m slope>=0.0ATR body>=0.5 cross/pullback,8202,1026,0.39,-0.013,-5.8,-0.016,-0.01,1/8,-1.7,0.39,-1.4,-2.0,8.0
+NIFTY 3m slope>=0.0ATR body>=0.5 cross/pullback +other idx,7075,885,0.39,-0.013,-5.4,-0.015,-0.011,1/8,-1.7,0.38,-1.4,-2.1,8.1
+NIFTY 3m slope>=0.0ATR body>=0.5 any close above,12316,1541,0.39,-0.014,-7.6,-0.017,-0.012,0/8,-1.7,0.38,-1.5,-1.8,7.9
+NIFTY 3m slope>=0.0ATR body>=0.5 any close above +other idx,11027,1379,0.39,-0.014,-6.9,-0.016,-0.012,1/8,-1.7,0.38,-1.5,-1.9,8.0
+NIFTY 3m slope>=0.0ATR body>=0.7 cross/pullback,5604,701,0.39,-0.013,-4.3,-0.015,-0.01,1/8,-1.7,0.39,-1.4,-2.0,8.9
+NIFTY 3m slope>=0.0ATR body>=0.7 cross/pullback +other idx,4829,604,0.39,-0.012,-3.6,-0.015,-0.008,1/8,-1.7,0.38,-1.4,-2.0,8.9
+NIFTY 3m slope>=0.0ATR body>=0.7 any close above,8931,1117,0.39,-0.013,-5.7,-0.015,-0.011,1/8,-1.7,0.39,-1.5,-1.9,8.8
+NIFTY 3m slope>=0.0ATR body>=0.7 any close above +other idx,7970,997,0.39,-0.013,-5.1,-0.016,-0.011,1/8,-1.8,0.38,-1.6,-1.9,8.9
+NIFTY 3m slope>=0.1ATR body>=0.5 cross/pullback,4151,519,0.37,-0.018,-5.0,-0.016,-0.02,1/8,-2.0,0.37,-1.4,-2.6,10.2
+NIFTY 3m slope>=0.1ATR body>=0.5 cross/pullback +other idx,3699,463,0.37,-0.019,-4.8,-0.017,-0.02,1/8,-2.1,0.36,-1.5,-2.6,10.2
+NIFTY 3m slope>=0.1ATR body>=0.5 any close above,9364,1171,0.38,-0.015,-6.6,-0.015,-0.015,0/8,-1.7,0.38,-1.4,-2.0,8.6
+NIFTY 3m slope>=0.1ATR body>=0.5 any close above +other idx,8606,1076,0.38,-0.015,-6.1,-0.016,-0.014,0/8,-1.7,0.38,-1.6,-1.9,8.7
+NIFTY 3m slope>=0.1ATR body>=0.7 cross/pullback,2804,351,0.38,-0.017,-3.5,-0.016,-0.017,2/8,-2.0,0.37,-1.6,-2.4,11.1
+NIFTY 3m slope>=0.1ATR body>=0.7 cross/pullback +other idx,2497,312,0.37,-0.016,-3.2,-0.018,-0.015,2/8,-2.0,0.36,-1.7,-2.3,11.1
+NIFTY 3m slope>=0.1ATR body>=0.7 any close above,6810,852,0.38,-0.015,-5.3,-0.016,-0.015,0/8,-1.8,0.38,-1.6,-1.9,9.5
+NIFTY 3m slope>=0.1ATR body>=0.7 any close above +other idx,6226,779,0.38,-0.014,-4.8,-0.015,-0.014,0/8,-1.8,0.38,-1.6,-2.0,9.6
+NIFTY 3m slope>=0.2ATR body>=0.5 cross/pullback,863,108,0.41,-0.008,-0.8,-0.004,-0.013,3/8,-1.2,0.39,-0.9,-1.6,16.5
+NIFTY 3m slope>=0.2ATR body>=0.5 cross/pullback +other idx,816,102,0.41,-0.01,-0.9,-0.004,-0.016,2/8,-1.1,0.39,-0.7,-1.6,16.1
+NIFTY 3m slope>=0.2ATR body>=0.5 any close above,5660,708,0.39,-0.011,-3.4,-0.012,-0.01,0/8,-1.5,0.39,-1.4,-1.6,10.0
+NIFTY 3m slope>=0.2ATR body>=0.5 any close above +other idx,5385,674,0.39,-0.013,-3.7,-0.014,-0.012,0/8,-1.7,0.38,-1.5,-1.7,10.0
+NIFTY 3m slope>=0.2ATR body>=0.7 cross/pullback,602,75,0.41,-0.013,-1.0,-0.003,-0.025,1/8,-1.6,0.39,-0.8,-2.4,17.7
+NIFTY 3m slope>=0.2ATR body>=0.7 cross/pullback +other idx,564,71,0.41,-0.016,-1.1,-0.004,-0.029,1/8,-1.5,0.38,-0.7,-2.3,17.4
+NIFTY 3m slope>=0.2ATR body>=0.7 any close above,3997,500,0.39,-0.009,-2.1,-0.011,-0.007,2/8,-1.6,0.38,-1.4,-1.7,11.0
+NIFTY 3m slope>=0.2ATR body>=0.7 any close above +other idx,3800,475,0.39,-0.011,-2.5,-0.012,-0.01,2/8,-1.7,0.38,-1.5,-1.9,10.9
+NIFTY 3m slope>=0.3ATR body>=0.5 cross/pullback,121,15,0.43,0.017,0.4,0.012,0.023,4/8,0.7,0.4,-0.1,1.9,24.0
+NIFTY 3m slope>=0.3ATR body>=0.5 cross/pullback +other idx,115,15,0.42,0.012,0.3,0.01,0.015,4/8,1.1,0.39,-0.3,3.1,23.2
+NIFTY 3m slope>=0.3ATR body>=0.5 any close above,2914,365,0.4,-0.006,-1.1,-0.009,-0.003,2/8,-1.4,0.39,-1.5,-1.4,11.4
+NIFTY 3m slope>=0.3ATR body>=0.5 any close above +other idx,2840,355,0.4,-0.006,-1.2,-0.009,-0.003,2/8,-1.5,0.39,-1.5,-1.4,11.2
+NIFTY 3m slope>=0.3ATR body>=0.7 cross/pullback,94,12,0.4,0.002,0.0,0.032,-0.046,3/8,-0.6,0.37,0.8,-2.7,26.7
+NIFTY 3m slope>=0.3ATR body>=0.7 cross/pullback +other idx,89,11,0.39,-0.002,-0.0,0.031,-0.058,3/8,0.1,0.37,0.6,-0.9,25.9
+NIFTY 3m slope>=0.3ATR body>=0.7 any close above,2033,255,0.4,-0.008,-1.3,-0.003,-0.013,2/8,-1.5,0.39,-1.1,-1.7,12.3
+NIFTY 3m slope>=0.3ATR body>=0.7 any close above +other idx,1976,247,0.4,-0.008,-1.2,-0.002,-0.013,2/8,-1.4,0.39,-1.1,-1.6,12.2
+NIFTY 3m literal slope0.2 RR 1:1.0,891,111,0.54,-0.016,-1.9,-0.011,-0.021,2/8,-1.3,0.53,-1.1,-1.5,9.7
+NIFTY 3m literal slope0.2 RR 1:1.5,875,109,0.46,-0.006,-0.6,-0.001,-0.011,3/8,-0.9,0.45,-0.6,-1.3,13.4
+NIFTY 3m literal slope0.2 RR 1:3.0,847,106,0.36,-0.004,-0.3,0.0,-0.008,4/8,-1.3,0.33,-1.3,-1.2,20.6
+NIFTY 3m literal slope0.2 ATM option,863,108,0.41,-0.008,-0.8,-0.004,-0.013,3/8,-2.1,0.38,-1.2,-3.0,16.5

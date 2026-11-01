@@ -1,0 +1,7 @@
+version,trades,per yr,win%,net pts/trade,t,2015-21,2022-26,yrs +,PF,max DD pts,total pts,options %/trade (2% cost),options 22-26
+"Your script (1R target, no volume)",2755,246,46.0,-18.6,-5.99,-21.2,-14.6,1/12,0.74,-54526,-51374,-5.22,-4.43
+Previous: 2x volume + trail,884,79,41.3,15.6,2.34,11.3,24.1,8/12,1.29,-2744,13753,5.37,4.03
+IMPROVED: 2x volume + net volume with trade + trail,764,68,43.6,20.2,2.79,14.3,33.0,9/12,1.38,-2191,15436,6.85,6.61
+IMPROVED: 2x volume + net volume with trade + trail | MONTHLY options,764,68,43.6,20.2,2.79,14.3,33.0,9/12,1.38,-2191,15436,2.14,1.6
+IMPROVED + breakeven at 1R,764,68,40.3,20.9,2.94,13.9,36.2,8/12,1.43,-2223,16001,7.07,7.27
+"IMPROVED, 2.5x volume",379,34,45.6,23.4,1.98,13.7,47.2,9/12,1.41,-1914,8863,9.63,8.98
