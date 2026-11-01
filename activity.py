@@ -206,6 +206,7 @@ def stock_candles(sym: str, bars: pd.DataFrame, session, fut: pd.DataFrame | Non
             d_oi.iloc[0] = ft["OI"].iloc[0] - fb["prev_oi"] if pd.notna(ft["OI"].iloc[0]) else np.nan
             with np.errstate(all="ignore"):
                 t["Candle OI x"] = d_oi.abs().values / fb["slot_abs"].reindex(s).values
+                t["Candle OI x"] = t["Candle OI x"].replace([np.inf, -np.inf], np.nan)  # slot with no usual OI change
                 if fb["daily_abs_pct"] and fb["daily_abs_pct"] > 0:
                     oi_x_day = np.abs(t["OI Chg %"].values) / fb["daily_abs_pct"]
             if "Close" in ft and pd.notna(fb["prev_close"]):

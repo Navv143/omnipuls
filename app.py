@@ -1281,7 +1281,7 @@ def _py(v):
     if isinstance(v, (np.integer,)):
         return int(v)
     if isinstance(v, (float, np.floating)):
-        return None if np.isnan(v) else float(v)
+        return float(v) if np.isfinite(v) else None  # NaN and infinity are not valid JSON for the widgets
     if isinstance(v, (pd.Timestamp, datetime)):
         return v.strftime("%d %b %Y")
     if hasattr(v, "isoformat"):
