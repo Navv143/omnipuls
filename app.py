@@ -1549,11 +1549,14 @@ def page_dashboard():
     t = ft[0] if ft else pd.DataFrame()
     if DHAN_DATA:
         svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
-        svc.set_universe(scan_universe("All F&O stocks"))
+        idx = index_defs()
+        svc.set_universe(tuple(sorted(set(scan_universe("All F&O stocks")) |
+                                      {m for d in idx.values() for m in d["w"]})))
+        svc.set_indices({**{k: d["id"] for k, d in idx.items()}, "INDIAVIX": 21})
         svc.touch()
         dashboard_desk(svc, t)
     else:
-        st.info("Connect Dhan for the market bias, smart-money heatmap and today's picks.", icon=":material/link:")
+        st.info("Connect Dhan for market strength, signals, money flow and today's picks.", icon=":material/link:")
     if t.empty:
         return
     st.subheader("F&O movers")
@@ -1567,72 +1570,221 @@ def _bias_card(col, title: str, value: str, note: str, tone: int):
     col.markdown(f"<div style='border:1px solid #22314A;border-left:4px solid {color};border-radius:10px;"
                  f"padding:10px 14px;background:#131D2F;min-height:96px'>"
                  f"<div class='muted' style='font-size:.78rem'>{title}</div>"
-                 f"<div style='font-size:1.25rem;font-weight:700;color:{color}'>{value}</div>"
+                 f"<div style='font-size:1.15rem;font-weight:700;color:{color}'>{value}</div>"
                  f"<div class='muted' style='font-size:.8rem'>{note}</div></div>", unsafe_allow_html=True)
+
+
+_SCAN_CACHE: dict = {}
+
+
+def _scan_now(svc):
+    """Radar shortlist and V3 breakouts on the loader's latest bars; recomputed only when new bars arrive."""
+    bars, nifty_df = svc.bars()
+    if not bars or nifty_df is None or nifty_df.empty:
+        return None
+    key = (id(svc), svc.last_pass, len(bars))
+    if _SCAN_CACHE.get("k") != key:
+        session = SC.session_of(nifty_df)
+        S = SC.prepare(bars, session)
+        N = SC.Stock("NIFTY 50", nifty_df, session)
+        rd = SC.radar(S, svc.oi())
+        v3, _ = SC.version3(S, N if N.ok else None)
+        _SCAN_CACHE.clear()
+        _SCAN_CACHE.update(k=key, v=(rd, v3, session))
+    return _SCAN_CACHE["v"]
+
+
+def _names(df: pd.DataFrame, n: int = 3, side_col: str | None = None, extra: str | None = None) -> str:
+    out = []
+    for _, r in df.head(n).iterrows():
+        s = str(r["Stock"])
+        if side_col and side_col in r and str(r[side_col]):
+            s += " " + ("▲" if str(r[side_col]).upper().startswith(("BUY", "BULL", "LONG")) else "▼")
+        if extra and extra in r and pd.notna(r[extra]):
+            s += f" ({r[extra]:+.1f}%)" if isinstance(r[extra], (int, float, np.floating)) else f" ({r[extra]})"
+        out.append(s)
+    return ", ".join(out)
 
 
 @st.fragment(run_every=60)
 def dashboard_desk(svc, t: pd.DataFrame):
-    """The morning answer in one screen: which way the index is being built, where the money is, what to look at."""
+    """One screen for a running market: how strong it is, what every scanner says now, where the money goes."""
     sf = sector_flow_table()
     box = apex_live(_dhan_sig())
+    act = _activity_data(svc)
+    R, E, per, _ = act if act else (pd.DataFrame(), pd.DataFrame(), {}, None)
+    flow = A.flow_window(per, None) if per else pd.DataFrame()
+    if not flow.empty:
+        flow["Sector"] = flow["Stock"].map(U.FNO_SECTOR_OF).fillna("Other")
+        flow = flow[flow["Stock"].isin(set(U.FNO_SECTOR_OF))]
+    secflow = A.sector_flow(flow) if not flow.empty else pd.DataFrame()
+    idx_b, fut_b = svc.idx_bars(), svc.ifut_bars()
+
+    # ---- 1. market strength
+    st.subheader("Market strength")
     c = st.columns(3)
-    # 1. index bias from option + futures OI build-up
+    c2 = st.columns(3)
     if box.get("bars") is not None:
         bars, info = box["bars"], box["info"]
         share, label = AP.dominance(bars)
-        early, elabel = AP.dominance(bars, "10:15")
-        tone = 0 if pd.isna(share) else (1 if share > 55 else -1 if share < 45 else 0)
-        _bias_card(c[0], f"Nifty build-up · {info['session']:%d %b} · {info['updated'][:5]}", label,
-                   (f"{share:.0f}% bullish so far" if pd.notna(share) else "") +
-                   (f" · first hour {early:.0f}%" if pd.notna(early) else ""), tone)
+        early, _ = AP.dominance(bars, "10:15")
+        _bias_card(c[0], f"Nifty build-up · {info['updated'][:5]}", label,
+                   (f"{share:.0f}% bullish so far" if pd.notna(share) else "")
+                   + (f" · first hour {early:.0f}%" if pd.notna(early) else ""),
+                   0 if pd.isna(share) else (1 if share > 55 else -1 if share < 45 else 0))
     else:
         _bias_card(c[0], "Nifty build-up", "Loading…", box.get("err") or "Option and futures OI, every 3 min", 0)
-    # 2. where the money is
-    if not sf.empty:
-        top, bot = sf.iloc[0], sf.iloc[-1]
-        _bias_card(c[1], "Smart money favours", f"{top['Sector']}",
-                   f"₹{top['Smart money (Rs cr)']:+,.0f} cr · weakest: {bot['Sector']} "
-                   f"₹{bot['Smart money (Rs cr)']:+,.0f} cr", 1 if top["Smart money (Rs cr)"] > 0 else 0)
-    else:
-        _bias_card(c[1], "Smart money favours", "Loading…", "Stock futures OI build-up by sector", 0)
-    # 3. breadth
     if not t.empty and "Chg %" in t:
         up, dn = int((t["Chg %"] > 0).sum()), int((t["Chg %"] < 0).sum())
-        _bias_card(c[2], "F&O breadth", f"{up} up · {dn} down",
-                   f"{int((t['Chg %'] >= 3).sum())} up 3%+, {int((t['Chg %'] <= -3).sum())} down 3%+",
+        _bias_card(c[1], "F&O breadth", f"{up} up · {dn} down",
+                   f"{int((t['Chg %'] >= 3).sum())} up 3%+ · {int((t['Chg %'] <= -3).sum())} down 3%+",
                    1 if up > 1.5 * dn else -1 if dn > 1.5 * up else 0)
-
-    # sector heatmap
-    st.subheader("Sector heatmap")
-    mode = st.segmented_control("Colour by", ["Smart money", "Price change"], default="Smart money",
-                                key="dash_heat", label_visibility="collapsed") or "Smart money"
-    res, _ = safe(oi_data, True)
-    flows = SC.stock_flows(res[0]) if res else pd.DataFrame()
-    fig = sector_heatmap(t, flows, sf, mode)
-    if fig is None:
-        st.caption("Waiting for prices and futures OI.")
     else:
-        st.plotly_chart(fig, width="stretch", key="dash_heatmap", config={"displayModeBar": False})
-        st.caption("Box size: open interest value of the stock's future. "
-                   + ("Colour: fresh futures positions today (green long build-up / short covering, red short "
-                      "build-up / long unwinding); a sector's colour is its smart-money bias."
-                      if mode == "Smart money" else "Colour: change today; a sector's colour is its average move."))
-
-    # today's picks
-    st.subheader("Today's picks")
-    rf, session = smart_money_stocks(svc)
-    picks = best_picks(rf, sf).head(5) if not rf.empty and not sf.empty else pd.DataFrame()
-    if picks.empty:
-        done, total = svc.progress()
-        st.caption("No stock is moving with a favoured sector yet." if done >= total else
-                   f"Loading stock history for R-factor: {done} of {total}.")
+        _bias_card(c[1], "F&O breadth", "—", "", 0)
+    if not flow.empty:
+        tin, tout = flow["Inflow Cr"].sum(), flow["Outflow Cr"].sum()
+        net = tin - tout
+        _bias_card(c[2], "Money flow, all F&O (today)", f"₹{net:+,.0f} Cr",
+                   f"{tin / (tin + tout) * 100:.1f}% of turnover buying", 1 if net > 0 else -1 if net < 0 else 0)
     else:
-        show_table(picks, ["Stock", "Side", "Price", "Chg %", "R-factor", "Buildup", "Flow Cr", "Volume vs usual",
-                           "Broke yday high/low", "Sector"], "dash_picks", height=250)
-        st.caption("Top R-factor stocks moving with a sector the money favours (max 3 per sector). Before entry: "
-                   "Nifty build-up the same way, yesterday's high/low broken, option writing backing it "
-                   "(Setups & Scanners → Momentum radar). Entry 9:45-10:30, one trade, small stop.")
+        _bias_card(c[2], "Money flow, all F&O", "Loading…", "Turnover split by where candles close", 0)
+    if not sf.empty:
+        top, bot = sf.iloc[0], sf.iloc[-1]
+        _bias_card(c2[0], "Futures money favours", str(top["Sector"]),
+                   f"₹{top['Smart money (Rs cr)']:+,.0f} Cr · weakest {bot['Sector']} "
+                   f"₹{bot['Smart money (Rs cr)']:+,.0f} Cr", 1 if top["Smart money (Rs cr)"] > 0 else 0)
+    else:
+        _bias_card(c2[0], "Futures money favours", "Loading…", "Fresh futures positions by sector", 0)
+    vix = idx_b.get("INDIAVIX")
+    if vix is not None and not vix.empty:
+        vd = SC.clean(vix) if hasattr(SC, "clean") else vix
+        days = sorted(set(vd.index.normalize()))
+        last = float(vd["Close"].iloc[-1])
+        prev = float(vd[vd.index.normalize() == days[-2]]["Close"].iloc[-1]) if len(days) > 1 else np.nan
+        ch = (last / prev - 1) * 100 if pd.notna(prev) else np.nan
+        _bias_card(c2[1], "India VIX", f"{last:.2f}", f"{ch:+.1f}% vs yesterday" if pd.notna(ch) else "",
+                   -1 if pd.notna(ch) and ch > 3 else 1 if pd.notna(ch) and ch < -3 else 0)
+    else:
+        _bias_card(c2[1], "India VIX", "Loading…", "", 0)
+    trend = []
+    for k in ("NIFTY", "BANKNIFTY"):
+        spot = idx_b.get(k)
+        if spot is None or spot.empty:
+            continue
+        r = TA.evaluate(k, spot, fut_b.get(k), vix, None, TA.days_to_expiry(k, spot.index.max()))
+        trend.append((k, r))
+    sigs = [(k, r) for k, r in trend if r.get("status") == "SIGNAL"]
+    if sigs:
+        k, r = sigs[0]
+        _bias_card(c2[2], "Index trend-day alert", f"{TREND_NAMES[k]}: BUY {r['side']} {r['strike']:,.0f}",
+                   f"at {r['sig_time']} · est. option {r['opt_now'] * 100:+.0f}%", 1 if r["side"] == "CE" else -1)
+    else:
+        note = " · ".join(f"{TREND_NAMES[k]} {r['move_atr']:+.2f} ATR" for k, r in trend if pd.notna(r.get("move_atr")))
+        _bias_card(c2[2], "Index trend-day alert", "No signal", note or "Needs index and futures data", 0)
+
+    # ---- 2. every scanner, one line each
+    st.subheader("Signals right now")
+    rows = []
+    og = opening_signals()
+    if og is not None:
+        g, sig, _ = og
+        for key, meta in SU.SETUPS.items():
+            df = sig.get(key)
+            if df is not None and not df.empty:
+                names = ", ".join(f"{r['sym']} {'▲' if str(r['side']).upper().startswith('BUY') else '▼'} "
+                                  f"({r['pnl_now%']:+.1f}%)" for _, r in df.head(3).iterrows())
+                rows.append({"Scanner": meta["name"], "Now": f"{len(df)} signal(s)", "Stocks": names,
+                             "Where": "Setups & Scanners → Opening setups"})
+            else:
+                rows.append({"Scanner": meta["name"], "Now": "No signal", "Stocks": "",
+                             "Where": "Setups & Scanners → Opening setups"})
+    sc = _scan_now(svc)
+    if sc is not None:
+        rd, v3, _ = sc
+        fit = rd[rd["TradeFinder fit"] == "Yes"] if not rd.empty else rd
+        rows.append({"Scanner": "Momentum radar shortlist", "Now": f"{len(fit)} fit" if len(fit) else "None yet",
+                     "Stocks": _names(fit, 3, "Side", "Move %") if len(fit) else "",
+                     "Where": "Setups & Scanners → Momentum radar"})
+        rows.append({"Scanner": "Breakout (V3), top-2 movers", "Now": f"{len(v3)} breakout(s)" if len(v3) else "None yet",
+                     "Stocks": _names(v3, 2, "Side") if len(v3) else "", "Where": "Setups & Scanners → Breakout (V3)"})
+    if not R.empty:
+        bull = R[R["Smart"] >= 40].sort_values("Smart", ascending=False)
+        bear = R[R["Smart"] <= -40].sort_values("Smart")
+        rows.append({"Scanner": "Unusual activity, bullish", "Now": f"{len(bull)} stocks",
+                     "Stocks": _names(bull, 3, None, "Chg %"), "Where": "F&O Stocks → Unusual activity"})
+        rows.append({"Scanner": "Unusual activity, bearish", "Now": f"{len(bear)} stocks",
+                     "Stocks": _names(bear, 3, None, "Chg %"), "Where": "F&O Stocks → Unusual activity"})
+    rf, _ = smart_money_stocks(svc)
+    picks = best_picks(rf, sf) if not rf.empty and not sf.empty else pd.DataFrame()
+    rows.append({"Scanner": "Smart-money picks (R-factor)", "Now": f"{len(picks)} picks" if len(picks) else "None yet",
+                 "Stocks": _names(picks, 3, "Side", "Chg %") if len(picks) else "", "Where": "Smart Money Sectors"})
+    if not secflow.empty:
+        rows.append({"Scanner": "Money flow by sector", "Now": f"In: {secflow.iloc[0]['Sector']}",
+                     "Stocks": f"Out: {secflow.iloc[-1]['Sector']} · top stock in: "
+                               f"{flow.sort_values('Net Flow Cr', ascending=False).iloc[0]['Stock']}",
+                     "Where": "F&O Stocks → Money flow"})
+    for k, r in trend:
+        rows.append({"Scanner": f"Trend-day alert, {TREND_NAMES[k]}",
+                     "Now": f"BUY {r['side']} {r['strike']:,.0f}" if r.get("status") == "SIGNAL" else r.get("status", "—"),
+                     "Stocks": f"move {r['move_atr']:+.2f} ATR (needs ±{r['thr']:.1f})" if pd.notna(r.get("move_atr")) else "",
+                     "Where": "Setups & Scanners → Index trend-day"})
+    if rows:
+        data_table(pd.DataFrame(rows), "dash_signals", name_col="Scanner", height=420)
+        st.caption("▲ buy / CE, ▼ sell / PE; brackets: change today (opening setups: P&L since the open). "
+                   "Refreshes every minute. Open the page in the last column for details and entry rules.")
+    b = st.columns(4)
+    for col, (label, view, page) in zip(b, [("Opening setups & radar", None, "scanners"),
+                                             ("Unusual activity", "Unusual activity", "fno"),
+                                             ("Money flow", "Money flow", "fno"), ("Smart money sectors", None, "smart")]):
+        if col.button(label, width="stretch", key=f"go_{label}"):
+            if view:
+                st.session_state["fno_view"] = view
+            st.switch_page(P[page])
+
+    # ---- 3. where the money is: heatmap + sector flow
+    left, right = st.columns([3, 2]) if not MOBILE else (st.container(), st.container())
+    with left:
+        st.subheader("Sector heatmap")
+        mode = st.segmented_control("Colour by", ["Smart money", "Price change"], default="Smart money",
+                                    key="dash_heat", label_visibility="collapsed") or "Smart money"
+        res, _ = safe(oi_data, True)
+        flows = SC.stock_flows(res[0]) if res else pd.DataFrame()
+        fig = sector_heatmap(t, flows, sf, mode)
+        if fig is None:
+            st.caption("Waiting for prices and futures OI.")
+        else:
+            st.plotly_chart(fig, width="stretch", key="dash_heatmap", config={"displayModeBar": False})
+    with right:
+        st.subheader("Money flow by sector")
+        if secflow.empty:
+            st.caption("Waiting for the day's candles.")
+        else:
+            sb = secflow.sort_values("Net Flow Cr")
+            fig = go.Figure(go.Bar(y=sb["Sector"], x=sb["Net Flow Cr"], orientation="h",
+                                   marker_color=np.where(sb["Net Flow Cr"] >= 0, UP, DOWN),
+                                   text=[f"{v:+,.0f}" for v in sb["Net Flow Cr"]], textposition="outside",
+                                   cliponaxis=False, hovertemplate="%{y}: ₹%{x:+,.0f} Cr<extra></extra>"))
+            fig.update_layout(height=28 * len(sb) + 60, template=plot_template(), margin=dict(l=10, r=40, t=10, b=10),
+                              xaxis=dict(title="net ₹ crore today"))
+            st.plotly_chart(fig, width="stretch", key="dash_secflow", config={"displayModeBar": False})
+
+    # ---- 4. what to look at
+    l2, r2 = st.columns(2) if not MOBILE else (st.container(), st.container())
+    with l2:
+        st.subheader("Today's picks")
+        if picks.empty:
+            st.caption("No stock is moving with a favoured sector yet.")
+        else:
+            show_table(picks.head(5), ["Stock", "Side", "Price", "Chg %", "R-factor", "Buildup", "Sector"],
+                       "dash_picks", height=250)
+    with r2:
+        st.subheader("Most unusual now")
+        if R.empty:
+            st.caption("Loading activity scores…")
+        else:
+            top = R.reindex(R["Smart"].abs().sort_values(ascending=False).index).head(5)
+            show_table(top, [c_ for c_ in ["Stock", "Side", "Price", "Chg %", "Smart", "Buildup", "Sector"]
+                             if c_ in top.columns], "dash_unusual", height=250)
 
 
 def sector_heatmap(t: pd.DataFrame, flows: pd.DataFrame, sf: pd.DataFrame, mode: str):
@@ -1778,7 +1930,8 @@ def page_fno():
     status_strip()
     st.header("F&O stocks")
     view = st.segmented_control("View", ["Live prices", "Full analytics", "Unusual activity", "Money flow"],
-                                key="fno_view", default="Live prices" if FEED is not None else "Full analytics",
+                                key="fno_view", default=None if "fno_view" in st.session_state else
+                                ("Live prices" if FEED is not None else "Full analytics"),
                                 label_visibility="collapsed") or "Full analytics"
     if view in ("Unusual activity", "Money flow"):
         page_activity(view)
@@ -2590,14 +2743,11 @@ def page_oi():
 # ---------------------------------------------------------------- trade setups (validated in research/)
 
 
-def setups_body():
-    st.caption("Rules found in Omnipuls research on 14 years of NSE data, tested year by year with costs. "
-               "They decide at 9:15 from the opening gap. Past results don't guarantee future ones; size so a run of "
-               "losses is survivable.")
+def opening_signals():
+    """Opening-gap setups (gap table, signals per setup, Nifty gap), or None without prices."""
     res, err = safe(fno_table)
     if res is None or res[0].empty:
-        no_data_msg(err)
-        return
+        return None
     t = res[0]
     # Nifty and sector gaps at the open
     nres = resolved([("Nifty 50", ["^NSEI"])])
@@ -2624,7 +2774,18 @@ def setups_body():
                      "prev_close": r["Prev Close"], "ltp": r["Price"], "high": r["Day High"], "low": r["Day Low"],
                      "sector_gap": sec_gap.get(SECTOR_INDEX.get(r["Sector"]), np.nan)})
     g = SU.gap_table(rows)
-    sig = SU.signals(g, nifty_gap)
+    return g, SU.signals(g, nifty_gap), nifty_gap
+
+
+def setups_body():
+    st.caption("Rules found in Omnipuls research on 14 years of NSE data, tested year by year with costs. "
+               "They decide at 9:15 from the opening gap. Past results don't guarantee future ones; size so a run of "
+               "losses is survivable.")
+    og = opening_signals()
+    if og is None:
+        no_data_msg()
+        return
+    g, sig, nifty_gap = og
     if not g.empty:
         st.caption(f"F&O stocks gapping 3%+: {int((g['gap'] <= -0.03).sum())} down, {int((g['gap'] >= 0.03).sum())} up.")
     for key, meta in SU.SETUPS.items():
