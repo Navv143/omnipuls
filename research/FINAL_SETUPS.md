@@ -266,3 +266,7 @@ All coded as written, after costs (Nifty 2 pts, Bank Nifty 5, stocks 0.06%, cryp
   high/low skips each day's first candle.
 - ETH 1h RSI 40/60 cross with 4h EMA 50/200 filter, stop 1.5 ATR, 2R (last year): 206 trades, PF 1.02, +0.1% total
   at 0.1% fee per side; PF 1.14, +23% at 0.05% per side; max drawdown -28 to -34%; one losing quarter -22%.
+- Cross-check in TradingView's own Strategy Tester (OANDA XAUUSD 15-min, Aug 3 - Oct 31 2026, the free plan's
+  window): 17 trades, 47% wins, profit factor 1.46, +2.80% wins / -1.70% losses (script's 0.1% commission).
+  The 9 trades listed from 2 Sep match the Python port one for one (same side and outcome, entries within 0-90 min;
+  PAXG vs OANDA prices differ slightly). The port is right; the sample is still small.
