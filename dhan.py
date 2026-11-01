@@ -108,8 +108,16 @@ def secrets_config() -> dict:
     """[dhan] client_id / access_token (or pin + totp_secret for automatic tokens) from Streamlit secrets."""
     try:
         import streamlit as st
-        sec = st.secrets.get("dhan")
-        return {k: str(v) for k, v in dict(sec or {}).items() if k in SECRET_KEYS and v}
+        sec = st.secrets.get("dhan") or st.secrets.get("Dhan") or st.secrets.get("DHAN")
+        alias = {"clientid": "client_id", "client": "client_id", "totp": "totp_secret", "totp_key": "totp_secret",
+                 "totpsecret": "totp_secret", "dhan_pin": "pin", "mpin": "pin", "token": "access_token"}
+        out = {}
+        for k, v in dict(sec or {}).items():
+            k = str(k).strip().lower()
+            k = alias.get(k, k)
+            if k in SECRET_KEYS and str(v).strip():
+                out[k] = str(v).strip()
+        return out
     except Exception:
         return {}
 

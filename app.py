@@ -3790,6 +3790,13 @@ def page_dhan():
         st.info("Not connected. Follow the steps below.", icon=":material/link_off:")
     if D.can_auto_token(DCFG) and _auto_token()["error"]:
         st.warning(f"Automatic token failed: {_auto_token()['error']}", icon=":material/error:")
+    if IS_ADMIN and not D.can_auto_token(DCFG):
+        sec = D.secrets_config()
+        have = {k: bool(sec.get(k) or DCFG.get(k)) for k in ("client_id", "pin", "totp_secret")}
+        st.warning("**Automatic token is OFF**, so the token still has to be pasted every day. It needs all three in "
+                   "Secrets under `[dhan]`: " + " · ".join(f"`{k}` {'✅' if ok else '❌ missing'}" for k, ok in have.items())
+                   + ". After saving Secrets the app restarts by itself; this line disappears once all three are found.",
+                   icon=":material/key_off:")
 
     st.subheader("Connect")
     st.markdown(
