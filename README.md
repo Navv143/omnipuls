@@ -24,7 +24,7 @@ Omnipuls works on Streamlit Community Cloud, with these differences from running
 
 - **Accounts and the Dhan token go in Secrets** (your app → ⋮ → Settings → Secrets), never in GitHub. See `.streamlit/secrets.toml.example`. On a public server the app won't offer "Create your admin account", so a stranger can't claim it; add your admin in Secrets first.
 - **Files reset whenever the app restarts, redeploys or wakes from sleep.** Accounts added, passwords changed or tokens pasted in the app last until then. Under Account, the app shows the lines to paste into Secrets to keep an account. Watchlists and alerts also reset.
-- **Dhan tokens expire every 24 hours.** Update `access_token` in Secrets each day, or paste the day's token in Dhan Connect. If a pasted token expires, the app falls back to the one in Secrets.
+- **No daily Dhan token:** put `client_id`, `pin` (your 6-digit Dhan PIN) and `totp_secret` (from web.dhan.co → DhanHQ Trading APIs → Setup TOTP) in Secrets, and the app makes a fresh 24-hour token by itself whenever it needs one. Keep them only in the cloud app's Secrets, not also on your computer: Dhan may allow one token at a time, and two copies would keep replacing each other's. Without them, update `access_token` in Secrets each day or paste the day's token in Dhan Connect.
 - **Live prices update every 1–2 seconds.** The server still receives every tick from Dhan, but Streamlit Cloud doesn't allow the direct tick stream to the browser, so the page fetches the latest ticks each second. On your own computer it is still tick by tick.
 - **Quit Omnipuls** is hidden on the cloud, and on your own computer only the admin sees it.
 - Yahoo Finance and NSE sometimes limit requests from cloud servers. Indian prices come from Dhan when connected, and the F&O list falls back to Dhan's contract list.
@@ -62,9 +62,19 @@ Omnipuls runs on your computer, and your phone opens it over the same Wi-Fi. As 
 
 Use the menu in the left sidebar.
 
-### Markets
+### Trade
 
-**Dashboard**: a running ticker tape and live tiles for Nifty 50, Bank Nifty, Sensex, Nifty Midcap 100, Fin Nifty, BTC/USD, ETH/USD, XAU/USD, Solana and US Oil (WTI). Below them, sector performance (today, 1 week, 1 month, 3 months, 1 year), then the top 10 gainers and top 10 losers among F&O stocks.
+**Dashboard**: the morning answer on one screen. A ticker tape and live tiles (Nifty 50, Bank Nifty, Sensex, Midcap 100, Fin Nifty, BTC, ETH, XAU, Solana, WTI); three cards: Nifty build-up (which way option and futures positions are being built, refreshed every 2 minutes), the sector smart money favours, and F&O breadth; a sector heatmap (each sector with its stocks, sized by futures OI value, coloured by fresh futures positions or by price change); today's 5 picks (top R-factor stocks moving with a favoured sector); and the top 10 gainers and losers.
+
+**Index Build-up**: Nifty, Bank Nifty or Fin Nifty in 3-minute candles with green/red bars of who is building positions, from the change in option open interest (5 strikes each side, nearest expiry) and futures open interest, plus the bull/bear share up to 9:45, 10:15, 10:30 and for the whole session.
+
+**Smart Money Sectors**: best picks, sectors ranked by the rupee value of fresh futures positions today, and every sector's stocks with live price, buildup, flow and R-factor (volume, OI, range and move vs the same window on the last 20 sessions).
+
+**Setups & Scanners**: Opening setups (gap fade, panic gap-down reversal, sector overreaction, decided at 9:15), Momentum radar (shortlist with option-writing and sector-money checks, daily log of the 10:30 picks), Breakout (V3) with its 9:30 ranking, and Research (what each setup returned in testing).
+
+**Option Chain**: see the Dhan section below.
+
+### Markets
 
 **NSE Indices & Sectors**: broad-market indices (Nifty 50, Bank, Sensex, Fin Nifty, Midcap Select, Midcap 100, Next 50, Smallcap 100, Nifty 500, India VIX and more) and about 24 sectoral and thematic indices, each with LTP, change, open/high/low, returns, distance from 52-week high, RSI and trend.
 
@@ -72,7 +82,7 @@ Use the menu in the left sidebar.
 
 **F&O Stocks**: every NSE F&O stock with LTP, change, open, high, low, previous close, gap, volume and volume vs average, turnover, lot size, lot value, ATR, RSI, trend, Supertrend, technical rating, returns, 52-week range and signals. Includes advance/decline counts, sector breadth, 18 scans (gainers, losers, volume spike, gaps, big movers, high volatility, RSI, trend, Supertrend and MACD signals) and filters by sector, price, RSI and trend. The F&O list and lot sizes are downloaded from NSE's contract file each day.
 
-**Crypto, Forex, Currency (INR), Commodities**: live tiles plus a full table for each market. The currency page also has a rupee converter.
+**Global Markets**: commodities, currency (INR, with a rupee converter), forex and crypto, each with live tiles and a full table; pick one with the switch at the top.
 
 ### Tools
 
@@ -84,7 +94,7 @@ Use the menu in the left sidebar.
 
 ## Dhan (live Indian market data and your account)
 
-Open **Dhan Connect** in the sidebar menu and paste your **Client ID** and **access token**. To get them, log in to web.dhan.co and open My Profile → Access DhanHQ APIs. The token is valid for 24 hours: renew it from the same page while it is valid, or paste a new one.
+Open **Dhan Connect** in the sidebar menu and paste your **Client ID** and **access token**. To get them, log in to web.dhan.co and open My Profile → Access DhanHQ APIs. The token is valid for 24 hours: renew it from the same page while it is valid, or paste a new one. To skip this every day, set `pin` and `totp_secret` (Secrets, or the environment variables `DHAN_PIN` and `DHAN_TOTP_SECRET`) and the app makes its own tokens; see Running on Streamlit Cloud.
 
 With Dhan's **Data APIs** subscription active:
 
