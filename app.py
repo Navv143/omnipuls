@@ -1782,7 +1782,7 @@ def _github_cfg() -> dict:
 
 
 def _log_desk(snaps: dict, verdict: dict, plans: list, ce, pe):
-    """Record the desk at 9:20, 9:45, 10:30 and 12:00 on market days (only from today's live data), once per checkpoint."""
+    """Record the desk at 9:20, 9:45, 10:30, 12:00, 13:30 and 15:00 on market days (only from today's live data), once per checkpoint."""
     now = datetime.now(IST).replace(tzinfo=None)
     n = snaps.get("NIFTY")
     if not n or n["closes"].empty or n["closes"].index.max().date() != now.date():
@@ -4675,7 +4675,7 @@ def page_research():
     st.caption("Only admins see this page, the Research tab, the 'How it works' tabs and the method notes under "
                "each scanner. Other users see the signals and tables only.")
     gh = _github_cfg()
-    st.caption(f"Desk log (9:20, 9:45, 10:30, 12:00 on market days): last saved {DL.STATUS['last'] or 'not yet in this run'}; "
+    st.caption(f"Desk log (9:20, 9:45, 10:30, 12:00, 13:30, 15:00 on market days): last saved {DL.STATUS['last'] or 'not yet in this run'}; "
                + ("copies to GitHub branch `logs`." if gh.get("token") else
                   "**GitHub copy off**: add `[github]` `token = \"…\"` in Secrets, or the log is lost on restart.")
                + (f" Last GitHub error: {DL.STATUS['error']}" if DL.STATUS["error"] else ""))
@@ -4690,6 +4690,131 @@ def page_research():
                             "Shares / trade": r[3], "Options / trade": r[4], "Years +": r[5], "Notes": r[6]}
                            for r in SC.RESEARCH])
         data_table(rs, "rs_table", name_col="Setup", height=520)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _desk_log(_bucket: int) -> pd.DataFrame:
+    return DL.load(_github_cfg())
+
+
+def _closes(stocks: tuple) -> dict:
+    """{stock: daily closes} (today's bar is the live price)."""
+    data, _ = safe(fetch_daily, tuple(U.fno_yahoo(x) for x in stocks))
+    out = {}
+    for x in stocks:
+        df = (data or {}).get(U.fno_yahoo(x))
+        if df is not None and not df.empty:
+            idx = pd.DatetimeIndex(df.index)
+            idx = (idx.tz_localize(None) if idx.tz is not None else idx).normalize()
+            c = pd.Series(df["Close"].to_numpy(), index=idx)
+            out[x] = c[~c.index.duplicated(keep="last")]
+    return out
+
+
+def _review(f: pd.DataFrame, closes: dict) -> pd.DataFrame:
+    """One row per logged pick: result from its log price to that day's close, and to the next day's close."""
+    rows = []
+    for _, r in f.iterrows():
+        c = closes.get(r["name"])
+        sgn = 1 if r["side"] == "CE" else -1
+        day = pd.Timestamp(r["date"])
+        res = {"Date": r["date"], "Time": r["check"], "Stock": r["name"], "Side": r["side"],
+               "Score": r["score"], "Price": r["price"], "Why": r["why"], "To close %": np.nan, "Next day %": np.nan}
+        if c is not None and pd.notna(r["price"]) and float(r["price"]) > 0:
+            if day in c.index:
+                res["To close %"] = sgn * (c.loc[day] / float(r["price"]) - 1) * 100
+            nxt = c[c.index > day]
+            if len(nxt):
+                res["Next day %"] = sgn * (nxt.iloc[0] / float(r["price"]) - 1) * 100
+        rows.append(res)
+    return pd.DataFrame(rows)
+
+
+def page_desk_review():
+    """Admin only: the logged desk at every time of day, side by side, with what each pick did afterwards."""
+    status_strip()
+    st.header("Desk review")
+    if not IS_ADMIN:
+        st.error("Admins only.")
+        return
+    L = _desk_log(int(time.time() // 300))
+    if L.empty:
+        st.info("No desk log yet. The Trading Desk saves itself at 9:20, 9:45, 10:30, 12:00, 13:30 and 15:00 on market "
+                "days while it is open; add [github] token in Secrets so the log survives app restarts.",
+                icon=":material/history:")
+        return
+    dates = sorted(L["date"].astype(str).unique(), reverse=True)
+    c1, c2 = st.columns([1, 3], vertical_alignment="bottom")
+    day = c1.selectbox("Day", dates, key="dr_day")
+    c2.caption("Result = move in the pick's direction (CE up, PE down) from the price when it was logged. "
+               "To close: that day's close (today: the live price). Next day: the next session's close, the check for "
+               "the 15:00 picks. No costs or stops: a quick read of where the desk was right and wrong.")
+    d = L[L["date"].astype(str) == day]
+    checks = [c for c in DL.CHECKS if c in set(d["check"])]
+    f = d[d["kind"] == "focus"]
+    R = _review(f, _closes(tuple(sorted(set(f["name"]))))) if not f.empty else pd.DataFrame()
+
+    v = d[d["kind"] == "verdict"].set_index("check")
+    ix = d[d["kind"] == "index"]
+    mood = []
+    for c in checks:
+        row = {"Time": c, "Mood": v.loc[c, "name"] if c in v.index else "",
+               "Score": float(v.loc[c, "score"]) if c in v.index and pd.notna(v.loc[c, "score"]) else np.nan}
+        for _, p_ in ix[ix["check"] == c].iterrows():
+            row[p_["name"]] = f"{p_['side']} {p_['price']}".strip() if p_["side"] in ("CE", "PE") else p_["side"]
+        if not R.empty:
+            g = R[R["Time"] == c]
+            row.update({"CE picks": int((g["Side"] == "CE").sum()), "PE picks": int((g["Side"] == "PE").sum()),
+                        "Avg to close %": g["To close %"].mean(),
+                        "Right %": 100 * (g["To close %"] > 0).mean() if g["To close %"].notna().any() else np.nan})
+        mood.append(row)
+    st.subheader("Each time of day")
+    data_table(pd.DataFrame(mood), "dr_mood", name_col="Time", signed=("Score", "Avg to close %"), height=300)
+
+    if not R.empty:
+        st.subheader("Picks across the day")
+        mat = []
+        for (stock, side), g in R.groupby(["Stock", "Side"]):
+            g = g.set_index("Time")
+            first = next(c for c in checks if c in g.index)
+            row = {"Stock": stock, "Side": side, "First seen": first}
+            for c in checks:
+                row[c] = f"{float(g.loc[c, 'Score']):+.0f} @ {float(g.loc[c, 'Price']):,.2f}" if c in g.index else ""
+            row["Times listed"] = len(g)
+            row["To close % (from first)"] = g.loc[first, "To close %"]
+            row["Next day % (from first)"] = g.loc[first, "Next day %"]
+            mat.append(row)
+        M = pd.DataFrame(mat).sort_values(["Times listed", "To close % (from first)"], ascending=[False, False])
+        data_table(M, "dr_matrix", name_col="Stock", signed=("To close % (from first)", "Next day % (from first)"),
+                   height=520)
+        st.caption("Cells: desk score @ price at that time (blank = not on the list then). Stocks listed at many times "
+                   "are the desk's most persistent picks.")
+        with st.expander("Every logged pick with its reasons"):
+            data_table(R.round(2), "dr_all", name_col="Stock", signed=("To close %", "Next day %"), height=480)
+
+    st.subheader("All logged days")
+    allf = L[L["kind"] == "focus"]
+    if allf.empty:
+        st.caption("No picks logged yet.")
+        return
+    RA = _review(allf, _closes(tuple(sorted(set(allf["name"])))))
+    rows = []
+    for c in DL.CHECKS:
+        g = RA[RA["Time"] == c]
+        for side in ("CE", "PE", "All"):
+            h = g if side == "All" else g[g["Side"] == side]
+            if h.empty:
+                continue
+            rows.append({"Time": c, "Side": side, "Picks": len(h), "Days": h["Date"].nunique(),
+                         "Avg to close %": h["To close %"].mean(),
+                         "Right to close %": 100 * (h["To close %"] > 0).mean(),
+                         "Avg next day %": h["Next day %"].mean(),
+                         "Right next day %": 100 * (h["Next day %"] > 0).mean()})
+    if rows:
+        data_table(pd.DataFrame(rows), "dr_alldays", name_col="Time", signed=("Avg to close %", "Avg next day %"),
+                   height=420)
+    st.caption("Read 'Right %' against 50%: above it the desk's picks at that time beat a coin flip so far. "
+               "A few weeks of days are needed before these numbers mean much.")
 
 
 def _sign_out():
@@ -4716,6 +4841,7 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("watchlist", page_watchlist, "Watchlist & Alerts", ":material/notifications:"),
     ("account", page_account, "Account", ":material/manage_accounts:"),
     ("research", page_research, "Research notes", ":material/lock:"),
+    ("review", page_desk_review, "Desk review", ":material/fact_check:"),
 ]
 # Start page: Dashboard, or set NAVV_START_PAGE (e.g. fno, crypto) to open somewhere else.
 _start = os.environ.get("NAVV_START_PAGE", "dashboard")
@@ -4723,7 +4849,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "dashboard"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({
-    "Trade": [P["dashboard"], P["apex"], P["smart"], P["scanners"], P["options"]],
+    "Trade": [P["dashboard"], P["apex"], P["smart"], P["scanners"], P["options"]] + ([P["review"]] if IS_ADMIN else []),
     "Markets": [P["fno"], P["oi"], P["sectors"], P["indices"], P["global"]],
     "Dhan": [P["mcx"], P["cdsfut"]] + ([P["portfolio"], P["dhan"]] if IS_ADMIN else []),
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["account"]] + ([P["research"]] if IS_ADMIN else []),

@@ -1,7 +1,8 @@
 """Daily log of the Trading Desk (verdict, index plans, CE / PE focus with their OI readings) so the parts with no
 history (futures buildup, sector futures money) can be judged after a few weeks.
 
-Saved four times a day (9:20, 9:45, 10:30 and 12:00 IST, the first desk view after each) to desk_log.csv next to the app, and, when
+Saved six times a day (9:20, 9:45, 10:30, 12:00, 13:30 and 15:00 IST, the first desk view after each; 15:00 doubles
+as the next-day watchlist) to desk_log.csv next to the app, and, when
 Secrets has [github] token (+ optional repo / branch), appended to desk_log/<YYYY-MM>.csv on the `logs` branch of the
 private repo: Streamlit Cloud forgets local files on every restart, and it deploys only `main`, so writing to
 `logs` never restarts the app. research/desk_log_eval.py scores the logged picks.
@@ -20,7 +21,7 @@ import requests
 
 HERE = Path(__file__).resolve().parent
 LOCAL = HERE / "desk_log.csv"
-CHECKS = ("09:20", "09:45", "10:30", "12:00")
+CHECKS = ("09:20", "09:45", "10:30", "12:00", "13:30", "15:00")
 FIELDS = ["date", "check", "logged_at", "kind", "name", "side", "price", "chg_pct", "score", "why", "extra"]
 _lock = threading.Lock()
 STATUS = {"last": "", "error": ""}
@@ -100,3 +101,33 @@ def save(rows: list[dict], github: dict | None):
             except Exception as e:
                 STATUS["error"] = str(e)[:200]
         threading.Thread(target=run, daemon=True, name="desk-log").start()
+
+
+def load(github: dict | None) -> "pd.DataFrame":
+    """Every logged row: the GitHub `logs` branch (all months) when a token is set, plus this machine's file."""
+    import pandas as pd
+    frames = []
+    if github and github.get("token"):
+        repo, branch = github.get("repo", "Navv143/omnipuls"), github.get("branch", "logs")
+        h = {"Authorization": f"Bearer {github['token']}", "Accept": "application/vnd.github+json"}
+        try:
+            r = requests.get(f"https://api.github.com/repos/{repo}/contents/desk_log", params={"ref": branch},
+                             headers=h, timeout=20)
+            if r.status_code == 200:
+                for f in r.json():
+                    if f.get("name", "").endswith(".csv"):
+                        c = requests.get(f["url"], params={"ref": branch}, headers=h, timeout=20).json()
+                        frames.append(pd.read_csv(io.StringIO(base64.b64decode(c["content"]).decode("utf-8"))))
+            elif r.status_code != 404:
+                STATUS["error"] = f"GitHub read {r.status_code}"
+        except Exception as e:
+            STATUS["error"] = str(e)[:200]
+    if LOCAL.exists():
+        try:
+            frames.append(pd.read_csv(LOCAL))
+        except Exception:
+            pass
+    if not frames:
+        return pd.DataFrame(columns=FIELDS)
+    d = pd.concat(frames, ignore_index=True)
+    return d.drop_duplicates(["date", "check", "kind", "name", "side"], keep="last")
