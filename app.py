@@ -50,6 +50,7 @@ import trend_alert as TA
 import desk as DK
 import twelve as TW
 import desk_log as DL
+import five_star as FIVE
 
 
 def _process_start() -> float:
@@ -77,7 +78,7 @@ def _reload_changed():
     sys, which survives reruns and cache clears). If a reload fails (Streamlit may be swapping the same module), drop
     it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
-    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL]  # dependencies before the modules that use them
+    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE]  # dependencies before the modules that use them
     seen = sys.__dict__.setdefault("_omni_seen", {})
     started = None
     stale = []
@@ -3191,14 +3192,16 @@ def scanner_body(svc, uni):
                     f"<br><span class='muted'>{note}</span>", unsafe_allow_html=True)
 
     signed = ("P&L %", "Gap %", "Change by 10:00 %")
-    tabs = st.tabs(["Opening setups", "Momentum radar", "Breakout (V3)", "Index trend-day + OI (options)"]
-                   + (["Research"] if IS_ADMIN else []))
+    tabs = st.tabs(["Opening setups", "Momentum radar", "Breakout (V3)", "Index trend-day + OI (options)",
+                    "Bank Nifty 5-STAR"] + (["Research"] if IS_ADMIN else []))
     with tabs[3]:
         index_trend_tab(svc)
+    with tabs[4]:
+        five_star_tab(svc)
     with tabs[0]:
         setups_body()
     if IS_ADMIN:
-        with tabs[4]:
+        with tabs[5]:
             rs = pd.DataFrame([{"Setup": r[0], "Verdict": SC.VERDICT_LABEL[r[2]], "Trade with": r[1],
                                 "Shares / trade": r[3], "Options / trade": r[4], "Years +": r[5], "Notes": r[6]}
                                for r in SC.RESEARCH])
@@ -4443,6 +4446,95 @@ def index_flow(svc, per: dict, stocks: pd.DataFrame, idx: dict, key: str, start)
 
 TREND_NAMES = {"NIFTY": "Nifty 50", "BANKNIFTY": "Bank Nifty", "FINNIFTY": "Fin Nifty", "SENSEX": "Sensex",
                "MIDCPNIFTY": "Midcap Select"}
+
+
+def _five_star_data(svc):
+    """Market internals from the Nifty 100 stocks, rebuilt once per loader pass."""
+    bars, _ = svc.bars()
+    memo = _memo("five_star")
+    key = (id(svc), svc.last_pass, len(bars))
+    if memo.get("k") != key:
+        stocks = {x: bars[x] for x in SC.NIFTY100 if x in bars}
+        memo.update(k=key, v=(FIVE.market_internals(stocks), stocks))
+    return memo["v"]
+
+
+def five_star_tab(svc):
+    note_md(f"{_badge('ok')}&nbsp; **Bank Nifty futures:** +29 pts a trade after 12 pts cost (2015-2026), 72 trades a "
+            "year, 50% wins, 9 of 12 years positive; last 12 months on Dhan data +13 pts. Profit comes from a few wide "
+            "trend days: fixed lots, keep capital for 2x the worst drawdown (-1,720 pts). Paper-trade first.",
+            unsafe_allow_html=True)
+    if IS_ADMIN:
+        with st.expander("Rules"):
+            st.markdown(FIVE.__doc__.split("\n", 2)[2])
+    bn = svc.idx_bars().get("BANKNIFTY")
+    if bn is None or bn.empty:
+        st.info("Waiting for Bank Nifty 5-minute bars from the loader.", icon=":material/hourglass_top:")
+        return
+    internals, stocks = _five_star_data(svc)
+    r = FIVE.evaluate(bn, internals)
+    if r.get("status") in ("no data", "need 12 earlier sessions"):
+        st.caption(f"Not ready: {r['status']}.")
+        return
+    sess = pd.Timestamp(r["session"])
+    live_today = sess.date() == datetime.now(IST).date()
+    sg = r.get("signal")
+    c1, c2 = st.columns([1.2, 1]) if not MOBILE else (st.container(), st.container())
+    with c1:
+        with st.container(border=True):
+            if sg:
+                side = "BUY" if sg["side"] > 0 else "SELL"
+                col = UP if sg["side"] > 0 else DOWN
+                st.markdown(f"<div style='font-size:1.6rem;font-weight:800;color:{col}'>{side} Bank Nifty · "
+                            f"{sg['time']}</div>", unsafe_allow_html=True)
+                m = st.columns(4)
+                m[0].metric("Entry", f"{sg['entry']:,.1f}")
+                m[1].metric("Stop now (Supertrend)", f"{sg['stop']:,.1f}", f"risk at entry {sg['risk']:,.0f} pts",
+                            delta_color="off")
+                m[2].metric("Points", f"{sg['pts']:+,.0f}", sg["state"], delta_color="normal" if sg["pts"] >= 0 else "inverse")
+                m[3].metric("Exit", f"{sg['exit']:,.1f}" if sg["exit"] else "—", sg["exit_time"] or "trail the Supertrend",
+                            delta_color="off")
+            else:
+                last = r["last"]
+                st.markdown(f"<div style='font-size:1.4rem;font-weight:700;color:#94A3B8'>No signal "
+                            f"{'yet' if live_today else 'that session'}</div>", unsafe_allow_html=True)
+                st.caption(f"Latest candle {last['time']}: {last['checks']} of 6 checks, leaning {last['lean']} · "
+                           f"Bank Nifty {last['close']:,.1f}, Supertrend {last['st']:,.1f}")
+            if not live_today:
+                st.caption(f"Market closed: showing {sess:%a %d %b}.")
+        rows = r["rows"]
+        lastrow = rows.iloc[-1]
+        st.markdown("**Latest candle, " + lastrow["Time"] + "**")
+        for n in FIVE.CHECK_NAMES:
+            st.markdown(("✅ " if lastrow[n] else "▫️ ") + n)
+    with c2:
+        st.markdown("**Market internals**")
+        it = FIVE.internals_now(internals, stocks)
+        if it:
+            m = st.columns(2)
+            m[0].metric("Nifty 50 above VWAP", f"{100 * it['breadth']:.0f}%" if pd.notna(it["breadth"]) else "—",
+                        f"{it['breadth_n']} stocks", delta_color="off")
+            m[1].metric("Volume, last candle", f"{it['vol_x']:.1f}x usual" if pd.notna(it["vol_x"]) else "—",
+                        f"day {it['turnover_x']:.2f}x" if pd.notna(it["turnover_x"]) else None, delta_color="off")
+            m = st.columns(2)
+            m[0].metric("Net volume, last candle", f"{it['net_z']:+.1f}" if pd.notna(it["net_z"]) else "—",
+                        "buying" if (it["net_z"] or 0) > 0 else "selling", delta_color="off")
+            m[1].metric("Net volume today", f"₹{it['cum_net_cr']:+,.0f} Cr", f"turnover ₹{it['turnover_cr']:,.0f} Cr",
+                        delta_color="off")
+            if it["heavy"]:
+                st.markdown(" · ".join(f"**{k}** <span style='color:{UP if v['chg'] >= 0 else DOWN}'>{v['chg']:+.2f}%</span>"
+                                       f"{' ▲VWAP' if v['above_vwap'] else ' ▼VWAP'}" for k, v in it["heavy"].items()),
+                            unsafe_allow_html=True)
+            note(f"As of {it['time']}. Volume and net volume: Nifty 100 stocks' turnover vs the same candle on the "
+                 "last 20 sessions; net = turnover split by where each candle closed in its range.")
+    st.markdown("**Today's candles**")
+    show = rows.copy()
+    for n in FIVE.CHECK_NAMES:
+        show[n] = np.where(show[n], "✅", "")
+    data_table(show.iloc[::-1].round(2), "five_star_rows", name_col="Time", height=420,
+               signed=("RSI",))
+    st.caption("Refreshes with the scanner page (every minute). Bank Nifty bars come from the index; check the futures "
+               "price before entering.")
 
 
 def index_trend_tab(svc):
