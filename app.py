@@ -52,6 +52,7 @@ import twelve as TW
 import desk_log as DL
 import five_star as FIVE
 import chain_log as CL
+import trade_odds as TO
 
 
 def _process_start() -> float:
@@ -79,7 +80,7 @@ def _reload_changed():
     sys, which survives reruns and cache clears). If a reload fails (Streamlit may be swapping the same module), drop
     it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
-    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE, CL]  # dependencies before the modules that use them
+    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE, CL, TO]  # dependencies before the modules that use them
     seen = sys.__dict__.setdefault("_omni_seen", {})
     started = None
     stale = []
@@ -4932,6 +4933,129 @@ def _paper_results(L: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _odds_bars(market: str, sym: str | None) -> tuple[pd.DataFrame, str]:
+    """About 60 sessions of 5-minute bars: Dhan for India (Yahoo if Dhan is off), Binance for crypto and gold."""
+    if market in TO.BINANCE:
+        return TO.binance_5m(TO.BINANCE[market]), "Binance" + (" PAXG, which tracks gold" if market == "Gold" else "")
+    if DHAN_DATA:
+        try:
+            cfg = _current_cfg()
+            seg, sid, ins = (("IDX_I", 13, "INDEX") if market == "Nifty 50" else ("IDX_I", 25, "INDEX")
+                             if market == "Bank Nifty" else ("NSE_EQ", D.equity_ids(cfg)[sym], "EQUITY"))
+            df = SS._naive(D.intraday(seg, sid, ins, 5, 90, cfg))
+            if not df.empty:
+                return df, "Dhan"
+        except Exception:
+            pass
+    tick = "^NSEI" if market == "Nifty 50" else "^NSEBANK" if market == "Bank Nifty" else f"{sym}.NS"
+    df = yf.download(tick, period="60d", interval="5m", progress=False, auto_adjust=False)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    return SS._naive(df[["Open", "High", "Low", "Close", "Volume"]].dropna()), "Yahoo"
+
+
+def page_odds():
+    st.title("Trade odds")
+    st.caption("Before a small fixed-target trade: from this price and this time of day, how often did the target "
+               "come before the stop? Built from the market's own 5-minute candles over about the last 60 sessions.")
+    c = st.columns([1.2, 1.2, 1, 1]) if not MOBILE else [st.container() for _ in range(4)]
+    mkt = c[0].selectbox("Market", list(TO.MARKETS), key="od_mkt")
+    tgt_d, cost_d, cost_unit, india = TO.MARKETS[mkt]
+    sym = c[1].selectbox("Stock", sorted(U.FNO_SECTOR_OF), key="od_sym") if mkt == "F&O stock" else None
+    side_txt = c[2 if sym else 1].radio("Side", ["Buy / CE", "Sell / PE"], horizontal=True, key="od_side")
+    side = 1 if side_txt.startswith("Buy") else -1
+    holds = ["30 min", "60 min", "120 min", "Till 15:15"] if india else ["30 min", "60 min", "120 min", "240 min"]
+    hold = c[3].selectbox("Hold for", holds, index=1, key=f"od_hold_{india}")
+    with st.spinner("Loading 5-minute candles..."):
+        got, err = safe(_odds_bars, mkt, sym)
+    if got is None or got[0].empty:
+        st.error(f"No 5-minute candles for {sym or mkt}: {err or 'empty'}")
+        return
+    bars, source = got
+    last = float(bars["Close"].iloc[-1])
+    pct = mkt == "F&O stock"
+    unit = "%" if pct else "pts"
+    c = st.columns(5) if not MOBILE else [st.container() for _ in range(5)]
+    tgt = c[0].number_input(f"Target ({unit})", min_value=0.01, value=float(tgt_d), step=0.25 if pct else 1.0,
+                            key=f"od_t_{mkt}")
+    stp = c[1].number_input(f"Stop ({unit})", min_value=0.01, value=float(tgt_d), step=0.25 if pct else 1.0,
+                            key=f"od_s_{mkt}")
+    entry = c[2].number_input("Entry price", min_value=0.0, value=round(last, 2), step=0.05,
+                              key=f"od_e_{mkt}_{sym}_{round(last, 2)}")
+    now_ist = datetime.now(IST)
+    if india:
+        times = [f"{h:02d}:{m:02d}" for h in range(9, 15) for m in range(0, 60, 5)
+                 if "09:15" <= f"{h:02d}:{m:02d}" <= "14:55"]
+        nxt = (now_ist + timedelta(minutes=5 - now_ist.minute % 5)).strftime("%H:%M")
+        live = SS.market_hours() and nxt in times
+        at = c[3].selectbox("Entry time", times, index=times.index(nxt) if live else times.index("09:30"),
+                            key="od_at")
+        slot = int(TO._slots(pd.DatetimeIndex([pd.Timestamp(f"2000-01-01 {at}")]), True)[0])
+    else:
+        nxt_utc = pd.Timestamp.now("UTC").tz_localize(None).ceil("5min")
+        at = (nxt_utc + pd.Timedelta(hours=5, minutes=30)).strftime("%H:%M")
+        c[3].text_input("Entry time (IST)", at, disabled=True, key="od_at_c")
+        slot = int(TO._slots(pd.DatetimeIndex([nxt_utc]), False)[0])
+    cost_in = c[4].number_input(f"Cost per trade ({'pts' if cost_unit == 'pts' else '% of price'})",
+                                min_value=0.0, value=float(cost_d), step=0.5 if cost_unit == "pts" else 0.01,
+                                key=f"od_c_{mkt}")
+    if entry <= 0:
+        return
+    t_pts = entry * tgt / 100 if pct else tgt
+    s_pts = entry * stp / 100 if pct else stp
+    cost = cost_in if cost_unit == "pts" else entry * cost_in / 100
+    hold_bars = None if hold.startswith("Till") else int(hold.split()[0]) // 5
+    today = pd.Timestamp(now_ist.date()) if india else pd.Timestamp.now("UTC").tz_localize(None).normalize()
+    r = TO.replays(bars, side, entry, t_pts, s_pts, slot, hold_bars, india, today)
+    if not r or r.get("error"):
+        st.warning(f"Cannot replay this: {r.get('error') if r else 'no candles left in the session'}.")
+        return
+    need = TO.break_even(t_pts, s_pts, cost)
+    exp = r["target"] * t_pts - r["stop"] * s_pts + r["open"] * r["open_avg_pts"] - cost
+    st.markdown(f"**{'BUY' if side > 0 else 'SELL'} {sym or mkt} at {entry:,.2f}, {at} IST** · target "
+                f"{entry + side * t_pts:,.2f} ({t_pts:,.2f} pts) · stop {entry - side * s_pts:,.2f} "
+                f"({s_pts:,.2f} pts) · {hold.lower()}")
+    m = st.columns(4)
+    m[0].metric("Target first", f"{100 * r['target']:.0f}%", border=True)
+    m[1].metric("Stop first", f"{100 * r['stop']:.0f}%", border=True)
+    m[2].metric("Neither (time ran out)", f"{100 * r['open']:.0f}%",
+                f"avg {r['open_avg_pts']:+,.1f} pts then", delta_color="off", border=True)
+    pu = "₹/share" if pct else "pts"
+    m[3].metric("Expected per trade", f"{exp:+,.1f} {pu}", f"after {cost:,.1f} {pu} cost", delta_color="off",
+                border=True)
+    v = TO.verdict(r["target"], r["stop"], need)
+    (st.success if "toward the target" in v else st.error if "toward the stop" in v else st.warning)(v)
+    st.caption(f"Break-even: a {t_pts:,.1f} target with a {s_pts:,.1f} stop and {cost:,.1f} cost must win "
+               f"{100 * need:.0f}% of the trades that reach one side. {r['n']:,} replays from {r['pool_days']} past "
+               f"sessions ({source}), seed {r['seed']}: the same inputs always give the same numbers.")
+    st.markdown(f"**What really happened: this trade at {at} on past days**")
+    h = TO.history(bars, side, t_pts, s_pts, slot, hold_bars, india, today)
+    if h.empty:
+        st.caption("No past days with a candle at this time.")
+    else:
+        cols = st.columns(2)
+        for col, (label, g) in zip(cols, (("Every past day", h),
+                                          ("Momentum days only (last 30 min moved your way)", h[h["Momentum day"]]))):
+            sm = TO.summary(g, cost)
+            with col.container(border=True):
+                st.markdown(f"**{label}**")
+                if not sm:
+                    st.caption("None.")
+                    continue
+                k = st.columns(4)
+                k[0].metric("Days", sm["trades"])
+                k[1].metric("Target", f"{100 * sm['target']:.0f}%")
+                k[2].metric("Stop", f"{100 * sm['stop']:.0f}%")
+                k[3].metric("Avg after cost", f"{sm['avg_pts']:+,.1f}")
+        with st.expander(f"All {len(h)} past days"):
+            data_table(h, "od_hist", name_col="Date", signed=("Points",), height=380)
+    note("Replays: each next 5-minute candle is a real past candle from the same time of day (within 10 minutes), "
+         "scaled to the price; inside a candle the stop is checked before the target. History: the same trade at "
+         "that candle's open on each past day. This is the recent past, not a forecast: news, results and expiry "
+         "days can do what these 60 sessions never did.")
+
+
 def page_desk_review():
     """Admin only: the logged desk at every time of day, side by side, with what each pick did afterwards."""
     status_strip()
@@ -5050,6 +5174,7 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("smart", page_smart_money, "Smart Money Sectors", ":material/insights:"),
     ("scanners", page_scanners, "Setups & Scanners", ":material/radar:"),
     ("options", page_option_chain, "Option Chain", ":material/table_chart:"),
+    ("odds", page_odds, "Trade odds", ":material/casino:"),
     ("fno", page_fno, "F&O Stocks", ":material/candlestick_chart:"),
     ("oi", page_oi, "OI Analysis", ":material/stacked_bar_chart:"),
     ("sectors", page_sectors, "Sector Performance", ":material/donut_small:"),
@@ -5072,7 +5197,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "dashboard"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({
-    "Trade": [P["dashboard"], P["apex"], P["smart"], P["scanners"], P["options"]] + ([P["review"]] if IS_ADMIN else []),
+    "Trade": [P["dashboard"], P["apex"], P["smart"], P["scanners"], P["odds"], P["options"]] + ([P["review"]] if IS_ADMIN else []),
     "Markets": [P["fno"], P["oi"], P["sectors"], P["indices"], P["global"]],
     "Dhan": [P["mcx"], P["cdsfut"]] + ([P["portfolio"], P["dhan"]] if IS_ADMIN else []),
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["account"]] + ([P["research"]] if IS_ADMIN else []),
