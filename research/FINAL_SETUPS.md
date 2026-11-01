@@ -230,3 +230,20 @@ candles. Nifty and Bank Nifty from 1-minute Dhan data (Oct 2025 - Oct 2026); 206
   became a top-5 mover only 4-8% of the time (2.5% at random) and the average move after the trigger to the close
   was about 0. The triggers show up on movers because movers move, not because they predict the move (hindsight).
   The real tell is early: the move starts at the open.
+
+## Bank Nifty failed-break fade (`research/bn_fade.py`, 2 Nov 2026) - CANDIDATE SETUP 5
+5 years of 5-minute data (Dec 2021 - Oct 2026), Bank Nifty index as the price, 5 pts cost a round trip.
+Rule (version "B S2"): the day did not open beyond the previous day's high (or low); a 5-min candle between 9:20
+and 14:30 closes beyond it; within the next 30 minutes a candle closes back inside the level -> trade AGAINST the
+break at that close (short after a PDH break, long after a PDL break). Stop 0.4 x daily ATR(14) (about 250 pts).
+Exit at 15:10's close, or at 2x the risk.
+- 347 trades (58 a year), 49% wins, +26 pts a trade (exit at close) / +25 (2R); first half +31 / +23, second half
+  +21 / +28; PDH shorts +25 and PDL longs +27. Total about +9,000 pts; worst losing run -3,300 / -2,600 pts.
+- Robust: positive in all 36 tried mixes of stop (0.2-1.0 ATR), "back inside within" 15/30/45 min and exit (close or
+  2R), both halves positive in all of them. Stops of 0.3 ATR and wider all give +21 to +29 pts. At 10 pts cost still
+  +21. Entries before 11:00 +43 a trade; 11:00-14:30 +13 (first half -2).
+- Weak years: 2023 (-5) and 2025 (-6 / +4); profit comes from 2022, 2024, 2026.
+- Taking the trade right at the break (no "back inside" wait) is weaker; tight stops just past the break lose.
+- Nifty, same rules: nothing (about 0). This is a Bank Nifty effect.
+- Caveats: the idea came from looking at the last year, so 2026 is not a clean test (2022-2025 are). Index, not
+  futures. Wide stop: size by the 250-pt risk. Paper-trade first.
