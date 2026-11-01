@@ -111,7 +111,15 @@ let lastH = 0;
 const fit = () => { const r = document.getElementById("root");
                     const h = Math.ceil(r ? r.getBoundingClientRect().height : 0) + 4;
                     if (h > 4 && Math.abs(h - lastH) > 2) { lastH = h; send("streamlit:setFrameHeight", {height: h}); } };
-const choose = (sym) => send("streamlit:setComponentValue", {value: {open: sym, nonce: Date.now()}, dataType: "json"});
+// A click opens the chart in a new browser tab (signed-in link from the app), so the page here stays where it is.
+const appBase = () => { try { return window.top.location.origin + "/"; } catch (e) { return "/"; } };
+const choose = (sym) => {
+  if (A && A.chart_url) {
+    const w = window.open(appBase() + A.chart_url.replace("@SYM@", encodeURIComponent(sym)), "_blank");
+    if (w) return;  // pop-up blocked: fall back to opening it here
+  }
+  send("streamlit:setComponentValue", {value: {open: sym, nonce: Date.now()}, dataType: "json"});
+};
 const rootEl = document.getElementById("root");
 new ResizeObserver(() => fit()).observe(rootEl || document.body);
 

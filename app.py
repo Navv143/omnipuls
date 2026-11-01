@@ -103,7 +103,8 @@ UP, DOWN, GOLD = "#26A69A", "#EF5350", "#E8B33A"
 DATA_FILE = Path(__file__).with_name("watchlist.json")  # replaced per user after sign-in
 
 ASSETS = Path(__file__).resolve().parent / "assets"
-st.set_page_config(page_title="Omnipuls", page_icon=str(ASSETS / "omnipuls_icon.png"), layout="wide")
+st.set_page_config(page_title="Omnipuls", page_icon=str(ASSETS / "omnipuls_icon.png"), layout="wide",
+                   initial_sidebar_state="collapsed")
 st.logo(str(ASSETS / "omnipuls_logo.png"), icon_image=str(ASSETS / "omnipuls_mark.png"), size="large")
 
 st.markdown(
@@ -276,6 +277,16 @@ def login_screen():
                         'on the computer that runs Omnipuls.</div>', unsafe_allow_html=True)
 
 
+@st.cache_resource(show_spinner=False)
+def _link_secret() -> bytes:
+    import secrets as _sec
+    return _sec.token_bytes(32)  # new on every server start, so old chart links stop working after a restart
+
+
+if "user" not in st.session_state and st.query_params.get("t"):
+    _u = auth.check_link_token(st.query_params.get("t"), _link_secret())
+    if _u:
+        st.session_state.user = _u
 if "user" not in st.session_state or not auth.load().get(st.session_state.user.get("id", "")):
     st.session_state.pop("user", None)
     login_screen()
@@ -1151,6 +1162,12 @@ def check_alerts(prices: dict):
 # ---------------------------------------------------------------- navigation helpers
 
 
+def chart_link(sym: str) -> str:
+    """URL that opens this symbol's chart in a new browser tab, already signed in (link valid 12 hours)."""
+    import urllib.parse
+    return f"chart?sym={urllib.parse.quote(sym)}&t={auth.link_token(USER['id'], _link_secret())}"
+
+
 def go_detail(sym: str):
     st.session_state.detail_pick = sym
     st.session_state.goto = "chart"
@@ -1522,6 +1539,7 @@ def live(kind: str, items: list, key: str, **kw):
     On this PC or home Wi-Fi, ticks stream straight to the browser from the local relay. On a public server
     (Streamlit Cloud) that port isn't reachable, so the widget is re-sent the latest ticks every 1-2 seconds."""
     keys = sorted({it["k"] for it in items if it.get("k")})
+    kw.setdefault("chart_url", f"chart?sym=@SYM@&t={auth.link_token(USER['id'], _link_secret())}")
     if FEED is not None and PUBLIC and keys:
         every = 1.0 if len(items) <= 60 else 2.0
 
@@ -2298,6 +2316,10 @@ TIMEFRAMES = {
 
 def page_details():
     status_strip()
+    if st.query_params.get("sym"):  # opened from a chart link in a new tab
+        st.session_state.detail_pick = U.normalize(st.query_params["sym"])
+        for k in ("sym", "t"):
+            st.query_params.pop(k, None)
     sym = st.session_state.detail_pick
     options = list(dict.fromkeys([sym] + store["watchlist"] + list(U.all_names())))
     top1, top2, top3 = st.columns([3, 2, 1])
@@ -2514,7 +2536,8 @@ def page_screener():
     st.header("Screener")
     c1, c2 = st.columns([2, 3])
     with c1:
-        markets = st.multiselect("Markets", list(U.GROUPS) + ["My watchlist"], default=["Crypto"], key="scr_markets")
+        markets = st.multiselect("Markets", list(U.GROUPS) + ["My watchlist"], default=["F&O Stocks"],
+                                 key="scr_markets")
     with c2:
         preset = st.selectbox("Scan", list(SCREEN_PRESETS), key="scr_preset")
     syms = []
@@ -2578,7 +2601,7 @@ def page_watchlist():
                             else "RSI —", unsafe_allow_html=True)
                 c4.markdown(f"{verdict(r['Score'])}  \n<span class='muted'>{r['Signals'] or 'No signals'}</span>",
                             unsafe_allow_html=True)
-                c5.button("Chart", key=f"open_{r['Symbol']}", on_click=go_detail, args=(r["Symbol"],))
+                c5.link_button("Chart", chart_link(r["Symbol"]))
                 if c6.button("✕", key=f"rm_{r['Symbol']}", help="Remove from watchlist"):
                     store["watchlist"].remove(r["Symbol"])
                     save_store(store)
@@ -2768,8 +2791,7 @@ def page_sectors():
     second = col if col != "Chg %" else "1W %"
     for _, r in g.iterrows():
         c = box.columns(widths, vertical_alignment="center")
-        c[0].button(r["Stock"], key=f"secstk_{r['Stock']}", type="tertiary", on_click=go_detail, args=(r["Symbol"],),
-                    help="Open chart")
+        c[0].markdown(f"[{r['Stock']}]({chart_link(r['Symbol'])})")
         c[1].markdown(f'<div class="cell">{fmt_price(r["Price"], r["Symbol"])}</div>', unsafe_allow_html=True)
         c[2].markdown(pct_html(r["Chg %"]), unsafe_allow_html=True)
         c[3].markdown(pct_html(r[second]), unsafe_allow_html=True)
@@ -2823,7 +2845,7 @@ def oi_list(df: pd.DataFrame, key: str, sort_col: str, ascending: bool, n: int =
         c.markdown(f'<div class="hdr">{label}</div>', unsafe_allow_html=True)
     for _, r in d.iterrows():
         c = box.columns(widths, vertical_alignment="center")
-        c[0].button(r["Stock"], key=f"{key}_{r['Stock']}", type="tertiary", on_click=go_detail, args=(r["Symbol"],))
+        c[0].markdown(f"[{r['Stock']}]({chart_link(r['Symbol'])})")
         c[1].markdown(pct_html(r["Fut Chg %"]), unsafe_allow_html=True)
         c[2].markdown(pct_html(r["OI Chg %"]), unsafe_allow_html=True)
         c[3].markdown(f'<div class="cell">{fmt_vol(r["OI"], ".NS")}</div>', unsafe_allow_html=True)
@@ -4594,7 +4616,7 @@ nav = st.navigation({
     "Markets": [P["fno"], P["oi"], P["sectors"], P["indices"], P["global"]],
     "Dhan": [P["mcx"], P["cdsfut"]] + ([P["portfolio"], P["dhan"]] if IS_ADMIN else []),
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["account"]],
-})
+}, position="top")
 
 with st.sidebar:
     u1, u2 = st.columns([3, 2], vertical_alignment="center")

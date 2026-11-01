@@ -237,3 +237,30 @@ def set_pref(user_id: str, name: str, value) -> None:
         state = _read(STATE_FILE)
         state.setdefault(uid, {}).setdefault("prefs", {})[name] = value
         _write(STATE_FILE, state)
+
+
+def link_token(user_id: str, secret: bytes, hours: float = 12) -> str:
+    """Signed sign-in token for chart links opened in a new browser tab (a new tab is a new session)."""
+    import base64
+    import hmac
+    exp = int(time.time() + hours * 3600)
+    msg = f"{normalize(user_id)}|{exp}".encode()
+    sig = hmac.new(secret, msg, hashlib.sha256).hexdigest()[:32]
+    return base64.urlsafe_b64encode(msg).decode().rstrip("=") + "." + sig
+
+
+def check_link_token(token: str, secret: bytes) -> dict | None:
+    """The signed-in user for a valid, unexpired link token, else None."""
+    import base64
+    import hmac
+    try:
+        body, sig = str(token).split(".", 1)
+        msg = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))
+        uid, exp = msg.decode().split("|")
+        good = hmac.new(secret, msg, hashlib.sha256).hexdigest()[:32]
+        if not hmac.compare_digest(good, sig) or int(exp) < time.time():
+            return None
+    except Exception:
+        return None
+    u = load().get(uid)
+    return {"id": uid, "name": u["name"], "role": u["role"]} if u else None
