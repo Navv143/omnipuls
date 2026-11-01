@@ -211,3 +211,22 @@ target, out after 30 / 60 / 120 minutes, compared with taking the same trade at 
 - So a small fixed target on a plain momentum candle is not an edge in any of the six markets. Use the Trade odds
   page before a trade, and take small-target trades only on top of a tested setup (gap fade, panic gap-down, sector
   overreaction, Bank Nifty 5-STAR).
+
+## Intraday study, last 1 year (`research/intraday_study.py`, 2 Nov 2026)
+Descriptive, not one fixed rule: what happens after the event, in points each way (MFE / MAE), on 3/5/10/15-min
+candles. Nifty and Bank Nifty from 1-minute Dhan data (Oct 2025 - Oct 2026); 206 F&O stocks on 5-minute data.
+- Previous-day high / low break (first candle closing beyond it, ~70 a year per side per index):
+  Nifty: 5-min break, median +28 pts your way vs -22 against in 30 min, +36-47 vs -27-42 in 60 min; about 55% close
+  back inside within 30 min; close-out about 0. No volume / RSI / VWAP / time split held up with these small samples.
+  Bank Nifty: breaks tend to FAIL: median 60-120 pts against in 60 min, 55-60% back inside within 30 min, and the
+  average to the close went against the break in every year 2022-2026 (5 years of 5-min data: -77, -25, -19, -19,
+  -46 pts). A lead for a fade setup; needs a proper rules test with stops.
+- Same-time candle break (9:15, 9:30 ... 14:00 candle; 3/5/10/15-min): every candle time is close to 50/50 up vs
+  down, points with you about equal to points against (Nifty ~30-35 each way in 60 min, Bank Nifty ~70-100), 60-75%
+  fall back inside within 30 minutes, the other side breaks too on 40-75% of days. No candle time is directional.
+- Top 5 gainers / losers each day (gaps over 3% out): 86-88% made their day low (gainers) / high (losers) in the
+  first 15 minutes; 40-45% of the open-to-close move was done by 10:00, ~60% by 11:00. The common "triggers" fired on
+  most movers (15-min range break on 88% of gainers, 3x volume burst on 85%), but on ALL stocks the same triggers
+  became a top-5 mover only 4-8% of the time (2.5% at random) and the average move after the trigger to the close
+  was about 0. The triggers show up on movers because movers move, not because they predict the move (hindsight).
+  The real tell is early: the move starts at the open.

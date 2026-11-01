@@ -886,13 +886,24 @@ def fetch_history(symbol: str, period: str, interval: str):
     return df
 
 
-DHAN_INTRA = {"1m": (1, 5), "5m": (5, 10), "15m": (15, 30), "25m": (25, 45), "1h": (60, 90)}
+DHAN_INTRA = {"1m": (1, 5), "3m": (1, 5), "5m": (5, 10), "10m": (5, 20), "15m": (15, 30), "25m": (25, 45),
+              "1h": (60, 90)}
+RESAMPLED = {"3m": 3, "10m": 10}  # built from 1- and 5-minute candles
+
+
+def resample_bars(df: pd.DataFrame, minutes: int, indian: bool = True) -> pd.DataFrame:
+    """Candles of `minutes` from smaller ones; Indian sessions start at 9:15."""
+    if df is None or df.empty:
+        return df
+    return df.resample(f"{minutes}min", origin="start_day", offset="15min" if indian else "0min").agg(
+        {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}).dropna(subset=["Close"])
 
 
 @st.cache_data(ttl=5, show_spinner=False)
 def dhan_intraday(seg: str, sid: int, ins: str, tf: str) -> pd.DataFrame:
     interval, days = DHAN_INTRA[tf]
-    return D.intraday(seg, sid, ins, interval, days, DCFG)
+    df = D.intraday(seg, sid, ins, interval, days, DCFG)
+    return resample_bars(df, RESAMPLED[tf]) if tf in RESAMPLED else df
 
 
 def chart_data(sym: str, tf: str, period: str, interval: str):
@@ -914,7 +925,10 @@ def chart_data(sym: str, tf: str, period: str, interval: str):
         return h.dropna(subset=["Close"]), "Dhan"
     if tf == "25m":
         return None, "Yahoo"
-    return fetch_history(sym, period, interval), "Yahoo"
+    df = fetch_history(sym, period, interval)
+    if tf in RESAMPLED:
+        df = resample_bars(df, RESAMPLED[tf], indian=str(sym).endswith((".NS", ".BO")) or str(sym).startswith("^NSE"))
+    return df, "Yahoo"
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
@@ -2443,7 +2457,8 @@ def page_commodities():
 
 
 TIMEFRAMES = {
-    "1m": ("5d", "1m"), "5m": ("5d", "5m"), "15m": ("1mo", "15m"), "25m": (None, None), "1h": ("3mo", "1h"),
+    "1m": ("5d", "1m"), "3m": ("5d", "1m"), "5m": ("5d", "5m"), "10m": ("1mo", "5m"), "15m": ("1mo", "15m"),
+    "25m": (None, None), "1h": ("3mo", "1h"),
     "1D": ("1y", "1d"), "1W": ("5y", "1wk"), "1M": ("max", "1mo"),
 }
 
@@ -2541,8 +2556,8 @@ def page_details():
                    + (" The 25-minute timeframe needs Dhan." if tf == "25m" and not ref else "")
                    + (f" (`{herr}`)" if herr else ""))
     else:
-        if intraday and tf in ("1m", "5m"):
-            hdf = hdf[hdf.index >= hdf.index[-1] - pd.Timedelta(days=2 if tf == "1m" else 5)]
+        if intraday and tf in ("1m", "3m", "5m", "10m"):
+            hdf = hdf[hdf.index >= hdf.index[-1] - pd.Timedelta(days={"1m": 2, "3m": 3, "5m": 5, "10m": 10}[tf])]
         tv_chart(hdf, sym, intraday, overlays, piv if intraday or tf == "1D" else None, tf)
         st.caption(f"Chart data: {csrc}. Times in IST.")
 
