@@ -49,6 +49,7 @@ import indices as IX
 import trend_alert as TA
 import desk as DK
 import twelve as TW
+import desk_log as DL
 
 
 def _process_start() -> float:
@@ -69,7 +70,7 @@ def _reload_changed():
     sys, which survives reruns and cache clears). If a reload fails (Streamlit may be swapping the same module), drop
     it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
-    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW]  # dependencies before the modules that use them
+    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL]  # dependencies before the modules that use them
     seen = sys.__dict__.setdefault("_omni_seen", {})
     started = None
     stale = []
@@ -1764,6 +1765,30 @@ def _claude_note(snapshot_json: str, bucket: int) -> str:
     return DK.claude_note(json.loads(snapshot_json), _anthropic_key())
 
 
+def _github_cfg() -> dict:
+    try:
+        return dict(st.secrets.get("github") or {})
+    except Exception:
+        return {}
+
+
+def _log_desk(snaps: dict, verdict: dict, plans: list, ce, pe):
+    """Record the desk at 10:30 and 12:00 on market days (only from today's live data), once per checkpoint."""
+    now = datetime.now(IST).replace(tzinfo=None)
+    n = snaps.get("NIFTY")
+    if not n or n["closes"].empty or n["closes"].index.max().date() != now.date():
+        return
+    done = _memo("desk_log").setdefault("done", set())
+    check = DL.due(now, done)
+    if not check:
+        return
+    done.add((now.strftime("%Y-%m-%d"), check))
+    try:
+        DL.save(DL.rows_from(now, check, verdict, plans, ce, pe), _github_cfg())
+    except Exception as e:
+        DL.STATUS["error"] = str(e)[:200]
+
+
 def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
     st.markdown(DESK_CSS, unsafe_allow_html=True)
     snaps = {k: _idx_snapshot(idx_b.get(k)) for k in ("NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "INDIAVIX")}
@@ -1820,6 +1845,7 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
     sec_flag = sf.set_index("Sector")["Flow"].to_dict() if not sf.empty else {}
     rd = sc[0] if sc is not None else pd.DataFrame()
     ce, pe = DK.focus(R, flow, rd, picks, sec_flag)
+    _log_desk(snaps, verdict, plans, ce, pe)
     c1, c2, c3 = st.columns([1.1, 1, 1]) if not MOBILE else (st.container(), st.container(), st.container())
     with c1:
         st.markdown("<div class='dk-kicker' style='margin:2px 0 8px'>Index options</div>", unsafe_allow_html=True)
@@ -1848,7 +1874,7 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
                 openings.append(f"{meta['name']}: " + ", ".join(df["sym"].head(3)))
     top_in = secflow.iloc[0]["Sector"] if not secflow.empty else None
     top_out = secflow.iloc[-1]["Sector"] if not secflow.empty else None
-    note = DK.desk_note(verdict, ce, pe, plans, top_in, top_out, openings)
+    desk_lines = DK.desk_note(verdict, ce, pe, plans, top_in, top_out, openings)
     key = _anthropic_key()
     snap = {"time": f"{now:%Y-%m-%d %H:%M} IST", "verdict": verdict, "index_plans": plans,
             "indices": {k: {kk: (round(vv, 2) if isinstance(vv, float) else vv) for kk, vv in v.items() if kk != "closes"}
@@ -1870,7 +1896,7 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
                 st.session_state["dk_claude_note"] = (now.strftime("%H:%M"), f"Claude could not answer: {e}")
     if not key:
         r.link_button("Open claude.ai", "https://claude.ai/new", icon=":material/open_in_new:", width="stretch")
-    body = "".join(f"<p>{_md_inline(x)}</p>" for x in note)
+    body = "".join(f"<p>{_md_inline(x)}</p>" for x in desk_lines)
     st.markdown(f"<div class='dk-note'>{body}</div>", unsafe_allow_html=True)
     cl = st.session_state.get("dk_claude_note")
     if cl:
@@ -4627,6 +4653,11 @@ def page_research():
         return
     st.caption("Only admins see this page, the Research tab, the 'How it works' tabs and the method notes under "
                "each scanner. Other users see the signals and tables only.")
+    gh = _github_cfg()
+    st.caption(f"Desk log (10:30 and 12:00 on market days): last saved {DL.STATUS['last'] or 'not yet in this run'}; "
+               + ("copies to GitHub branch `logs`." if gh.get("token") else
+                  "**GitHub copy off**: add `[github]` `token = \"…\"` in Secrets, or the log is lost on restart.")
+               + (f" Last GitHub error: {DL.STATUS['error']}" if DL.STATUS["error"] else ""))
     pick = st.segmented_control("Note", list(RESEARCH_DOCS), default=list(RESEARCH_DOCS)[0], key="rs_doc",
                                 label_visibility="collapsed") or list(RESEARCH_DOCS)[0]
     try:

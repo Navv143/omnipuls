@@ -34,3 +34,4 @@ research/results/open1pct_events.csv.gz
 research/results/*_log.txt
 activity_history/
 index_cache.json
+desk_log.csv
