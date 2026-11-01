@@ -64,6 +64,13 @@ def _process_start() -> float:
         return time.time()
 
 
+def _stop_background():
+    """Stop every background refresher this process started (they live outside Streamlit's caches)."""
+    for b in sys.__dict__.get("_omni_boxes", []):
+        b["stop"] = True
+    sys.__dict__["_omni_boxes"] = []
+
+
 def _reload_changed():
     """A running Streamlit server re-reads only app.py after a code update (git pull on Streamlit Cloud); imported
     modules can stay old. Reload any module whose file changed, once per file version (remembered per process in
@@ -89,6 +96,7 @@ def _reload_changed():
         seen[m.__name__] = mt
     if not stale:
         return
+    _stop_background()
     for m in (SS, F):  # stop the old background loaders and feeds; the reloaded modules start new ones
         for old in list(getattr(m, "INSTANCES", [])):
             try:
@@ -2116,16 +2124,21 @@ def apex_live(sig: tuple) -> dict:
 def _apex_live(sig: tuple) -> dict:
     """Nifty build-up kept fresh in the background (every 2 minutes in market hours), so the dashboard never waits."""
     import threading
-    box = {"bars": None, "info": None, "err": None}
+    _stop_background()  # only one refresher: a new token or a code update must not leave the old one running
+    box = {"bars": None, "info": None, "err": None, "stop": False}
+    sys.__dict__.setdefault("_omni_boxes", []).append(box)
 
     def loop():
-        while True:
+        while not box["stop"]:
             try:
                 bars, info = AP.buildup("NIFTY", 5, 3, DCFG)
                 box.update(bars=bars, info=info, err=None)
             except Exception as e:
                 box["err"] = getattr(e, "friendly", str(e))
-            time.sleep(120 if SS.market_hours() else 900)
+            wait = 120 if SS.market_hours() else 900
+            while wait > 0 and not box["stop"]:
+                time.sleep(5)
+                wait -= 5
 
     threading.Thread(target=loop, daemon=True, name="apex-nifty").start()
     return box
