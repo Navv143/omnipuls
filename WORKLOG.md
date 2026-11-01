@@ -3,6 +3,18 @@
 What was built, fixed and tested, day by day, with the commit for each change. Research details are in
 `research/intraday/README.md` and `research/README.md`; this log is the short version.
 
+## 28-29 Oct 2026: TradingView charts and going online (chat "Charts migration to TradingView")
+
+- Price chart moved from Plotly to TradingView Lightweight Charts (`tvchart/index.html`, `tv_chart()` in app.py):
+  candles with volume, live OHLC legend, EMA 20/50/200, Bollinger, VWAP, Supertrend, pivots, RSI and MACD panes,
+  IST times, zoom kept across refreshes. Bar charts (sectors, OI, option chain) stay Plotly. The old `navv/` copy
+  got the same chart. `628064c`
+- Git and GitHub CLI installed; code uploaded to the private repo Navv143/omnipuls with passwords, tokens, watchlists
+  and caches left out; dev container added. `fc0474c`
+- Deployed on Streamlit Community Cloud at omnipuls-navv.streamlit.app (branch main, app.py, Python 3.12). Admin
+  login `navsolanki` copied to Secrets as salt + hash (no plain password). An older broken "omnipuls ·
+  streamlit_app.py" app in the Streamlit workspace points to a deleted repo and can be removed.
+
 ## 29-30 Oct 2026: radar, TradeFinder process, index build-up, smart money, new layout
 
 **Built and shipped**
