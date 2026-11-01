@@ -165,6 +165,9 @@ SYSTEM = (
     "or levels. Say plainly when readings conflict or data is thin. Mention that only the opening-price setups and "
     "the index trend-day + rising futures OI rule have tested edges; everything else is confluence. Under 180 "
     "words, markdown bullets, no preamble. This is information, not investment advice.")
+# shown to non-admin users in the copy-to-claude.ai box: the same request without the research finding
+SYSTEM_PUBLIC = SYSTEM.replace(" Mention that only the opening-price setups and the index trend-day + rising futures OI "
+                               "rule have tested edges; everything else is confluence.", "")
 
 
 def claude_note(snapshot: dict, api_key: str) -> str:

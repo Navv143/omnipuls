@@ -1147,6 +1147,17 @@ def market_status(now_ist: datetime) -> list[tuple[str, str, str]]:
             ("Crypto", "Open 24×7", "open")]
 
 
+def note(*args, **kw):
+    """How a reading is computed or what the research found: shown to the admin only, so the methods stay private."""
+    if IS_ADMIN:
+        st.caption(*args, **kw)
+
+
+def note_md(*args, **kw):
+    if IS_ADMIN:
+        st.markdown(*args, **kw)
+
+
 def status_strip():
     now = datetime.now(IST)
     pills = "".join(f'<span class="pill {cls}">{m}: {s}</span>' for m, s, cls in market_status(now))
@@ -1824,7 +1835,7 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
         st.markdown(_focus_html(ce, "CE FOCUS", UP, "bullish confluence"), unsafe_allow_html=True)
     with c3:
         st.markdown(_focus_html(pe, "PE FOCUS", DOWN, "bearish confluence"), unsafe_allow_html=True)
-    st.caption("Focus lists: stocks where 3+ independent readings agree with today's move (activity score, futures "
+    note("Focus lists: stocks where 3+ independent readings agree with today's move (activity score, futures "
                "buildup, sector money, own money flow, radar shortlist, yesterday's high/low, smart-money pick); dots = "
                "points. Confluence, not a tested signal: confirm on the chart and keep a small stop.")
 
@@ -1871,7 +1882,7 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
         with st.expander("Get Claude's read for free (copy → paste into claude.ai)", icon=":material/auto_awesome:"):
             st.caption("Press the copy icon at the top right of the box, open claude.ai (free account), paste and send. "
                        "The text holds this minute's readings, so copy it again later for a fresh read.")
-            st.code(DK.SYSTEM + "\n\nLive snapshot:\n" + json.dumps(snap, default=str, indent=1, ensure_ascii=False),
+            st.code((DK.SYSTEM if IS_ADMIN else DK.SYSTEM_PUBLIC) + "\n\nLive snapshot:\n" + json.dumps(snap, default=str, indent=1, ensure_ascii=False),
                     language=None, wrap_lines=True)
 
 
@@ -3004,7 +3015,7 @@ def opening_signals():
 
 
 def setups_body():
-    st.caption("Rules found in Omnipuls research on 14 years of NSE data, tested year by year with costs. "
+    note("Rules found in Omnipuls research on 14 years of NSE data, tested year by year with costs. "
                "They decide at 9:15 from the opening gap. Past results don't guarantee future ones; size so a run of "
                "losses is survivable.")
     og = opening_signals()
@@ -3016,7 +3027,7 @@ def setups_body():
         st.caption(f"F&O stocks gapping 3%+: {int((g['gap'] <= -0.03).sum())} down, {int((g['gap'] >= 0.03).sum())} up.")
     for key, meta in SU.SETUPS.items():
         st.subheader(meta["name"])
-        st.markdown(f"**Rule:** {meta['rule']}  \n<span class='muted'>{meta['stats']}</span>", unsafe_allow_html=True)
+        note_md(f"**Rule:** {meta['rule']}  \n<span class='muted'>{meta['stats']}</span>", unsafe_allow_html=True)
         df = sig.get(key)
         if df is None or df.empty:
             st.caption("No signal" + (" (not a panic day: Nifty didn't open 0.5% lower)." if key == "panic_gap" else "."))
@@ -3062,7 +3073,7 @@ def scan_universe(choice: str) -> tuple:
 def page_scanners():
     status_strip()
     st.header("Setups & scanners")
-    st.caption("Intraday scanners from the Omnipuls research. They run on all F&O stocks; the backtests behind "
+    note("Intraday scanners from the Omnipuls research. They run on all F&O stocks; the backtests behind "
                "them used 5-minute data for the Nifty 100 stocks, Feb 2015 to Apr 2026, after 0.12% costs on shares "
                "and 2% of premium on options. Each tab shows today's signals, how each trade is doing, and what the "
                "backtest found. Past results don't guarantee future ones.")
@@ -3116,30 +3127,32 @@ def scanner_body(svc, uni):
 
     def head(i):
         name, where, verdict, sh, op, yrs, note = SC.RESEARCH[i]
-        st.markdown(f"{_badge(verdict)}&nbsp; **Shares:** {sh} per trade · **Options:** {op} · **Years profitable:** {yrs}"
+        note_md(f"{_badge(verdict)}&nbsp; **Shares:** {sh} per trade · **Options:** {op} · **Years profitable:** {yrs}"
                     f"<br><span class='muted'>{note}</span>", unsafe_allow_html=True)
 
     signed = ("P&L %", "Gap %", "Change by 10:00 %")
-    tabs = st.tabs(["Opening setups", "Momentum radar", "Breakout (V3)", "Index trend-day + OI (options)", "Research"])
+    tabs = st.tabs(["Opening setups", "Momentum radar", "Breakout (V3)", "Index trend-day + OI (options)"]
+                   + (["Research"] if IS_ADMIN else []))
     with tabs[3]:
         index_trend_tab(svc)
     with tabs[0]:
         setups_body()
-    with tabs[4]:
-        rs = pd.DataFrame([{"Setup": r[0], "Verdict": SC.VERDICT_LABEL[r[2]], "Trade with": r[1],
-                            "Shares / trade": r[3], "Options / trade": r[4], "Years +": r[5], "Notes": r[6]}
-                           for r in SC.RESEARCH])
-        data_table(rs, "scan_research", name_col="Setup", height=520)
-        st.markdown(
-            "**What to trade:** the gap fade, entered at the opening price with a pre-open order on the cash shares "
-            "(9:00-9:08), 0.75-1% stop, exit 15:20. The Opening setups tab lists it each morning.  \n"
-            "**For stock options:** nothing tested holds up from 9:20 onward. Run "
-            "`research/intraday/gapfade_options_dhan.py` to see whether options bought at 9:15-9:16 still catch the "
-            "gap fade on real Dhan option prices.  \n"
-            "**Before real money:** paper-trade for 3-4 weeks.")
+    if IS_ADMIN:
+        with tabs[4]:
+            rs = pd.DataFrame([{"Setup": r[0], "Verdict": SC.VERDICT_LABEL[r[2]], "Trade with": r[1],
+                                "Shares / trade": r[3], "Options / trade": r[4], "Years +": r[5], "Notes": r[6]}
+                               for r in SC.RESEARCH])
+            data_table(rs, "scan_research", name_col="Setup", height=520)
+            st.markdown(
+                "**What to trade:** the gap fade, entered at the opening price with a pre-open order on the cash shares "
+                "(9:00-9:08), 0.75-1% stop, exit 15:20. The Opening setups tab lists it each morning.  \n"
+                "**For stock options:** nothing tested holds up from 9:20 onward. Run "
+                "`research/intraday/gapfade_options_dhan.py` to see whether options bought at 9:15-9:16 still catch the "
+                "gap fade on real Dhan option prices.  \n"
+                "**Before real money:** paper-trade for 3-4 weeks.")
     with tabs[2]:
         head(4)
-        st.caption("Rule: at 9:30 rank stocks by ATR%, 9:15-9:30 range, RVOL and gap size; take the top 2. Entry when "
+        note("Rule: at 9:30 rank stocks by ATR%, 9:15-9:30 range, RVOL and gap size; take the top 2. Entry when "
                    "a 5-min candle closes beyond the 9:15-9:30 range by 12:00 with volume 1.5x its 10-day slot "
                    "average and Nifty not broken the other way; enter next candle. Stop 0.5 ATR, trail 1 ATR, exit 15:20.")
         flt = st.toggle("Use the volume and Nifty filters (the test found they add nothing)", value=True, key="v3f")
@@ -3151,12 +3164,12 @@ def scanner_body(svc, uni):
         with st.expander("Top-ranked stocks at 9:30"):
             if not ranked.empty:
                 data_table(ranked, "scan_v3_rank", signed=("Gap %",), name_col="Stock", height=380)
-                st.caption("Block deal? = opening volume 20x+ its 20-day usual: almost always one large negotiated "
+                note("Block deal? = opening volume 20x+ its 20-day usual: almost always one large negotiated "
                            "trade at the open, not traders piling in. Its RVOL is real but says little about follow-"
                            "through; treat that stock's rank with care.")
     with tabs[1]:
         head(5)
-        st.caption("Each stock 1%+ from yesterday's close, compared with the same time window on its last sessions: "
+        note("Each stock 1%+ from yesterday's close, compared with the same time window on its last sessions: "
                    "volume since the open and in the last 30 minutes, range, move vs ATR, futures OI change (near + "
                    "next month) and big-money bars (a 5-minute candle with 4x its usual volume, in the move's "
                    "direction, with OI added). Ranked by the tested score; OI and big-money bars are shown but not "
@@ -3177,7 +3190,8 @@ def scanner_body(svc, uni):
             st.caption("No stock is 1%+ from yesterday's close yet.")
         else:
             fit = rd[rd["TradeFinder fit"] == "Yes"].head(5)
-            st.markdown("**Shortlist: TradeFinder pattern** (broke yesterday's high for CE / low for PE, its sector "
+            st.markdown("**Shortlist**")
+            note_md("**Shortlist: TradeFinder pattern** (broke yesterday's high for CE / low for PE, its sector "
                         "moving the same way, volume 1.5x+ its 20-day usual for this time; top 5 by score)")
             if fit.empty:
                 st.caption("No stock fits the pattern yet.")
@@ -3187,15 +3201,15 @@ def scanner_body(svc, uni):
                 data_table(fit, "scan_radar_fit", signed=("Move %", "From open %", "Sector move %", "OI chg %", "Sector money (Rs cr)",
                                                           "Put OI chg %", "Call OI chg %"), name_col="Stock", height=230)
                 if DHAN_DATA:
-                    st.caption("Option writing: OI change vs yesterday on the 3 strikes each side of the money, "
+                    note("Option writing: OI change vs yesterday on the 3 strikes each side of the money, "
                                "nearest expiry (Dhan option chain, refreshed about every 90 s). Puts written = option "
                                "sellers expect the stock to hold up; calls written = they expect it to stay down. "
                                "'Options confirm' when that backs the stock's direction; TradeFinder skips stocks "
                                "where it starts late. Not backtested: there is no option-chain history.")
-                    st.caption("Sector money: the sector's fresh futures positions today (see Index Build-up). "
+                    note("Sector money: the sector's fresh futures positions today (see Index Build-up). "
                                "'Money favours' Yes when it backs the stock's side; TradeFinder picks stocks from the "
                                "sector the money favours.")
-            st.caption("Checked on 360 of their verified trades (Dec 2024 - Oct 2026): at 10:30 this top 5 held their "
+            note("Checked on 360 of their verified trades (Dec 2024 - Oct 2026): at 10:30 this top 5 held their "
                        "stock on about 27% of days, the top 10 on about 37%. Their pick then ran a further 3% on "
                        "average; the rest of the shortlist usually does not. Use it to narrow the field, then apply "
                        "your own confirmation (5-minute candle, OI build-up) and a small stop.")
@@ -3204,8 +3218,9 @@ def scanner_body(svc, uni):
                            name_col="Stock", height=520)
         if live_today:
             radar_log_today(S, oi, session)
-        with st.expander("Track record of the 10:30 picks (logged daily)"):
-            radar_track_record(bars)
+        if IS_ADMIN:
+            with st.expander("Track record of the 10:30 picks (logged daily)"):
+                radar_track_record(bars)
 
 
 def with_sector_money(rd: pd.DataFrame) -> pd.DataFrame:
@@ -4030,7 +4045,8 @@ def activity_body(svc):
                 border=True)
     m[4].metric("Unusual candles today", len(E), border=True)
 
-    tabs = st.tabs(["Smart score ranking", "Unusual candles", "Stock candle by candle", "How the score works"])
+    tabs = st.tabs(["Smart score ranking", "Unusual candles", "Stock candle by candle"]
+                   + (["How the score works"] if IS_ADMIN else []))
     with tabs[0]:
         f1, f2, f3 = st.columns([1, 1, 2])
         side = f1.segmented_control("Side", ["All", "Bullish", "Bearish"], default="All", key="act_side") or "All"
@@ -4094,12 +4110,13 @@ def activity_body(svc):
             t = c[[x for x in cols if x in c]].iloc[::-1].round(2)
             data_table(t, f"act_c_{sym}", name_col="Time", height=480,
                        signed=("Chg %", "Smart", "Direction", "vs VWAP %", "OI Chg %"))
-    with tabs[3]:
-        st.markdown(A.HOW)
-        st.caption("Order-book quantities (total buy and sell quantity waiting in the market depth) are recorded from "
-                   "live quotes about once a minute while this page's loader runs, and saved daily so they can be "
-                   "compared with the usual reading over time. Near futures expiry, OI falls as positions roll to the "
-                   "next month, so 'long unwinding' readings in the last few days are less meaningful.")
+    if IS_ADMIN:
+        with tabs[3]:
+            st.markdown(A.HOW)
+            note("Order-book quantities (total buy and sell quantity waiting in the market depth) are recorded from "
+                       "live quotes about once a minute while this page's loader runs, and saved daily so they can be "
+                       "compared with the usual reading over time. Near futures expiry, OI falls as positions roll to the "
+                       "next month, so 'long unwinding' readings in the last few days are less meaningful.")
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
@@ -4152,7 +4169,7 @@ def flow_body(svc):
     m[3].metric("Most inflow", sec.iloc[0]["Sector"], f"₹{sec.iloc[0]['Net Flow Cr']:+,.0f} Cr", border=True)
     m[4].metric("Most outflow", sec.iloc[-1]["Sector"], f"₹{sec.iloc[-1]['Net Flow Cr']:+,.0f} Cr", border=True)
 
-    tabs = st.tabs(["Sectors", "Rotation: from → to", "Through the day", "Stocks", "How it works"])
+    tabs = st.tabs(["Sectors", "Rotation: from → to", "Through the day", "Stocks"] + (["How it works"] if IS_ADMIN else []))
     with tabs[0]:
         sb = sec.sort_values("Net Flow Cr")
         fig = go.Figure()
@@ -4243,8 +4260,9 @@ def flow_body(svc):
                        "Buildup", "Smart"], "flow_stocks", height=680)
         st.caption("Flow % of usual day: net flow ÷ the stock's normal full-day turnover, so small and large stocks "
                    "can be compared. Futures OI ₹ Cr: new money in (+) or out (−) of the nearest future.")
-    with tabs[4]:
-        st.markdown(A.FLOW_HOW)
+    if IS_ADMIN:
+        with tabs[4]:
+            st.markdown(A.FLOW_HOW)
 
 
 def _index_stats(stocks: pd.DataFrame, d: dict, prev_close: float | None) -> tuple[pd.DataFrame, dict]:
@@ -4361,13 +4379,14 @@ TREND_NAMES = {"NIFTY": "Nifty 50", "BANKNIFTY": "Bank Nifty", "FINNIFTY": "Fin 
 
 
 def index_trend_tab(svc):
-    st.markdown(f"{_badge('ok')}&nbsp; **Index options (buy):** +4.1% of premium a trade on Bank Nifty, +1.9% on Nifty "
+    note_md(f"{_badge('ok')}&nbsp; **Index options (buy):** +4.1% of premium a trade on Bank Nifty, +1.9% on Nifty "
                 "(fixed check times); 10-20 trades a year per index · win ~40-47%<br><span class='muted'>"
                 "Trend established by mid-morning AND futures OI rising (new positions behind the move) is the only "
                 "pattern in the index study where buying options paid. Noisy on its own: paper-trade first, size small."
                 "</span>", unsafe_allow_html=True)
-    with st.expander("Rules"):
-        st.markdown(TA.__doc__.split("\n", 2)[2])
+    if IS_ADMIN:
+        with st.expander("Rules"):
+            st.markdown(TA.__doc__.split("\n", 2)[2])
     thr_cols = st.columns(len(TREND_NAMES))
     thr = {k: c.number_input(f"{TREND_NAMES[k]} threshold (ATR)", 0.3, 2.0, TA.DEFAULT_THR[k], 0.1, key=f"ta_thr_{k}")
            for c, k in zip(thr_cols, TREND_NAMES)}
@@ -4422,7 +4441,7 @@ def page_apex():
     if not DHAN_DATA:
         need_dhan()
         return
-    st.caption("Who is building positions, from the change in open interest every 3 minutes (not volume). Green: puts "
+    note("Who is building positions, from the change in open interest every 3 minutes (not volume). Green: puts "
                "written, calls closed, futures long build-up or short covering. Red: calls written, puts closed, "
                "futures short build-up or long unwinding. Options: the strikes each side of the money, nearest "
                "expiry. Refreshes about every 2.5 minutes.")
@@ -4469,7 +4488,7 @@ def page_apex():
                    "apex_bars", labels={"opt_bull": "Options bull", "opt_bear": "Options bear", "fut_bull":
                                         "Futures bull", "fut_bear": "Futures bear", "net": "Net", "cum": "Cumulative"},
                    signed=("net", "cum"), height=360)
-    st.caption("How TradeFinder uses it: trade the index in the direction that dominates the first 30-60 minutes, "
+    note("How TradeFinder uses it: trade the index in the direction that dominates the first 30-60 minutes, "
                "wait for the shakeout against it, trail the stop. Not backtested here: Dhan keeps no option OI history "
                "for expired contracts, so only the latest session can be shown.")
 
@@ -4531,7 +4550,7 @@ def page_smart_money():
     if not DHAN_DATA:
         need_dhan()
         return
-    st.caption("Sectors ranked by fresh positions in their stock futures today, not by price or volume. Inside each "
+    note("Sectors ranked by fresh positions in their stock futures today, not by price or volume. Inside each "
                "sector, stocks are ranked by R-factor: how unusual today's volume, futures OI change, range and move "
                "are versus the same time window on the last 20 sessions (0-100, across all F&O stocks). TradeFinder's "
                "way: take the sector the money favours, then its top 2-3 R-factor stocks moving with it.")
@@ -4570,7 +4589,7 @@ def smart_money_body(svc):
             st.caption("No stock is moving with a bullish or bearish sector yet.")
         else:
             show_table(picks, ["Stock", "Side"] + SMART_COLS[1:], "smart_picks", height=420)
-            st.caption("Stocks in a Bullish sector that are up with long build-up or short covering in their future "
+            note("Stocks in a Bullish sector that are up with long build-up or short covering in their future "
                        "(Bearish: down with short build-up or long unwinding), top 3 per sector by R-factor, best 10 "
                        "overall. Then check the radar's yesterday high/low break and option writing before entry.")
 
@@ -4578,7 +4597,7 @@ def smart_money_body(svc):
     st.subheader("Sectors by smart money")
     data_table(sf, "smart_sectors", signed=("Smart money (Rs cr)", "Bias %", "Price move %"), name_col="Sector",
                height=480)
-    st.caption("Rupee value of fresh positions in each sector's stock futures today (near month, OI change x price): "
+    note("Rupee value of fresh positions in each sector's stock futures today (near month, OI change x price): "
                "long build-up counts fully bullish, short covering half, short build-up fully bearish, long "
                "unwinding half.")
 
@@ -4593,6 +4612,32 @@ def smart_money_body(svc):
         with st.expander(f"{r['Sector']} · {r['Flow']} · ₹{r['Smart money (Rs cr)']:+,.0f} cr · {len(g)} stocks",
                          expanded=False):
             show_table(g, SMART_COLS[:-1], f"smart_sec_{r['Sector']}", height=420)
+
+
+RESEARCH_DOCS = {"Final setups (summary)": "research/FINAL_SETUPS.md", "Intraday studies": "research/intraday/README.md",
+                 "Daily data studies": "research/README.md", "Work log": "WORKLOG.md"}
+
+
+def page_research():
+    """Admin only: every research note and the methods behind the scanners, in one locked place."""
+    status_strip()
+    st.header("Research notes")
+    if not IS_ADMIN:
+        st.error("Admins only.")
+        return
+    st.caption("Only admins see this page, the Research tab, the 'How it works' tabs and the method notes under "
+               "each scanner. Other users see the signals and tables only.")
+    pick = st.segmented_control("Note", list(RESEARCH_DOCS), default=list(RESEARCH_DOCS)[0], key="rs_doc",
+                                label_visibility="collapsed") or list(RESEARCH_DOCS)[0]
+    try:
+        st.markdown((Path(__file__).parent / RESEARCH_DOCS[pick]).read_text(encoding="utf-8"))
+    except Exception as e:
+        st.warning(f"Could not open {RESEARCH_DOCS[pick]}: {e}")
+    with st.expander("Scanner research table"):
+        rs = pd.DataFrame([{"Setup": r[0], "Verdict": SC.VERDICT_LABEL[r[2]], "Trade with": r[1],
+                            "Shares / trade": r[3], "Options / trade": r[4], "Years +": r[5], "Notes": r[6]}
+                           for r in SC.RESEARCH])
+        data_table(rs, "rs_table", name_col="Setup", height=520)
 
 
 def _sign_out():
@@ -4618,6 +4663,7 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("screener", page_screener, "Screener", ":material/filter_alt:"),
     ("watchlist", page_watchlist, "Watchlist & Alerts", ":material/notifications:"),
     ("account", page_account, "Account", ":material/manage_accounts:"),
+    ("research", page_research, "Research notes", ":material/lock:"),
 ]
 # Start page: Dashboard, or set NAVV_START_PAGE (e.g. fno, crypto) to open somewhere else.
 _start = os.environ.get("NAVV_START_PAGE", "dashboard")
@@ -4628,7 +4674,7 @@ nav = st.navigation({
     "Trade": [P["dashboard"], P["apex"], P["smart"], P["scanners"], P["options"]],
     "Markets": [P["fno"], P["oi"], P["sectors"], P["indices"], P["global"]],
     "Dhan": [P["mcx"], P["cdsfut"]] + ([P["portfolio"], P["dhan"]] if IS_ADMIN else []),
-    "Tools": [P["chart"], P["screener"], P["watchlist"], P["account"]],
+    "Tools": [P["chart"], P["screener"], P["watchlist"], P["account"]] + ([P["research"]] if IS_ADMIN else []),
 }, position="top")
 
 with st.sidebar:
