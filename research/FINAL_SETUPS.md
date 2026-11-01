@@ -168,3 +168,17 @@ Thursday/Friday weekly high-low pattern.
 2. Re-check Setup 1 with real futures volume and OI from the 1-minute futures data.
 3. Run research/intraday/gapfade_options_dhan.py to see whether options at 9:15-9:16 catch the gap fade.
 4. Paper-trade both setups; turn on the automatic Dhan token (Dhan Connect).
+
+## Follow-up, 1 Nov 2026 (this PC)
+- Live tab added: Setups & Scanners -> "Bank Nifty 5-STAR" (six checks per 5-minute candle, entry, Supertrend stop
+  and trail, internals panel). Replay of the last 250 sessions on Dhan data: 64 signals a year, 45% wins, +13 pts a
+  trade after 12 pts cost (research: +29).
+- Real futures volume and OI (`research/five_star_futures.py`): Dhan has intraday bars only for live contracts, so
+  only 23 comparable sessions (24 Sep - 28 Oct 2026, November future, next-month until the 27 Oct expiry). All four
+  versions lost in that window (research version 12 trades, -56 pts a trade after cost; futures-volume version -56;
+  + OI rising -49 / -75). Every research signal also had futures volume 1.5x+, so the stock-turnover proxy agrees
+  with the futures. Too few trades to judge; re-run as more sessions accumulate. The 2015-2023 1-minute futures data
+  stayed in the other chat's cloud workspace and is not on this PC.
+- Gap fade on real option prices (`research/intraday/gapfade_options_dhan.py`): Dhan's /charts/rollingoption returns
+  DH-905 for every request (weekly and monthly, index and stock, 1- and 5-minute), including Dhan's own example
+  shape. Not runnable until Dhan support enables it for this account.
