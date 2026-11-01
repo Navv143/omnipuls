@@ -1680,7 +1680,13 @@ DESK_CSS = """
 .dk-score{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:1.6rem;font-weight:700;color:var(--dk-c);text-align:right}
 .dk-desc{color:#C9D6EA;font-size:.92rem;margin-top:4px;max-width:640px}
 .dk-scale-note{font-family:Sora,sans-serif;font-size:.74rem;font-weight:400;color:#7F93B2}
-.dk-scale{display:flex;justify-content:space-between;font-size:.7rem;color:#7F93B2;margin-top:2px}
+.dk-scale{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}
+.dk-band{border:1px solid #22314A;border-radius:8px;padding:6px 8px;background:#101A2B;text-align:center;font-size:.74rem;color:#8EA1BF;line-height:1.3}
+.dk-band b{display:block;font-weight:600;color:#AFC0DA}
+.dk-band span{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem}
+.dk-band.on{border-color:var(--b);background:color-mix(in srgb,var(--b) 18%,#101A2B);color:#E6EDF7}
+.dk-band.on b{color:var(--b)}
+@media (max-width:640px){.dk-scale{grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}.dk-band{padding:4px 2px;font-size:.62rem}.dk-band span{font-size:.6rem}}
 .dk-gauge{position:relative;height:8px;border-radius:6px;margin:12px 0 6px;
   background:linear-gradient(90deg,#EF5350 0%,#3A475E 50%,#26A69A 100%)}
 .dk-gauge i{position:absolute;top:-5px;width:4px;height:18px;border-radius:2px;background:#fff;box-shadow:0 0 8px #fff}
@@ -1816,7 +1822,10 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
     sess = nday.index.max() if nday is not None and len(nday) else None
     when = (f"{now:%a %d %b · %H:%M} IST" if sess is None or sess.date() == now.date()
             else f"{sess:%a %d %b} session (market closed now)")
-    scale = "".join(f"<span>{x}</span>" for x in ("Strong bearish", "Bearish", "Neutral", "Bullish", "Strong bullish"))
+    bands = [("Strong bearish", "−100 to −55", DOWN), ("Bearish", "−55 to −20", DOWN), ("Neutral", "−20 to +20", "#94A3B8"),
+             ("Bullish", "+20 to +55", UP), ("Strong bullish", "+55 to +100", UP)]
+    scale = "".join(f"<div class='dk-band{' on' if lab == verdict['label'] else ''}' style='--b:{c}'><b>{lab}</b>"
+                    f"<span>{rng}</span></div>" for lab, rng, c in bands)
     st.markdown(
         f"<div class='dk-hero' style='--dk-c:{color};--dk-glow:{glow}'><div class='dk-row'>"
         f"<div><div class='dk-kicker'>The mood right now · {when}</div>"
