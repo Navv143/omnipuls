@@ -1562,11 +1562,11 @@ def live(kind: str, items: list, key: str, **kw):
     """Render a live widget; clicking an instrument opens its chart.
 
     On this PC or home Wi-Fi, ticks stream straight to the browser from the local relay. On a public server
-    (Streamlit Cloud) that port isn't reachable, so the widget is re-sent the latest ticks every 1-2 seconds."""
+    (Streamlit Cloud) that port isn't reachable, so the widget is re-sent the latest ticks every 3-6 seconds."""
     keys = sorted({it["k"] for it in items if it.get("k")})
     kw.setdefault("chart_url", f"chart?sym=@SYM@&t={auth.link_token(USER['id'], _link_secret())}")
     if FEED is not None and PUBLIC and keys:
-        every = 1.0 if len(items) <= 60 else 2.0
+        every = 3.0 if len(items) <= 60 else 6.0
 
         @st.fragment(run_every=every)
         def _polled():
@@ -1918,7 +1918,7 @@ def _md_inline(s: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
 
 
-@st.fragment(run_every=60)
+@st.fragment(run_every=120)
 def dashboard_desk(svc, t: pd.DataFrame):
     """One screen for a running market: how strong it is, what every scanner says now, where the money goes."""
     sf = sector_flow_table()
@@ -3115,7 +3115,7 @@ def page_scanners():
     scanner_body(svc, uni)
 
 
-@st.fragment(run_every=20)
+@st.fragment(run_every=60)
 def scanner_body(svc, uni):
     now = datetime.now(IST)
     done, total = svc.progress()
@@ -4038,7 +4038,7 @@ def page_activity(view: str = "Unusual activity"):
     (flow_body if view == "Money flow" else activity_body)(svc)
 
 
-@st.fragment(run_every=30)
+@st.fragment(run_every=60)
 def activity_body(svc):
     done, total = svc.progress()
     fresh = svc.freshness()
@@ -4153,7 +4153,7 @@ def index_defs() -> dict:
 FLOW_WINDOWS = {"Whole day": None, "Last 60 min": 60, "Last 30 min": 30, "Last 15 min": 15}
 
 
-@st.fragment(run_every=30)
+@st.fragment(run_every=60)
 def flow_body(svc):
     done, total = svc.progress()
     if done < total:
@@ -4586,7 +4586,7 @@ def page_smart_money():
     smart_money_body(svc)
 
 
-@st.fragment(run_every=30)
+@st.fragment(run_every=60)
 def smart_money_body(svc):
     sf = sector_flow_table()
     if DSTAT.get("hist_left_oi", 0):
@@ -4746,7 +4746,7 @@ with st.sidebar:
     auto = st.toggle("Auto-refresh tables & indicators", value=True, key="auto",
                      help="Live prices stream tick by tick on their own; this refreshes the rest of the page.")
     every = st.select_slider("Refresh every", options=[5, 10, 15, 30, 60, 120, 300],
-                             value=60 if FEED is not None else (10 if DHAN_DATA else 30),
+                             value=120 if PUBLIC else (60 if FEED is not None else (10 if DHAN_DATA else 30)),
                              format_func=lambda s: f"{s}s" if s < 60 else f"{s // 60} min", key="every",
                              disabled=not auto)
     if st.button("Refresh now", width="stretch"):
@@ -4768,7 +4768,6 @@ _goto = st.session_state.pop("goto", None)
 if _goto in P and getattr(nav, "url_path", "") != _goto:
     st.switch_page(P[_goto])
 
-st.session_state["_last_full"] = time.time()
 _BOOT.empty()
 st.session_state["_booted"] = True
 if DHAN_DATA:  # start loading scanner data in the background so the Scanners page is ready when opened
@@ -4777,14 +4776,17 @@ if DHAN_DATA:  # start loading scanner data in the background so the Scanners pa
             st.session_state.get("scan_uni", "All F&O stocks")))
     except Exception:
         pass
-if auto:
+SELF_REFRESH = {"dashboard", "scanners", "smart", "apex"}  # these refresh their own sections; a full rerun only reloads
+if auto and getattr(nav, "url_path", "") not in SELF_REFRESH:
     @st.fragment(run_every=every)
     def _tick():
-        if time.time() - st.session_state.get("_last_full", 0) >= every - 1:
+        # timed from when the last full run finished, so a slow page can't be refreshed again the moment it loads
+        if time.time() - st.session_state.get("_last_full", time.time()) >= every - 1:
             st.rerun(scope="app")
     _tick()
 
 nav.run()
+st.session_state["_last_full"] = time.time()
 
 if DSTAT.get("error"):
     sb_status.caption(f":orange[{DSTAT['error'][:160]}]")
