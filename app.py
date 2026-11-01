@@ -47,6 +47,7 @@ import apex as AP
 import activity as A
 import indices as IX
 import trend_alert as TA
+import desk as DK
 
 
 def _process_start() -> float:
@@ -74,7 +75,7 @@ def _stale(mod, started: float) -> bool:
 
 def _reload_changed():
     import importlib
-    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA]  # dependencies before the modules that use them
+    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK]  # dependencies before the modules that use them
     started = _process_start()
     stale = any(_stale(m, started) for m in mods)
     if not stale:
@@ -1535,16 +1536,13 @@ PERIODS = {"Today": "Chg %", "1 week": "1W %", "1 month": "1M %", "3 months": "3
 def page_dashboard():
     status_strip()
     res = resolved(U.DASHBOARD)
-    if not res:
-        no_data_msg()
-        return
-    syms = tuple(res.values())
-    data, err = safe(fetch_daily, syms)
-    if not data:
+    data, err = safe(fetch_daily, tuple(res.values())) if res else (None, None)
+    if data:  # the ticker tiles are nice to have: the desk below works without them
+        live("tiles", items_from(data, [(label, res[label]) for label, _ in U.DASHBOARD if label in res]),
+             key="dash_tiles", tape=True)
+    elif not DHAN_DATA:
         no_data_msg(err)
         return
-    live("tiles", items_from(data, [(label, res[label]) for label, _ in U.DASHBOARD if label in res]),
-         key="dash_tiles", tape=True)
     ft, _ = safe(fno_table)
     t = ft[0] if ft else pd.DataFrame()
     if DHAN_DATA:
@@ -1563,15 +1561,6 @@ def page_dashboard():
     live("movers", [live_item(r["Symbol"], r["Stock"], r["Price"], r["Prev Close"], vol=r["Volume"])
                      for _, r in t.iterrows()], key="dash_movers", n=10)
     check_alerts(dict(zip(t["Symbol"], t["Price"])))
-
-
-def _bias_card(col, title: str, value: str, note: str, tone: int):
-    color = UP if tone > 0 else DOWN if tone < 0 else "#94A3B8"
-    col.markdown(f"<div style='border:1px solid #22314A;border-left:4px solid {color};border-radius:10px;"
-                 f"padding:10px 14px;background:#131D2F;min-height:96px'>"
-                 f"<div class='muted' style='font-size:.78rem'>{title}</div>"
-                 f"<div style='font-size:1.15rem;font-weight:700;color:{color}'>{value}</div>"
-                 f"<div class='muted' style='font-size:.8rem'>{note}</div></div>", unsafe_allow_html=True)
 
 
 _SCAN_CACHE: dict = {}
@@ -1606,6 +1595,225 @@ def _names(df: pd.DataFrame, n: int = 3, side_col: str | None = None, extra: str
     return ", ".join(out)
 
 
+DESK_CSS = """
+<style>
+.dk-hero{border:1px solid #22314A;border-radius:16px;padding:18px 22px;margin:4px 0 14px;
+  background:radial-gradient(120% 140% at 0% 0%,var(--dk-glow) 0%,rgba(19,29,47,.0) 55%),linear-gradient(180deg,#121C2E,#0E1626)}
+.dk-row{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between}
+.dk-kicker{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:#7F93B2}
+.dk-verdict{font-size:2.1rem;font-weight:800;line-height:1.1;color:var(--dk-c)}
+.dk-score{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:1.1rem;color:#C9D6EA}
+.dk-gauge{position:relative;height:8px;border-radius:6px;margin:12px 0 6px;
+  background:linear-gradient(90deg,#EF5350 0%,#3A475E 50%,#26A69A 100%)}
+.dk-gauge i{position:absolute;top:-5px;width:4px;height:18px;border-radius:2px;background:#fff;box-shadow:0 0 8px #fff}
+.dk-parts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.dk-chip{font-size:.78rem;padding:4px 10px;border-radius:999px;border:1px solid #2A3A56;background:#162238;color:#C9D6EA}
+.dk-chip b{color:var(--c)}
+.dk-idx{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.dk-card{border:1px solid #22314A;border-radius:12px;padding:10px 12px;background:#121C2E}
+.dk-card .n{font-size:.75rem;color:#8EA1BF;letter-spacing:.04em}
+.dk-card .p{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:1.15rem;font-weight:700;color:#E6EDF7}
+.dk-card .c{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.85rem}
+.dk-plan{border:1px solid #22314A;border-left:4px solid var(--c);border-radius:12px;padding:12px 14px;background:#121C2E;
+  margin-bottom:10px}
+.dk-plan .h{display:flex;justify-content:space-between;align-items:baseline}
+.dk-plan .side{font-weight:800;font-size:1.25rem;color:var(--c)}
+.dk-plan .t{color:#AFC0DA;font-size:.86rem;margin-top:4px}
+.dk-list{border:1px solid #22314A;border-radius:14px;overflow:hidden;background:#101A2B}
+.dk-list .hd{padding:10px 14px;font-weight:700;letter-spacing:.06em;font-size:.82rem;
+  background:linear-gradient(90deg,var(--c) -400%,#16233A 60%);color:#E6EDF7;display:flex;justify-content:space-between}
+.dk-item{padding:10px 14px;border-top:1px solid #1C2A42}
+.dk-item .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.dk-item .s{font-weight:700;color:#E6EDF7}
+.dk-item .num{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.85rem;color:#C9D6EA}
+.dk-item .why{font-size:.76rem;color:#8EA1BF;margin-top:3px}
+.dk-dots{letter-spacing:2px;color:var(--c);font-size:.8rem}
+.dk-empty{padding:14px;color:#7F93B2;font-size:.85rem}
+.dk-note{border:1px solid #2A3A56;border-radius:14px;padding:14px 18px;background:#121C2E}
+.dk-note p{margin:.25rem 0}
+</style>
+"""
+
+
+def _spark(closes: pd.Series, color: str) -> str:
+    v = closes.dropna().to_numpy()[-60:]
+    if len(v) < 3:
+        return ""
+    lo, hi = v.min(), v.max()
+    span = hi - lo or 1
+    pts = " ".join(f"{i * 120 / (len(v) - 1):.1f},{30 - (x - lo) / span * 26:.1f}" for i, x in enumerate(v))
+    return (f"<svg width='100%' height='32' viewBox='0 0 120 32' preserveAspectRatio='none'>"
+            f"<polyline fill='none' stroke='{color}' stroke-width='1.6' points='{pts}'/></svg>")
+
+
+def _idx_snapshot(df: pd.DataFrame | None) -> dict | None:
+    """Last price, change vs yesterday's close, change from today's open, ATR % and today's closes."""
+    if df is None or df.empty:
+        return None
+    d = SC.clean(df)
+    if d.empty:
+        return None
+    day = d.index.normalize()
+    days = sorted(set(day))
+    today = d[day == days[-1]]
+    prev = d[day == days[-2]]["Close"].iloc[-1] if len(days) > 1 else np.nan
+    daily = d.groupby(day).agg(h=("High", "max"), l=("Low", "min"), c=("Close", "last"))
+    atr = ((daily["h"] - daily["l"]) / daily["c"]).iloc[-15:-1].mean() * 100 if len(daily) > 3 else np.nan
+    last = float(today["Close"].iloc[-1])
+    return {"last": last, "chg": (last / prev - 1) * 100 if pd.notna(prev) else np.nan,
+            "from_open": (last / float(today["Open"].iloc[0]) - 1) * 100, "atr": atr, "closes": today["Close"]}
+
+
+def _focus_html(df: pd.DataFrame, title: str, color: str, side: str) -> str:
+    rows = []
+    for _, r in df.iterrows():
+        n = int(min(abs(r["Score"]), 8))
+        rows.append(f"<div class='dk-item'><div class='top'><span class='s'>{r['Stock']}</span>"
+                    f"<span class='num'>{r['Price']:,.2f} &nbsp;<b style='color:{color}'>{r['Chg %']:+.2f}%</b></span></div>"
+                    f"<div class='top'><span class='why'>{r['Why']}</span><span class='dk-dots'>{'●' * n}</span></div></div>")
+    body = "".join(rows) or "<div class='dk-empty'>No stock has 3+ readings agreeing yet.</div>"
+    return (f"<div class='dk-list' style='--c:{color}'><div class='hd'><span>{title}</span><span>{side}</span></div>"
+            f"{body}</div>")
+
+
+def _anthropic_key() -> str:
+    try:
+        k = (st.secrets.get("anthropic") or {}).get("api_key")
+    except Exception:
+        k = None
+    return str(k or os.environ.get("ANTHROPIC_API_KEY") or "")
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _claude_note(snapshot_json: str, bucket: int) -> str:
+    """One Claude call per 5-minute bucket for the same market state, shared by every viewer."""
+    return DK.claude_note(json.loads(snapshot_json), _anthropic_key())
+
+
+def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
+    st.markdown(DESK_CSS, unsafe_allow_html=True)
+    snaps = {k: _idx_snapshot(idx_b.get(k)) for k in ("NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "INDIAVIX")}
+    box = apex_live(_dhan_sig())
+    share = AP.dominance(box["bars"])[0] if box.get("bars") is not None else None
+    adv = int((t["Chg %"] > 0).sum()) if not t.empty and "Chg %" in t else None
+    dec = int((t["Chg %"] < 0).sum()) if not t.empty and "Chg %" in t else None
+    buy_share = (flow["Inflow Cr"].sum() / (flow["Inflow Cr"].sum() + flow["Outflow Cr"].sum()) * 100
+                 if not flow.empty else None)
+    fut_money = float(sf["Smart money (Rs cr)"].sum()) if not sf.empty else None
+    n = snaps.get("NIFTY") or {}
+    vix = snaps.get("INDIAVIX") or {}
+    verdict = DK.regime(share, adv, dec, buy_share, fut_money, vix.get("chg"), n.get("from_open"), n.get("atr"))
+    s = verdict["score"]
+    color = UP if pd.notna(s) and s >= 20 else DOWN if pd.notna(s) and s <= -20 else "#94A3B8"
+    glow = "rgba(38,166,154,.22)" if color == UP else "rgba(239,83,80,.22)" if color == DOWN else "rgba(148,163,184,.12)"
+    pos = 50 if pd.isna(s) else (s + 100) / 2
+    chips = "".join(f"<span class='dk-chip' style='--c:{UP if p['pull'] > 0 else DOWN if p['pull'] < 0 else '#94A3B8'}'>"
+                    f"{p['reading']}: <b>{p['value']}</b></span>" for p in verdict["parts"])
+    now = datetime.now(IST)
+    st.markdown(
+        f"<div class='dk-hero' style='--dk-c:{color};--dk-glow:{glow}'><div class='dk-row'>"
+        f"<div><div class='dk-kicker'>Market verdict · {now:%a %d %b · %H:%M} IST</div>"
+        f"<div class='dk-verdict'>{verdict['label']}</div></div>"
+        f"<div class='dk-score'>{'—' if pd.isna(s) else f'{s:+.0f}'} / 100</div></div>"
+        f"<div class='dk-gauge'><i style='left:calc({pos:.0f}% - 2px)'></i></div>"
+        f"<div class='dk-parts'>{chips}</div></div>", unsafe_allow_html=True)
+
+    # index strip
+    cards = []
+    for k, name in (("NIFTY", "NIFTY 50"), ("BANKNIFTY", "BANK NIFTY"), ("FINNIFTY", "FIN NIFTY"), ("SENSEX", "SENSEX"),
+                    ("INDIAVIX", "INDIA VIX")):
+        x = snaps.get(k)
+        if not x:
+            continue
+        up_ = x["chg"] >= 0 if pd.notna(x["chg"]) else True
+        c = (DOWN if up_ else UP) if k == "INDIAVIX" else (UP if up_ else DOWN)
+        cards.append(f"<div class='dk-card'><div class='n'>{name}</div><div class='p'>{x['last']:,.2f}</div>"
+                     f"<div class='c' style='color:{c}'>{x['chg']:+.2f}% <span style='color:#7F93B2'>· open "
+                     f"{x['from_open']:+.2f}%</span></div>{_spark(x['closes'], c)}</div>")
+    if cards:
+        st.markdown(f"<div class='dk-idx'>{''.join(cards)}</div>", unsafe_allow_html=True)
+
+    # index option plans + CE / PE focus
+    plans = []
+    for k, name in (("NIFTY", "Nifty"), ("BANKNIFTY", "Bank Nifty")):
+        x = snaps.get(k)
+        if not x:
+            continue
+        tr = TA.evaluate(k, idx_b.get(k), fut_b.get(k), idx_b.get("INDIAVIX"), None,
+                         TA.days_to_expiry(k, idx_b.get(k).index.max()))
+        plans.append(DK.index_plan(name, x["last"], TA.STEP.get(k, 50), verdict, tr,
+                                   share if k == "NIFTY" else None))
+    sec_flag = sf.set_index("Sector")["Flow"].to_dict() if not sf.empty else {}
+    rd = sc[0] if sc is not None else pd.DataFrame()
+    ce, pe = DK.focus(R, flow, rd, picks, sec_flag)
+    c1, c2, c3 = st.columns([1.1, 1, 1]) if not MOBILE else (st.container(), st.container(), st.container())
+    with c1:
+        st.markdown("<div class='dk-kicker' style='margin:2px 0 8px'>Index options</div>", unsafe_allow_html=True)
+        for p in plans:
+            pc = UP if p["tone"] > 0 else DOWN if p["tone"] < 0 else "#94A3B8"
+            strike = f" {p['strike']:,.0f}" if p.get("strike") and p["side"] in ("CE", "PE") else ""
+            st.markdown(f"<div class='dk-plan' style='--c:{pc}'><div class='h'><span>{p['index']}</span>"
+                        f"<span class='side'>{p['side']}{strike}</span></div><div class='t'>{p['text']}</div></div>",
+                        unsafe_allow_html=True)
+        if not plans:
+            st.caption("Index bars are still loading.")
+    with c2:
+        st.markdown(_focus_html(ce, "CE FOCUS", UP, "bullish confluence"), unsafe_allow_html=True)
+    with c3:
+        st.markdown(_focus_html(pe, "PE FOCUS", DOWN, "bearish confluence"), unsafe_allow_html=True)
+    st.caption("Focus lists: stocks where 3+ independent readings agree with today's move (activity score, futures "
+               "buildup, sector money, own money flow, radar shortlist, yesterday's high/low, smart-money pick); dots = "
+               "points. Confluence, not a tested signal: confirm on the chart and keep a small stop.")
+
+    # desk note: rule-based always, Claude on request
+    openings = []
+    if og is not None:
+        for key, meta in SU.SETUPS.items():
+            df = og[1].get(key)
+            if df is not None and not df.empty:
+                openings.append(f"{meta['name']}: " + ", ".join(df["sym"].head(3)))
+    top_in = secflow.iloc[0]["Sector"] if not secflow.empty else None
+    top_out = secflow.iloc[-1]["Sector"] if not secflow.empty else None
+    note = DK.desk_note(verdict, ce, pe, plans, top_in, top_out, openings)
+    key = _anthropic_key()
+    l, r = st.columns([3, 1], vertical_alignment="bottom")
+    l.markdown("<div class='dk-kicker' style='margin:6px 0'>Desk note</div>", unsafe_allow_html=True)
+    ask = r.button("Ask Claude", icon=":material/auto_awesome:", width="stretch", key="dk_claude",
+                   disabled=not key, help=None if key else "Add [anthropic] api_key in Secrets to enable")
+    if ask:
+        snap = {"time": f"{now:%Y-%m-%d %H:%M} IST", "verdict": verdict, "index_plans": plans,
+                "indices": {k: {kk: (round(vv, 2) if isinstance(vv, float) else vv) for kk, vv in v.items() if kk != "closes"}
+                            for k, v in snaps.items() if v},
+                "ce_focus": ce[["Stock", "Price", "Chg %", "Score", "Why"]].round(2).to_dict("records") if len(ce) else [],
+                "pe_focus": pe[["Stock", "Price", "Chg %", "Score", "Why"]].round(2).to_dict("records") if len(pe) else [],
+                "sector_money_in": secflow.head(3)[["Sector", "Net Flow Cr"]].round(0).to_dict("records") if not secflow.empty else [],
+                "sector_money_out": secflow.tail(3)[["Sector", "Net Flow Cr"]].round(0).to_dict("records") if not secflow.empty else [],
+                "opening_setups": openings}
+        with st.spinner("Claude is reading the market…"):
+            try:
+                st.session_state["dk_claude_note"] = (now.strftime("%H:%M"),
+                                                      _claude_note(json.dumps(snap, sort_keys=True, default=str),
+                                                                   int(time.time() // 300)))
+            except Exception as e:
+                st.session_state["dk_claude_note"] = (now.strftime("%H:%M"), f"Claude could not answer: {e}")
+    body = "".join(f"<p>{_md_inline(x)}</p>" for x in note)
+    st.markdown(f"<div class='dk-note'>{body}</div>", unsafe_allow_html=True)
+    cl = st.session_state.get("dk_claude_note")
+    if cl:
+        with st.container(border=True):
+            st.markdown(f"**Claude's read** · {cl[0]} IST")
+            st.markdown(cl[1])
+            st.caption("Written by Claude from the readings above; information, not investment advice.")
+    elif not key:
+        st.caption("Ask Claude: add an Anthropic API key to Secrets as `[anthropic]` `api_key = \"…\"` to get a "
+                   "written read of the market (a few rupees a call; at most one call per 5 minutes).")
+
+
+def _md_inline(s: str) -> str:
+    import re
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
+
+
 @st.fragment(run_every=60)
 def dashboard_desk(svc, t: pd.DataFrame):
     """One screen for a running market: how strong it is, what every scanner says now, where the money goes."""
@@ -1620,72 +1828,22 @@ def dashboard_desk(svc, t: pd.DataFrame):
     secflow = A.sector_flow(flow) if not flow.empty else pd.DataFrame()
     idx_b, fut_b = svc.idx_bars(), svc.ifut_bars()
 
-    # ---- 1. market strength
-    st.subheader("Market strength")
-    c = st.columns(3)
-    c2 = st.columns(3)
-    if box.get("bars") is not None:
-        bars, info = box["bars"], box["info"]
-        share, label = AP.dominance(bars)
-        early, _ = AP.dominance(bars, "10:15")
-        _bias_card(c[0], f"Nifty build-up · {info['updated'][:5]}", label,
-                   (f"{share:.0f}% bullish so far" if pd.notna(share) else "")
-                   + (f" · first hour {early:.0f}%" if pd.notna(early) else ""),
-                   0 if pd.isna(share) else (1 if share > 55 else -1 if share < 45 else 0))
-    else:
-        _bias_card(c[0], "Nifty build-up", "Loading…", box.get("err") or "Option and futures OI, every 3 min", 0)
-    if not t.empty and "Chg %" in t:
-        up, dn = int((t["Chg %"] > 0).sum()), int((t["Chg %"] < 0).sum())
-        _bias_card(c[1], "F&O breadth", f"{up} up · {dn} down",
-                   f"{int((t['Chg %'] >= 3).sum())} up 3%+ · {int((t['Chg %'] <= -3).sum())} down 3%+",
-                   1 if up > 1.5 * dn else -1 if dn > 1.5 * up else 0)
-    else:
-        _bias_card(c[1], "F&O breadth", "—", "", 0)
-    if not flow.empty:
-        tin, tout = flow["Inflow Cr"].sum(), flow["Outflow Cr"].sum()
-        net = tin - tout
-        _bias_card(c[2], "Money flow, all F&O (today)", f"₹{net:+,.0f} Cr",
-                   f"{tin / (tin + tout) * 100:.1f}% of turnover buying", 1 if net > 0 else -1 if net < 0 else 0)
-    else:
-        _bias_card(c[2], "Money flow, all F&O", "Loading…", "Turnover split by where candles close", 0)
-    if not sf.empty:
-        top, bot = sf.iloc[0], sf.iloc[-1]
-        _bias_card(c2[0], "Futures money favours", str(top["Sector"]),
-                   f"₹{top['Smart money (Rs cr)']:+,.0f} Cr · weakest {bot['Sector']} "
-                   f"₹{bot['Smart money (Rs cr)']:+,.0f} Cr", 1 if top["Smart money (Rs cr)"] > 0 else 0)
-    else:
-        _bias_card(c2[0], "Futures money favours", "Loading…", "Fresh futures positions by sector", 0)
+    og = opening_signals()
+    sc = _scan_now(svc)
+    rf, _ = smart_money_stocks(svc)
+    picks = best_picks(rf, sf) if not rf.empty and not sf.empty else pd.DataFrame()
+    trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og)
     vix = idx_b.get("INDIAVIX")
-    if vix is not None and not vix.empty:
-        vd = SC.clean(vix) if hasattr(SC, "clean") else vix
-        days = sorted(set(vd.index.normalize()))
-        last = float(vd["Close"].iloc[-1])
-        prev = float(vd[vd.index.normalize() == days[-2]]["Close"].iloc[-1]) if len(days) > 1 else np.nan
-        ch = (last / prev - 1) * 100 if pd.notna(prev) else np.nan
-        _bias_card(c2[1], "India VIX", f"{last:.2f}", f"{ch:+.1f}% vs yesterday" if pd.notna(ch) else "",
-                   -1 if pd.notna(ch) and ch > 3 else 1 if pd.notna(ch) and ch < -3 else 0)
-    else:
-        _bias_card(c2[1], "India VIX", "Loading…", "", 0)
     trend = []
     for k in ("NIFTY", "BANKNIFTY"):
         spot = idx_b.get(k)
         if spot is None or spot.empty:
             continue
-        r = TA.evaluate(k, spot, fut_b.get(k), vix, None, TA.days_to_expiry(k, spot.index.max()))
-        trend.append((k, r))
-    sigs = [(k, r) for k, r in trend if r.get("status") == "SIGNAL"]
-    if sigs:
-        k, r = sigs[0]
-        _bias_card(c2[2], "Index trend-day alert", f"{TREND_NAMES[k]}: BUY {r['side']} {r['strike']:,.0f}",
-                   f"at {r['sig_time']} · est. option {r['opt_now'] * 100:+.0f}%", 1 if r["side"] == "CE" else -1)
-    else:
-        note = " · ".join(f"{TREND_NAMES[k]} {r['move_atr']:+.2f} ATR" for k, r in trend if pd.notna(r.get("move_atr")))
-        _bias_card(c2[2], "Index trend-day alert", "No signal", note or "Needs index and futures data", 0)
+        trend.append((k, TA.evaluate(k, spot, fut_b.get(k), vix, None, TA.days_to_expiry(k, spot.index.max()))))
 
     # ---- 2. every scanner, one line each
     st.subheader("Signals right now")
     rows = []
-    og = opening_signals()
     if og is not None:
         g, sig, _ = og
         for key, meta in SU.SETUPS.items():
@@ -1698,7 +1856,6 @@ def dashboard_desk(svc, t: pd.DataFrame):
             else:
                 rows.append({"Scanner": meta["name"], "Now": "No signal", "Stocks": "",
                              "Where": "Setups & Scanners → Opening setups"})
-    sc = _scan_now(svc)
     if sc is not None:
         rd, v3, _ = sc
         fit = rd[rd["TradeFinder fit"] == "Yes"] if not rd.empty else rd
@@ -1714,8 +1871,6 @@ def dashboard_desk(svc, t: pd.DataFrame):
                      "Stocks": _names(bull, 3, None, "Chg %"), "Where": "F&O Stocks → Unusual activity"})
         rows.append({"Scanner": "Unusual activity, bearish", "Now": f"{len(bear)} stocks",
                      "Stocks": _names(bear, 3, None, "Chg %"), "Where": "F&O Stocks → Unusual activity"})
-    rf, _ = smart_money_stocks(svc)
-    picks = best_picks(rf, sf) if not rf.empty and not sf.empty else pd.DataFrame()
     rows.append({"Scanner": "Smart-money picks (R-factor)", "Now": f"{len(picks)} picks" if len(picks) else "None yet",
                  "Stocks": _names(picks, 3, "Side", "Chg %") if len(picks) else "", "Where": "Smart Money Sectors"})
     if not secflow.empty:
@@ -4358,7 +4513,7 @@ def _sign_out():
         del st.session_state[k]
 
 PAGE_DEFS = [  # (url, function, menu title, icon)
-    ("dashboard", page_dashboard, "Dashboard", ":material/dashboard:"),
+    ("dashboard", page_dashboard, "Trading Desk", ":material/space_dashboard:"),
     ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
     ("smart", page_smart_money, "Smart Money Sectors", ":material/insights:"),
     ("scanners", page_scanners, "Setups & Scanners", ":material/radar:"),

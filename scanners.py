@@ -483,7 +483,7 @@ def stock_flows(fut: pd.DataFrame) -> pd.DataFrame:
     d = fut.dropna(subset=["Fut LTP", "OI", "OI Chg %"]).copy()
     prev = d["OI"] / (1 + d["OI Chg %"] / 100)
     d["oi_cr"] = (d["OI"] - prev).abs() * d["Fut LTP"] / 1e7
-    d["flow"] = d["oi_cr"] * d["Buildup"].map(SMART_WEIGHT).fillna(0)
+    d["flow"] = d["oi_cr"] * pd.to_numeric(d["Buildup"].map(SMART_WEIGHT), errors="coerce").fillna(0.0)
     return d
 
 

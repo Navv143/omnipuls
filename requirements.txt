@@ -6,3 +6,4 @@ numpy>=1.26
 requests>=2.31
 websockets>=12
 truststore>=0.10
+anthropic>=2.0
