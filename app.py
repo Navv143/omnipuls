@@ -1776,19 +1776,17 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
     top_out = secflow.iloc[-1]["Sector"] if not secflow.empty else None
     note = DK.desk_note(verdict, ce, pe, plans, top_in, top_out, openings)
     key = _anthropic_key()
+    snap = {"time": f"{now:%Y-%m-%d %H:%M} IST", "verdict": verdict, "index_plans": plans,
+            "indices": {k: {kk: (round(vv, 2) if isinstance(vv, float) else vv) for kk, vv in v.items() if kk != "closes"}
+                        for k, v in snaps.items() if v},
+            "ce_focus": ce[["Stock", "Price", "Chg %", "Score", "Why"]].round(2).to_dict("records") if len(ce) else [],
+            "pe_focus": pe[["Stock", "Price", "Chg %", "Score", "Why"]].round(2).to_dict("records") if len(pe) else [],
+            "sector_money_in": secflow.head(3)[["Sector", "Net Flow Cr"]].round(0).to_dict("records") if not secflow.empty else [],
+            "sector_money_out": secflow.tail(3)[["Sector", "Net Flow Cr"]].round(0).to_dict("records") if not secflow.empty else [],
+            "opening_setups": openings}
     l, r = st.columns([3, 1], vertical_alignment="bottom")
     l.markdown("<div class='dk-kicker' style='margin:6px 0'>Desk note</div>", unsafe_allow_html=True)
-    ask = r.button("Ask Claude", icon=":material/auto_awesome:", width="stretch", key="dk_claude",
-                   disabled=not key, help=None if key else "Add [anthropic] api_key in Secrets to enable")
-    if ask:
-        snap = {"time": f"{now:%Y-%m-%d %H:%M} IST", "verdict": verdict, "index_plans": plans,
-                "indices": {k: {kk: (round(vv, 2) if isinstance(vv, float) else vv) for kk, vv in v.items() if kk != "closes"}
-                            for k, v in snaps.items() if v},
-                "ce_focus": ce[["Stock", "Price", "Chg %", "Score", "Why"]].round(2).to_dict("records") if len(ce) else [],
-                "pe_focus": pe[["Stock", "Price", "Chg %", "Score", "Why"]].round(2).to_dict("records") if len(pe) else [],
-                "sector_money_in": secflow.head(3)[["Sector", "Net Flow Cr"]].round(0).to_dict("records") if not secflow.empty else [],
-                "sector_money_out": secflow.tail(3)[["Sector", "Net Flow Cr"]].round(0).to_dict("records") if not secflow.empty else [],
-                "opening_setups": openings}
+    if key and r.button("Ask Claude", icon=":material/auto_awesome:", width="stretch", key="dk_claude"):
         with st.spinner("Claude is reading the market…"):
             try:
                 st.session_state["dk_claude_note"] = (now.strftime("%H:%M"),
@@ -1796,6 +1794,8 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
                                                                    int(time.time() // 300)))
             except Exception as e:
                 st.session_state["dk_claude_note"] = (now.strftime("%H:%M"), f"Claude could not answer: {e}")
+    if not key:
+        r.link_button("Open claude.ai", "https://claude.ai/new", icon=":material/open_in_new:", width="stretch")
     body = "".join(f"<p>{_md_inline(x)}</p>" for x in note)
     st.markdown(f"<div class='dk-note'>{body}</div>", unsafe_allow_html=True)
     cl = st.session_state.get("dk_claude_note")
@@ -1804,9 +1804,13 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
             st.markdown(f"**Claude's read** · {cl[0]} IST")
             st.markdown(cl[1])
             st.caption("Written by Claude from the readings above; information, not investment advice.")
-    elif not key:
-        st.caption("Ask Claude: add an Anthropic API key to Secrets as `[anthropic]` `api_key = \"…\"` to get a "
-                   "written read of the market (a few rupees a call; at most one call per 5 minutes).")
+    if not key:
+        with st.expander("Get Claude's read for free (copy → paste into claude.ai)", icon=":material/auto_awesome:"):
+            st.caption("Press the copy icon at the top right of the box, open claude.ai (free account), paste and send. "
+                       "The text holds this minute's readings, so copy it again later for a fresh read.")
+            st.code(DK.SYSTEM + "\n\nLive snapshot:\n" + json.dumps(snap, default=str, indent=1, ensure_ascii=False),
+                    language=None, wrap_lines=True)
+
 
 
 def _md_inline(s: str) -> str:
