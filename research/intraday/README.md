@@ -164,3 +164,20 @@ average +0.006% / +0.005% / +0.012% before costs, +0.04% to the close: a coin fl
 725 filter/exit combinations (time, gap, volume, trigger-candle volume, Nifty, sector, yesterday's high/low, ATR,
 side; 150+ trades each): none positive in both halves and 2025-26. Best tilt: volume 2x + Nifty + sector all the same
 way, +0.04% per trade on 1,681 trades (about 1 a day), not significant. The 1% move from a quiet open carries no edge.
+
+## Trading Desk readings tested (1 Nov 2026)
+
+`research/desk_backtest.py`, Dhan 5-minute bars, 206 F&O stocks, Nov 2021 - Oct 2026, 274,515 stock signals
+(1%+ movers at 10:00 / 10:30 / 11:00). Futures OI has no history, so buildup, sector futures money and the
+smart-money pick are left out; activity (volume vs usual), flow (buy share), yesterday's break, sector move and
+radar fit are rebuilt as the desk computes them. Shares, next-candle entry, 1% stop, exit 15:20, 0.12% costs.
+- Focus (3+ readings agreeing): -0.03% to -0.04% per trade vs -0.05% for all movers and -0.06% for 0-2 points.
+  The readings rank stocks a little better than nothing, but no version is positive after costs in 2025-26.
+  4+ points: +0.06% to +0.09% in 2021-24, -0.06% to -0.08% since. Top 3 a day: about 0.
+- PE side holds up better than CE side (about 0 vs -0.06%). As an ATM option buy every version loses (-0.45%).
+- Single readings at 10:30: radar fit (break + sector + volume) +0.003% vs -0.063% without; sector same way
+  -0.034% vs -0.088%; volume 1.5x+ -0.031% vs -0.061%; buy share and yesterday's break alone add nothing.
+- Market verdict (breadth + buy share + Nifty from open) at 10:15 / 11:00: Nifty goes its way on 52-57% of days but
+  only by about 0.01-0.05% for the rest of the day; a Nifty futures trade on it is about 0 after costs.
+Verdict: the desk's readings describe the market; they are not an edge on their own. OI-based parts can only be
+judged from a log kept going forward.
