@@ -54,6 +54,7 @@ import five_star as FIVE
 import chain_log as CL
 import trade_odds as TO
 import fade as FADE
+import gold_flow as GF
 
 
 def _process_start() -> float:
@@ -81,7 +82,7 @@ def _reload_changed():
     sys, which survives reruns and cache clears). If a reload fails (Streamlit may be swapping the same module), drop
     it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
-    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE, CL, TO, FADE]  # dependencies before the modules that use them
+    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE, CL, TO, FADE, GF]  # dependencies before the modules that use them
     seen = sys.__dict__.setdefault("_omni_seen", {})
     started = None
     stale = []
@@ -1834,6 +1835,19 @@ def _log_paper(svc, idx_b: dict, og, now: datetime):
             if tr["state"] != "open" and key + ("final",) not in done:
                 done.add(key + ("final",))
                 rows += DL.fade_row(now, tr, final=True)
+    try:
+        for tr in (_gold_flow() or {}).get("trades", []):
+            if tr["entry"] is None or tr["signal_time"] < GOLD_LOG_START:
+                continue
+            key = ("gold", str(tr["signal_time"]))
+            if key not in done:
+                done.add(key)
+                rows += DL.gold_row(now, tr, final=False)
+            if tr["state"] != "open" and key + ("final",) not in done:
+                done.add(key + ("final",))
+                rows += DL.gold_row(now, tr, final=True)
+    except Exception as e:
+        DL.STATUS["error"] = f"gold log: {e}"[:200]
     if rows:
         DL.save(rows, _github_cfg())
 
@@ -3266,17 +3280,19 @@ def scanner_body(svc, uni):
 
     signed = ("P&L %", "Gap %", "Change by 10:00 %")
     tabs = st.tabs(["Opening setups", "Momentum radar", "Breakout (V3)", "Index trend-day + OI (options)",
-                    "Bank Nifty 5-STAR", "BN failed-break fade"] + (["Research"] if IS_ADMIN else []))
+                    "Bank Nifty 5-STAR", "BN failed-break fade", "Gold Order Flow"] + (["Research"] if IS_ADMIN else []))
     with tabs[3]:
         index_trend_tab(svc)
     with tabs[4]:
         five_star_tab(svc)
     with tabs[5]:
         fade_tab(svc)
+    with tabs[6]:
+        gold_flow_tab()
     with tabs[0]:
         setups_body()
     if IS_ADMIN:
-        with tabs[6]:
+        with tabs[7]:
             rs = pd.DataFrame([{"Setup": r[0], "Verdict": SC.VERDICT_LABEL[r[2]], "Trade with": r[1],
                                 "Shares / trade": r[3], "Options / trade": r[4], "Years +": r[5], "Notes": r[6]}
                                for r in SC.RESEARCH])
@@ -4534,6 +4550,69 @@ def _five_star_data(svc):
     return memo["v"]
 
 
+GOLD_LOG_START = pd.Timestamp("2026-11-02")  # paper trades are logged from here on (UTC signal time)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _gold_flow() -> dict:
+    """Gold Order Flow on 15-minute PAXG candles (60 days from Binance), refreshed every 5 minutes."""
+    try:
+        return GF.run(GF.to_15m(TO.binance_5m("PAXGUSDT", 60)))
+    except Exception as e:
+        return {"error": str(e)[:200]}
+
+
+def gold_flow_tab():
+    note_md(f"{_badge('ok')}&nbsp; **Your TradingView strategy, gold 15-min:** +0.31% a trade after costs over 2 years "
+            "(176 trades, 41% wins, 7 of 9 quarters positive); TradingView's own Strategy Tester gives the same trades. "
+            "Stop 1.5%, target 3%, about 90 trades a year, trades can last days. Paper-trade first.",
+            unsafe_allow_html=True)
+    if IS_ADMIN:
+        with st.expander("Rules"):
+            st.markdown(GF.__doc__.split("\n", 4)[4])
+    r = _gold_flow()
+    if r.get("error"):
+        st.error(f"Gold candles did not load: {r['error']}")
+        return
+    stt, trs = r["state"], r["trades"]
+    ist = lambda t: (pd.Timestamp(t) + pd.Timedelta(hours=5, minutes=30)).strftime("%d %b %H:%M")  # noqa: E731
+    m = st.columns(4)
+    m[0].metric("Gold (PAXG)", f"${stt['last']:,.2f}", f"candle {ist(stt['time'])} IST", delta_color="off")
+    m[1].metric("Order flow", stt["flow"])
+    m[2].metric("Structure", stt["structure"])
+    m[3].metric("Order block", stt["in_ob"])
+    cur = trs[-1] if trs and trs[-1]["state"] in ("open", "waiting for next candle") else None
+    if cur:
+        col = UP if cur["side"] > 0 else DOWN
+        with st.container(border=True):
+            st.markdown(f"<div style='font-size:1.5rem;font-weight:800;color:{col}'>"
+                        f"{'BUY' if cur['side'] > 0 else 'SELL'} gold · signal {ist(cur['signal_time'])} IST "
+                        f"({cur['kind']})</div>", unsafe_allow_html=True)
+            k = st.columns(4)
+            k[0].metric("Entry", f"${cur['entry']:,.2f}" if cur["entry"] else "next candle")
+            k[1].metric("Stop (1.5%)", f"${cur['stop']:,.2f}")
+            k[2].metric("Target (3%)", f"${cur['target']:,.2f}")
+            k[3].metric("Now", f"{cur['pct']:+.2f}%" if cur["pct"] is not None else "—", cur["state"],
+                        delta_color="off")
+    else:
+        st.markdown("<div style='font-size:1.3rem;font-weight:700;color:#94A3B8'>No open trade: waiting for the next "
+                    "order-flow cross with the structure</div>", unsafe_allow_html=True)
+    done = [t for t in trs if t["state"] in ("stopped", "target hit")]
+    if done:
+        v = pd.Series([t["pct"] - GF.COST_PCT for t in done])
+        st.caption(f"Last 60 days: {len(done)} closed trades, {100 * (v > 0).mean():.0f}% wins, average {v.mean():+.2f}%, "
+                   f"total {v.sum():+.1f}% (after about 0.5 $ cost a trade).")
+    tbl = pd.DataFrame([{"Signal (IST)": ist(t["signal_time"]), "Side": "BUY" if t["side"] > 0 else "SELL",
+                         "Type": t["kind"], "Entry": t["entry"], "Stop": t["stop"], "Target": t["target"],
+                         "Exit": t["exit"], "Exit (IST)": ist(t["exit_time"]) if t["exit_time"] is not None else "",
+                         "Result": t["state"], "Result %": (t["pct"] - GF.COST_PCT) if t["pct"] is not None else None}
+                        for t in reversed(trs)])
+    if not tbl.empty:
+        data_table(tbl.round(2), "gold_flow_trades", name_col="Signal (IST)", signed=("Result %",), height=420)
+    st.caption("15-minute candles of PAXG (a gold-backed token that tracks XAUUSD) from Binance; check the XAUUSD price at "
+               "your broker before entering. Refreshes every 5 minutes.")
+
+
 def fade_tab(svc):
     note_md(f"{_badge('ok')}&nbsp; **Bank Nifty failed-break fade:** +26 pts a trade after 5 pts cost (Dec 2021 - "
             "Oct 2026), 58 trades a year, 49% wins, positive in both halves and in all 36 tried stop / window / exit "
@@ -5011,6 +5090,16 @@ def _paper_results(L: pd.DataFrame) -> pd.DataFrame:
         out.append({"Date": r["date"], "Setup": "Bank Nifty failed-break fade", "Stock": "BANKNIFTY",
                     "Side": "BUY" if r["side"] == "CE" else "SELL", "Entry": r["price"],
                     "Result pts": float(r["score"]) - FADE.COST, "Note": f"{r['why']} ({r['extra']})"})
+    gf = L[L["kind"] == "gold_flow_final"]
+    done_g = set(zip(gf["date"], gf["check"]))
+    for _, r in gf.iterrows():
+        out.append({"Date": r["date"], "Setup": "Gold Order Flow", "Stock": "GOLD",
+                    "Side": "BUY" if r["side"] == "CE" else "SELL", "Entry": r["price"],
+                    "Result %": float(r["score"]) - GF.COST_PCT, "Note": f"{r['why']} ({r['extra']})"})
+    for _, r in L[L["kind"] == "gold_flow"].iterrows():
+        if (r["date"], r["check"]) not in done_g:
+            out.append({"Date": r["date"], "Setup": "Gold Order Flow", "Stock": "GOLD",
+                        "Side": "BUY" if r["side"] == "CE" else "SELL", "Entry": r["price"], "Note": "still open"})
     for _, r in L[(L["kind"] == "fade")].iterrows():
         if (r["date"], r["check"]) not in done_f:
             out.append({"Date": r["date"], "Setup": "Bank Nifty failed-break fade", "Stock": "BANKNIFTY",
@@ -5224,7 +5313,7 @@ def page_desk_review():
             data_table(P_.sort_values("Date", ascending=False).round(2), "dr_paper", name_col="Stock",
                        signed=tuple(c for c in ("Result %", "Result pts") if c in P_), height=420)
         st.caption("History to beat: gap fade +0.66% a trade, panic gap-down +1.36%, sector overreaction +0.71%, "
-                   "5-STAR +29 pts, failed-break fade +26 pts. A few weeks of trades are needed before comparing.")
+                   "5-STAR +29 pts, failed-break fade +26 pts, Gold Order Flow +0.31%. A few weeks of trades are needed before comparing.")
 
     st.subheader("All logged days")
     allf = L[L["kind"] == "focus"]

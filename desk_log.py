@@ -162,3 +162,14 @@ def fade_row(now: datetime, tr: dict, final: bool) -> list[dict]:
              "price": round(tr["entry"], 2), "chg_pct": "", "score": round(tr["pts"], 1) if final else "",
              "why": tr["state"] if final else f"stop {tr['stop']:.1f} target {tr['target']:.1f}",
              "extra": f"{tr['level']}; exit {tr['exit']:.1f} at {tr['exit_time']}" if final else tr["level"]}]
+
+
+def gold_row(now: datetime, tr: dict, final: bool) -> list[dict]:
+    """Gold Order Flow paper trade: when it opens, and its result (% before cost) once closed. Times in IST."""
+    import pandas as pd
+    ist = lambda t: (t + pd.Timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d %H:%M")  # noqa: E731
+    return [{"date": ist(tr["signal_time"])[:10], "check": ist(tr["signal_time"])[11:], "logged_at": now.strftime("%H:%M"),
+             "kind": "gold_flow_final" if final else "gold_flow", "name": "GOLD", "side": "CE" if tr["side"] > 0 else "PE",
+             "price": round(tr["entry"], 2), "chg_pct": "", "score": round(tr["pct"], 3) if final else "",
+             "why": tr["state"] if final else f"{tr['kind']} stop {tr['stop']:.1f} target {tr['target']:.1f}",
+             "extra": f"exit {tr['exit']:.1f} at {ist(tr['exit_time'])}" if final else ""}]
