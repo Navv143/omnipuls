@@ -48,6 +48,54 @@ import activity as A
 import indices as IX
 import trend_alert as TA
 
+
+def _process_start() -> float:
+    """When this server process started (Linux, i.e. Streamlit Cloud); elsewhere 'now', so nothing counts as stale."""
+    try:
+        with open("/proc/self/stat") as fh:
+            ticks = int(fh.read().rsplit(")", 1)[1].split()[19])
+        with open("/proc/stat") as fh:
+            boot = next(int(line.split()[1]) for line in fh if line.startswith("btime"))
+        return boot + ticks / os.sysconf("SC_CLK_TCK")
+    except Exception:
+        return time.time()
+
+
+def _stale(mod, started: float) -> bool:
+    """True when the module's file changed after the copy in memory was loaded. A running Streamlit server re-reads
+    only app.py after a code update (git pull on Streamlit Cloud); imported modules stay old until reloaded."""
+    try:
+        mtime = os.path.getmtime(mod.__file__)
+    except Exception:
+        return False
+    loaded = getattr(mod, "_omni_mtime", None)
+    return mtime > started + 1 if loaded is None else mtime != loaded
+
+
+def _reload_changed():
+    import importlib
+    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA]  # dependencies before the modules that use them
+    started = _process_start()
+    stale = any(_stale(m, started) for m in mods)
+    if not stale:
+        for m in mods:
+            if getattr(m, "_omni_mtime", None) is None:
+                m._omni_mtime = os.path.getmtime(m.__file__)
+        return
+    for m in (SS, F):  # stop the old background loaders and feeds; the reloaded modules start new ones
+        for old in list(getattr(m, "INSTANCES", [])):
+            try:
+                old.stop()
+            except Exception:
+                pass
+    for m in mods:
+        importlib.reload(m)
+        m._omni_mtime = os.path.getmtime(m.__file__)
+    st.cache_resource.clear()  # cached loaders, feeds and data were built by the old code
+
+
+_reload_changed()
+
 IST = timezone(timedelta(hours=5, minutes=30))
 UP, DOWN, GOLD = "#26A69A", "#EF5350", "#E8B33A"
 DATA_FILE = Path(__file__).with_name("watchlist.json")  # replaced per user after sign-in
