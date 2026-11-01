@@ -1677,7 +1677,10 @@ DESK_CSS = """
 .dk-row{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between}
 .dk-kicker{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:#7F93B2}
 .dk-verdict{font-size:2.1rem;font-weight:800;line-height:1.1;color:var(--dk-c)}
-.dk-score{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:1.1rem;color:#C9D6EA}
+.dk-score{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:1.6rem;font-weight:700;color:var(--dk-c);text-align:right}
+.dk-desc{color:#C9D6EA;font-size:.92rem;margin-top:4px;max-width:640px}
+.dk-scale-note{font-family:Sora,sans-serif;font-size:.74rem;font-weight:400;color:#7F93B2}
+.dk-scale{display:flex;justify-content:space-between;font-size:.7rem;color:#7F93B2;margin-top:2px}
 .dk-gauge{position:relative;height:8px;border-radius:6px;margin:12px 0 6px;
   background:linear-gradient(90deg,#EF5350 0%,#3A475E 50%,#26A69A 100%)}
 .dk-gauge i{position:absolute;top:-5px;width:4px;height:18px;border-radius:2px;background:#fff;box-shadow:0 0 8px #fff}
@@ -1809,13 +1812,22 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
     chips = "".join(f"<span class='dk-chip' style='--c:{UP if p['pull'] > 0 else DOWN if p['pull'] < 0 else '#94A3B8'}'>"
                     f"{p['reading']}: <b>{p['value']}</b></span>" for p in verdict["parts"])
     now = datetime.now(IST)
+    nday = (snaps.get("NIFTY") or {}).get("closes")
+    sess = nday.index.max() if nday is not None and len(nday) else None
+    when = (f"{now:%a %d %b · %H:%M} IST" if sess is None or sess.date() == now.date()
+            else f"{sess:%a %d %b} session (market closed now)")
+    scale = "".join(f"<span>{x}</span>" for x in ("Strong bearish", "Bearish", "Neutral", "Bullish", "Strong bullish"))
     st.markdown(
         f"<div class='dk-hero' style='--dk-c:{color};--dk-glow:{glow}'><div class='dk-row'>"
-        f"<div><div class='dk-kicker'>Market verdict · {now:%a %d %b · %H:%M} IST</div>"
-        f"<div class='dk-verdict'>{verdict['label']}</div></div>"
-        f"<div class='dk-score'>{'—' if pd.isna(s) else f'{s:+.0f}'} / 100</div></div>"
-        f"<div class='dk-gauge'><i style='left:calc({pos:.0f}% - 2px)'></i></div>"
-        f"<div class='dk-parts'>{chips}</div></div>", unsafe_allow_html=True)
+        f"<div><div class='dk-kicker'>The mood right now · {when}</div>"
+        f"<div class='dk-verdict'>{verdict['label']}</div>"
+        f"<div class='dk-desc'>{DK.MOOD_TEXT.get(verdict['label'], '')}</div></div>"
+        f"<div class='dk-score'>{'—' if pd.isna(s) else f'{s:+.0f}'} <span style='color:#7F93B2'>/ 100</span>"
+        f"<div class='dk-scale-note'>−100 all bearish · 0 balanced · +100 all bullish</div></div></div>"
+        f"<div class='dk-gauge'><i style='left:calc({pos:.0f}% - 2px)'></i></div><div class='dk-scale'>{scale}</div>"
+        f"<div class='dk-parts'>{chips}</div>"
+        f"<div class='dk-scale-note' style='margin-top:8px'>The mood describes the market now; it is not a forecast. "
+        f"Each chip is one reading: green pulls the score up, red pulls it down.</div></div>", unsafe_allow_html=True)
 
     # index strip
     cards = []

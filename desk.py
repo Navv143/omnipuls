@@ -14,6 +14,14 @@ import numpy as np
 import pandas as pd
 
 LABELS = [(55, "Strong bullish"), (20, "Bullish"), (-20, "Neutral"), (-55, "Bearish"), (-101, "Strong bearish")]
+MOOD_TEXT = {
+    "Strong bullish": "Almost every reading points up: buyers are in control.",
+    "Bullish": "More readings point up than down: buyers have the edge, but not all agree.",
+    "Neutral": "Readings cancel out: no clear side. Waiting is a fair choice.",
+    "Bearish": "More readings point down than up: sellers have the edge, but not all agree.",
+    "Strong bearish": "Almost every reading points down: sellers are in control.",
+    "Waiting for data": "Readings appear once today's data loads.",
+}
 
 
 def _clip(x, lo=-1.0, hi=1.0):
@@ -136,8 +144,9 @@ def desk_note(verdict: dict, ce: pd.DataFrame, pe: pd.DataFrame, plans: list, to
     s = verdict.get("score", np.nan)
     if pd.notna(s):
         strongest = max(verdict["parts"], key=lambda p: abs(p["pull"]))
-        lines.append(f"**{verdict['label']}** ({s:+.0f}/100). Strongest reading: {strongest['reading'].lower()}, "
-                     f"{strongest['value']}.")
+        lines.append(f"Mood right now: **{verdict['label']}** ({s:+.0f} on a scale from −100, all bearish, to +100, "
+                     f"all bullish). {MOOD_TEXT.get(verdict['label'], '')} Biggest pull: "
+                     f"{strongest['reading'].lower()}, {strongest['value']}.")
     if top_in or top_out:
         lines.append(f"Money is going into **{top_in or '—'}** and out of **{top_out or '—'}**.")
     for p in plans:
