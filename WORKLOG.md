@@ -95,7 +95,31 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 1 Nov 2026: Navv work shipped, Trading Desk, speed, Twelve Data, top menu
+
+**Built and shipped**
+- The "Navv" chat's work (unusual activity, money flow, index flow, trend-day alert, research) arrived here
+  uncommitted via OneDrive; committed and pushed after replacing scipy in trend_alert.py (not installed, would have
+  stopped the app). `6a19fc6`
+- Fixes after that deploy: the cloud kept old copies of changed modules (AttributeError `set_indices`), now reloaded
+  once per file version and rerun if Streamlit swaps a module mid-update (`83b81af`, `84b8171`); Infinity in the
+  Unusual activity table broke the widget, now blank (`8fbf857`); empty futures buildup crashed sector money (`3e78a42`).
+- Trading Desk (first page): market verdict -100..+100 from build-up, breadth, money flow, futures money, Nifty move
+  and VIX; index strip with sparklines; Nifty / Bank Nifty option plan (CE / PE / Wait, trend-day alert when it
+  fires); CE and PE focus lists (3+ readings agreeing, with reasons); desk note; signals from every scanner, sector
+  heatmap + money flow, picks, most unusual. `d2d8d9a`, `3e78a42` (`desk.py`)
+- Claude's read: free copy-ready prompt for claude.ai; one-click "Ask Claude" if `[anthropic] api_key` is in Secrets
+  (claude-opus-5-5, at most one call per 5 minutes). `64b2796`
+- Speed: scanner results kept across page loads (were rebuilt every load); Yahoo skipped 15 min after a failure;
+  Twelve Data fallback for crypto, forex, gold, WTI when Yahoo fails (`[twelvedata] api_key`, free plan: 7 calls a
+  minute, 10-minute reuse). `90a83aa` (`twelve.py`)
+- Menu as a bar on top, sidebar closed by default; charts open in a new tab signed in by a 12-hour link code (reset on
+  restart); Screener starts on all F&O stocks. `0cc08e9`
+
 ## Open items
+- Check the top menu and new-tab charts signed in, also on a phone (pop-ups must be allowed for the site).
+- Add `[twelvedata] api_key` in Secrets (and optionally `[anthropic] api_key` for one-click Claude).
+- Optional: automatic Dhan token on this PC for local testing (test first whether Dhan allows two tokens at once).
 - Put `pin` and `totp_secret` in the cloud app's Secrets (only there, not on this PC: Dhan may allow one token).
 - Re-run `research/apex_backtest.py` weekly with a valid token on this PC to grow the build-up history.
 - Run research/index_options/dhan_index_options.py (real expired-option prices) and send the summary back.
