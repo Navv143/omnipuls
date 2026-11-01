@@ -199,3 +199,15 @@ period is split in two halves and a rule must beat buy-and-hold on risk in both.
 - The cloud app records Nifty and Bank Nifty option chains (2 nearest expiries, 12 strikes each side, LTP, bid, ask,
   OI, volume, IV, delta, theta) every 5 minutes to the `logs` branch (`chain_log.py`). After 2-3 months this is
   enough to test option selling on real prices.
+
+## Small fixed targets on momentum, 1 Nov 2026 (`research/momentum_target.py`)
+The user's targets: Nifty 25-30 pts, Bank Nifty 45-50, F&O stocks 2-3%, gold 8-10 $, BTC 400-500 $, ETH 15-20 $.
+5-minute bars (Indian markets Nov 2021 - Oct 2026, 52 stocks; crypto and gold 2 years from Binance). Three momentum
+entries (30-min breakout, 2x range burst, 3 candles one way above/below the 20 average), stop 1x / 0.75x / 0.5x the
+target, out after 30 / 60 / 120 minutes, compared with taking the same trade at any candle.
+- Momentum entries hit the target only 1-5 points more often than a random entry (Bank Nifty: less often).
+- 0 of 54 versions per market made money after costs; none positive in both halves. Before costs Nifty made about
+  +1 pt a trade and ETH about +0.01%: the costs are larger than the edge.
+- So a small fixed target on a plain momentum candle is not an edge in any of the six markets. Use the Trade odds
+  page before a trade, and take small-target trades only on top of a tested setup (gap fade, panic gap-down, sector
+  overreaction, Bank Nifty 5-STAR).
