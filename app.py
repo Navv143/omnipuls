@@ -51,6 +51,7 @@ import desk as DK
 import twelve as TW
 import desk_log as DL
 import five_star as FIVE
+import chain_log as CL
 
 
 def _process_start() -> float:
@@ -78,7 +79,7 @@ def _reload_changed():
     sys, which survives reruns and cache clears). If a reload fails (Streamlit may be swapping the same module), drop
     it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
-    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE]  # dependencies before the modules that use them
+    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE, CL]  # dependencies before the modules that use them
     seen = sys.__dict__.setdefault("_omni_seen", {})
     started = None
     stale = []
@@ -1790,6 +1791,29 @@ def _github_cfg() -> dict:
         return {}
 
 
+def _log_paper(svc, idx_b: dict, og, now: datetime):
+    """Paper trades of the tested setups: the opening setups once a day after 9:20, Bank Nifty 5-STAR when it fires
+    and again with its result after 15:15."""
+    done = _memo("desk_log").setdefault("paper", set())
+    day = now.strftime("%Y-%m-%d")
+    rows = []
+    if og is not None and now.strftime("%H:%M") >= "09:20" and (day, "setups") not in done:
+        done.add((day, "setups"))
+        rows += DL.setup_rows(now, og[1], {k: m["name"] for k, m in SU.SETUPS.items()})
+    bn = idx_b.get("BANKNIFTY")
+    if bn is not None and not bn.empty and pd.DatetimeIndex(bn.index).max().date() == now.date():
+        internals, _ = _five_star_data(svc)
+        sg = FIVE.evaluate(bn, internals).get("signal")
+        if sg and (day, "5star") not in done:
+            done.add((day, "5star"))
+            rows += DL.star_row(now, sg, final=False)
+        if sg and sg["state"] != "open" and (day, "5star_final") not in done:
+            done.add((day, "5star_final"))
+            rows += DL.star_row(now, sg, final=True)
+    if rows:
+        DL.save(rows, _github_cfg())
+
+
 def _log_desk(snaps: dict, verdict: dict, plans: list, ce, pe):
     """Record the desk at 9:20, 9:45, 10:30, 12:00, 13:30 and 15:00 on market days (only from today's live data), once per checkpoint."""
     now = datetime.now(IST).replace(tzinfo=None)
@@ -1876,6 +1900,11 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
     rd = sc[0] if sc is not None else pd.DataFrame()
     ce, pe = DK.focus(R, flow, rd, picks, sec_flag)
     _log_desk(snaps, verdict, plans, ce, pe)
+    try:
+        if datetime.now(IST).weekday() < 5:
+            _log_paper(svc, idx_b, og, datetime.now(IST).replace(tzinfo=None))
+    except Exception as e:
+        DL.STATUS["error"] = f"paper log: {e}"[:200]
     c1, c2, c3 = st.columns([1.1, 1, 1]) if not MOBILE else (st.container(), st.container(), st.container())
     with c1:
         st.markdown("<div class='dk-kicker' style='margin:2px 0 8px'>Index options</div>", unsafe_allow_html=True)
@@ -2142,6 +2171,25 @@ def _apex_live(sig: tuple) -> dict:
                 wait -= 5
 
     threading.Thread(target=loop, daemon=True, name="apex-nifty").start()
+    return box
+
+
+def _current_cfg() -> dict:
+    """Dhan settings with the latest token (the automatic one when on), read fresh on every call: the recorder thread
+    outlives the page run that started it."""
+    cfg = D.load_config()
+    tok = _auto_token().get("token")
+    if tok:
+        cfg["access_token"] = tok
+    return cfg
+
+
+@st.cache_resource(show_spinner=False)
+def _chain_recorder() -> dict:
+    """Option-chain recorder (chain_log.py), one per server process; registered so updates stop it."""
+    box = {"stop": False}
+    sys.__dict__.setdefault("_omni_boxes", []).append(box)
+    CL.start(box, _current_cfg, _github_cfg)
     return box
 
 
@@ -4787,6 +4835,9 @@ def page_research():
     st.caption("Only admins see this page, the Research tab, the 'How it works' tabs and the method notes under "
                "each scanner. Other users see the signals and tables only.")
     gh = _github_cfg()
+    st.caption(f"Option-chain recorder (cloud copy, every 5 min in market hours): {CL.STATUS['snaps']} snapshots, "
+               f"{CL.STATUS['rows']} rows this run, last {CL.STATUS['last'] or '—'}; written to GitHub "
+               f"{CL.STATUS['written'] or 'not yet'}" + (f"; last error: {CL.STATUS['error']}" if CL.STATUS["error"] else "."))
     st.caption(f"Desk log (9:20, 9:45, 10:30, 12:00, 13:30, 15:00 on market days): last saved {DL.STATUS['last'] or 'not yet in this run'}; "
                + ("copies to GitHub branch `logs`." if gh.get("token") else
                   "**GitHub copy off**: add `[github]` `token = \"…\"` in Secrets, or the log is lost on restart.")
@@ -4840,6 +4891,45 @@ def _review(f: pd.DataFrame, closes: dict) -> pd.DataFrame:
                 res["Next day %"] = sgn * (nxt.iloc[0] / float(r["price"]) - 1) * 100
         rows.append(res)
     return pd.DataFrame(rows)
+
+
+def _paper_results(L: pd.DataFrame) -> pd.DataFrame:
+    """Results of the logged tested-setup paper trades. Opening setups: entry at the open, stop from the rule, exit at
+    the close, 0.12% costs; the stop is checked on the day's low (buys) / high (shorts), so it counts as hit even if
+    the close later recovered. 5-STAR: points from its own trailing-stop record, 12 points cost."""
+    out = []
+    st_ = L[L["kind"] == "setup"]
+    if not st_.empty:
+        data, _ = safe(fetch_daily, tuple(U.fno_yahoo(x) for x in sorted(set(st_["name"]))))
+        for _, r in st_.iterrows():
+            df = (data or {}).get(U.fno_yahoo(r["name"]))
+            res = np.nan
+            if df is not None and not df.empty:
+                idx = pd.DatetimeIndex(df.index)
+                idx = (idx.tz_localize(None) if idx.tz is not None else idx).normalize()
+                d = df.set_axis(idx)
+                day = pd.Timestamp(r["date"])
+                if day in d.index:
+                    bar = d.loc[[day]].iloc[-1]
+                    e = float(r["price"])
+                    stop = float(str(r["extra"]).replace("stop", "").strip() or "nan")
+                    side = 1 if r["side"] == "CE" else -1
+                    hit = (bar["Low"] <= stop) if side > 0 else (bar["High"] >= stop)
+                    px = stop if hit else float(bar["Close"])
+                    res = side * (px / e - 1) * 100 - 0.12
+            out.append({"Date": r["date"], "Setup": r["why"], "Stock": r["name"],
+                        "Side": "BUY" if r["side"] == "CE" else "SHORT", "Entry": r["price"],
+                        "Result %": res, "Note": "stop hit" if pd.notna(res) and res < -0.5 else ""})
+    fin = L[L["kind"] == "5star_final"]
+    for _, r in fin.iterrows():
+        out.append({"Date": r["date"], "Setup": "Bank Nifty 5-STAR", "Stock": "BANKNIFTY",
+                    "Side": "BUY" if r["side"] == "CE" else "SELL", "Entry": r["price"],
+                    "Result pts": float(r["score"]) - 12, "Note": r["why"]})
+    opened = L[(L["kind"] == "5star") & ~L["date"].isin(set(fin["date"]))]
+    for _, r in opened.iterrows():
+        out.append({"Date": r["date"], "Setup": "Bank Nifty 5-STAR", "Stock": "BANKNIFTY",
+                    "Side": "BUY" if r["side"] == "CE" else "SELL", "Entry": r["price"], "Note": "result not logged yet"})
+    return pd.DataFrame(out)
 
 
 def page_desk_review():
@@ -4903,6 +4993,27 @@ def page_desk_review():
                    "are the desk's most persistent picks.")
         with st.expander("Every logged pick with its reasons"):
             data_table(R.round(2), "dr_all", name_col="Stock", signed=("To close %", "Next day %"), height=480)
+
+    st.subheader("Paper trades: the tested setups")
+    P_ = _paper_results(L)
+    if P_.empty:
+        st.caption("No paper trades logged yet: the gap fade / panic gap-down / sector overreaction picks are saved "
+                   "after 9:20 and Bank Nifty 5-STAR when it fires, while the Trading Desk is open.")
+    else:
+        summ = []
+        for setup, g in P_.groupby("Setup"):
+            col = "Result pts" if setup.startswith("Bank Nifty") else "Result %"
+            v = g[col].dropna() if col in g else pd.Series(dtype=float)
+            summ.append({"Setup": setup, "Trades": len(g), "With result": len(v),
+                         "Average": f"{v.mean():+.2f}{' pts' if 'pts' in col else '%'}" if len(v) else "—",
+                         "Total": f"{v.sum():+.2f}{' pts' if 'pts' in col else '%'}" if len(v) else "—",
+                         "Win %": round(100 * (v > 0).mean()) if len(v) else np.nan})
+        data_table(pd.DataFrame(summ), "dr_paper_sum", name_col="Setup", height=220)
+        with st.expander(f"All {len(P_)} paper trades"):
+            data_table(P_.sort_values("Date", ascending=False).round(2), "dr_paper", name_col="Stock",
+                       signed=tuple(c for c in ("Result %", "Result pts") if c in P_), height=420)
+        st.caption("History to beat: gap fade +0.66% a trade, panic gap-down +1.36%, sector overreaction +0.71%, "
+                   "5-STAR +29 pts. A few weeks of trades are needed before comparing.")
 
     st.subheader("All logged days")
     allf = L[L["kind"] == "focus"]
@@ -5029,6 +5140,11 @@ if _goto in P and getattr(nav, "url_path", "") != _goto:
 
 _BOOT.empty()
 st.session_state["_booted"] = True
+if DHAN_DATA and PUBLIC:  # record option chains on the cloud copy only (one recorder, one GitHub log)
+    try:
+        _chain_recorder()
+    except Exception:
+        pass
 if DHAN_DATA:  # start loading scanner data in the background so the Scanners page is ready when opened
     try:
         get_scan_service("dhan", _dhan_sig(), SS.VERSION).set_universe(scan_universe(

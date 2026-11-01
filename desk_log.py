@@ -131,3 +131,25 @@ def load(github: dict | None) -> "pd.DataFrame":
         return pd.DataFrame(columns=FIELDS)
     d = pd.concat(frames, ignore_index=True)
     return d.drop_duplicates(["date", "check", "kind", "name", "side"], keep="last")
+
+
+def setup_rows(now: datetime, sig: dict, names: dict) -> list[dict]:
+    """The tested opening setups' signals of the day (paper trades): entry = opening price, stop as the rule says."""
+    base = {"date": now.strftime("%Y-%m-%d"), "check": "09:15", "logged_at": now.strftime("%H:%M"), "kind": "setup"}
+    out = []
+    for key, df in (sig or {}).items():
+        if df is None or df.empty:
+            continue
+        for _, r in df.iterrows():
+            out.append({**base, "name": r["sym"], "side": "CE" if str(r["side"]).upper().startswith("BUY") else "PE",
+                        "price": round(float(r["entry"]), 2), "chg_pct": round(float(r["gap"]) * 100, 2),
+                        "score": "", "why": names.get(key, key), "extra": f"stop {float(r['stop_px']):.2f}"})
+    return out
+
+
+def star_row(now: datetime, sg: dict, final: bool) -> list[dict]:
+    """Bank Nifty 5-STAR paper trade: the signal when it fires, and its result once the trade has closed."""
+    return [{"date": now.strftime("%Y-%m-%d"), "check": sg["time"], "logged_at": now.strftime("%H:%M"),
+             "kind": "5star_final" if final else "5star", "name": "BANKNIFTY", "side": "CE" if sg["side"] > 0 else "PE",
+             "price": round(sg["entry"], 2), "chg_pct": "", "score": round(sg["pts"], 1) if final else "",
+             "why": sg["state"] if final else f"stop {sg['stop0']:.1f}", "extra": f"exit {sg['exit']}" if final else ""}]

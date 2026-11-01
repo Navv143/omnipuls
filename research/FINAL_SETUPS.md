@@ -182,3 +182,20 @@ Thursday/Friday weekly high-low pattern.
 - Gap fade on real option prices (`research/intraday/gapfade_options_dhan.py`): Dhan's /charts/rollingoption returns
   DH-905 for every request (weekly and monthly, index and stock, 1- and 5-minute), including Dhan's own example
   shape. Not runnable until Dhan support enables it for this account.
+
+## ETH, BTC and gold trend rules, 1 Nov 2026 (`research/eth_gold.py`)
+Daily closes, decide at the close and hold from the next day, 0.10% cost per change (crypto), 0.05% (gold); the
+period is split in two halves and a rule must beat buy-and-hold on risk in both.
+- ETH (Binance, Aug 2017 on): long above the 50-day average, cash otherwise: Sharpe 1.05 vs 0.69 buy-and-hold, worst
+  fall -64% vs -94%; second half Sharpe 0.82 vs 0.24, +30.5% a year vs -6.6%. The 20/100-day averages and 30-day
+  momentum also beat buy-and-hold in both halves. Usable as a filter (when to hold ETH), not as a trading system.
+- BTC: same rule, Sharpe 1.27 vs 0.81; second half 0.89 vs 0.50. Confirms the earlier BTC trend filter.
+- Gold (COMEX GC=F, 2000 on): buy-and-hold +10.7% a year, Sharpe 0.66. No trend rule beats it (best: 200-day
+  average, Sharpe 0.55). Gold is better simply held than traded on trend.
+
+## Paper trading and option history (from 1 Nov 2026)
+- The Trading Desk now logs the gap fade / panic gap-down / sector overreaction picks after 9:20 and every Bank Nifty
+  5-STAR signal and its result. Admin -> Desk review -> "Paper trades" shows the running results against history.
+- The cloud app records Nifty and Bank Nifty option chains (2 nearest expiries, 12 strikes each side, LTP, bid, ask,
+  OI, volume, IV, delta, theta) every 5 minutes to the `logs` branch (`chain_log.py`). After 2-3 months this is
+  enough to test option selling on real prices.
