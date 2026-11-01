@@ -247,3 +247,22 @@ Exit at 15:10's close, or at 2x the risk.
 - Nifty, same rules: nothing (about 0). This is a Bank Nifty effect.
 - Caveats: the idea came from looking at the last year, so 2026 is not a clean test (2022-2025 are). Index, not
   futures. Wide stop: size by the 250-pt risk. Paper-trade first.
+
+## Popular YouTube methods and the user's own TradingView scripts (2 Nov 2026)
+All coded as written, after costs (Nifty 2 pts, Bank Nifty 5, stocks 0.06%, crypto 0.10%, gold 0.5 $).
+- Gautam Jha 1-min PDL/PDH reversal: -0.07 to -0.19R. Order-block retest: -0.15 to -0.45R, every year negative.
+  Liquidity sweep reversal (index, stocks, gold; swing and yesterday's levels, 5 and 1-min): -0.17 to -0.49R.
+  Power of Stocks 5 EMA as taught: -0.20R index, -0.44R stocks; traffic light 1/5/15-min: about 0.
+  Gold London breakout: -0.03R (fade -0.45R). (`jha_orderblock.py`, `sweep_london.py`, `powerofstocks.py`)
+- User's 22 scripts (`my_scripts.py`, `my_scripts2.py`): PDH/PDL Reversal v3, Momentum Scalper, XAUUSD Confluence,
+  BB, Momentum Zone, EMA Ribbon BOS, Key Reaction Candle, 5:30-6:30 zone, 9:30 Sniper, Atomic Supertrend, AMD MSS,
+  First Candle bias, RSI turn: all about 0 before costs and negative after.
+- Only lead: "Order Flow + Structure + Order Blocks" strategy (SL 1.5%, TP 3%). Gold 15-min "base" signals:
+  176 trades in 2 years, +0.31% a trade, 7 of 9 quarters positive, +0.17% without the best 5% (longs +0.70%,
+  shorts +0.11%; gold rose strongly in this period). Stocks 5-min "FULL" (+0.10%) falls apart without the best 5%
+  of trades or at the script's own 0.2% cost. Paper-trade gold before trusting it.
+- Script bugs found: XAUUSD Confluence scores out of 7 but has 6 checks (Grade A never fires); AMD MSS's bullish
+  "BOS" crosses the swing LOW (should be the swing high), bearish the swing high; Momentum Zone's yesterday
+  high/low skips each day's first candle.
+- ETH 1h RSI 40/60 cross with 4h EMA 50/200 filter, stop 1.5 ATR, 2R (last year): 206 trades, PF 1.02, +0.1% total
+  at 0.1% fee per side; PF 1.14, +23% at 0.05% per side; max drawdown -28 to -34%; one losing quarter -22%.
