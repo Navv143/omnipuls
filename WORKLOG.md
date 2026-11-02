@@ -95,6 +95,23 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 2 Nov 2026: scanner calculations off the page path, 3x faster
+
+**Why pages were still slow after the refresh fixes:** after each loader pass (every 1-2 min in market hours) the
+first page view recalculated the radar, R-factor and unusual-activity scores for ~200 stocks while it waited:
+~23 s per new candle and ~43 s on the first load of the day (measured on 200 stocks x 40 sessions; slower on the
+cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
+
+**Fixed** (all outputs checked identical to the old code on the same data)
+- Futures OI "usual change" (`scanners._oi_window`): one pass instead of a loop re-scanning every bar for every day;
+  R-factor 14.3 s -> 1.8 s, radar 3.2 s -> 0.4 s.
+- Same-time-of-day averages (`activity.baseline`, `fut_baseline`): one groupby instead of pivot_table per table;
+  "HH:MM" labels by lookup instead of strftime (also in `scanners`). First load: prepare 4.7 s -> 2.0 s, unusual
+  activity 18.5 s -> 10.5 s.
+- Pages no longer wait for a recalculation: the last result for the same loader and session shows at once and the
+  new one is built in the background, one at a time (`_fresh_or_last` in app.py). Only the first result of the day
+  is built while the page waits. Numbers lag by at most one loader pass.
+
 ## 2 Nov 2026: slow app and repeated refreshing fixed
 
 **Fixed**

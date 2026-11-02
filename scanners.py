@@ -106,6 +106,15 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     return df[["Open", "High", "Low", "Close", "Volume"]].astype(float)
 
 
+_HHMM = np.array([f"{m // 60:02d}:{m % 60:02d}" for m in range(1440)], dtype=object)
+
+
+def _hhmm(idx) -> pd.Index:
+    """'HH:MM' of each timestamp, by table lookup (much faster than strftime)."""
+    idx = pd.DatetimeIndex(idx)
+    return pd.Index(_HHMM[idx.hour * 60 + idx.minute], dtype=pd.StringDtype(na_value=np.nan))
+
+
 _HIST_CACHE: dict = {}  # earlier-session stats don't change during the day: compute once per stock
 
 
@@ -117,7 +126,7 @@ def _hist_stats(hist: pd.DataFrame):
     tr = pd.concat([daily["high"] - daily["low"], (daily["high"] - pc).abs(), (daily["low"] - pc).abs()], axis=1).max(axis=1)
     atr = float(tr.tail(14).mean())
     # volume by time-of-day slot for earlier sessions (rows = dates, cols = HH:MM)
-    slot = hist.index.strftime("%H:%M")
+    slot = _hhmm(hist.index)
     slot_vol = hist["Volume"].groupby([hist.index.normalize(), slot]).sum().unstack()
     cum_vol = slot_vol.reindex(sorted(slot_vol.columns), axis=1).fillna(0).cumsum(axis=1)
     return daily, atr, slot_vol, cum_vol
@@ -346,14 +355,23 @@ def _oi_window(o: pd.DataFrame, session, t_last, hhmm: str, lookback: int):
         return None
     prev_close = before["OI"].iloc[-1]
     chg = today["OI"].iloc[-1] / prev_close - 1 if prev_close > 0 else np.nan
-    days = before.index.normalize().unique()
     t_end = dtime(*map(int, hhmm.split(":")))
-    past = []
-    for a, b in zip(days[:-1], days[1:]):
-        x = before[(before.index.normalize() == b) & (before.index.time <= t_end)]
-        p = before[before.index.normalize() == a]["OI"].iloc[-1]
-        if len(x) and p > 0:
-            past.append(abs(x["OI"].iloc[-1] / p - 1))
+    # For each pair of sessions (a, b): OI at hhmm on b vs OI at the close of a. Done in one pass over the bars
+    # (a loop over days re-scanned every bar for every day: ~80 ms a stock, most of the R-factor's time).
+    bd = before.index.normalize()
+    days = bd.unique()
+    last = ~bd.duplicated(keep="last")
+    day_close = pd.Series(before["OI"].values[last], index=bd[last]).reindex(days).values
+    wmask = before.index.time <= t_end
+    wd = bd[wmask]
+    wlast = ~wd.duplicated(keep="last")
+    win = pd.Series(before["OI"].values[wmask][wlast], index=wd[wlast])
+    has = days[1:].isin(win.index)
+    p = day_close[:-1]
+    with np.errstate(all="ignore"):
+        valid = has & (p > 0)
+        x = win.reindex(days[1:]).values
+        past = list(np.abs(x[valid] / p[valid] - 1))
     # rollover weeks (positions moving into these contracts) inflate OI change; leave out days above 3x the median
     med = float(np.median(past)) if past else np.nan
     clean = [x for x in past if x <= 3 * med] if past else []
