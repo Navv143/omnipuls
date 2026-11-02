@@ -83,22 +83,37 @@ def _reload_changed():
     it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
     mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE, CL, TO, FADE, GF]  # dependencies before the modules that use them
+    import hashlib
     seen = sys.__dict__.setdefault("_omni_seen", {})
     started = None
     stale = []
+
+    def digest(path):
+        try:
+            return hashlib.sha1(Path(path).read_bytes()).hexdigest()
+        except Exception:
+            return None
+
     for m in mods:
         try:
             mt = os.path.getmtime(m.__file__)
         except Exception:
             continue
         prev = seen.get(m.__name__)
+        if prev is not None and not isinstance(prev, tuple):
+            prev = (prev, None)  # remembered by an older version of this function (mtime only)
         if prev is None:  # first look in this process: stale only if the file changed after the process started
             started = _process_start() if started is None else started
             if mt > started + 1:
                 stale.append(m)
-        elif mt != prev:
-            stale.append(m)
-        seen[m.__name__] = mt
+            seen[m.__name__] = (mt, digest(m.__file__))
+        elif mt != prev[0]:
+            # A sync tool (OneDrive, Dropbox) can touch a file without changing it; reloading then cleared every
+            # cache and the live feed, so the whole app loaded again from scratch. Reload only on a real change.
+            h = digest(m.__file__)
+            if h != prev[1]:
+                stale.append(m)
+            seen[m.__name__] = (mt, h)
     if not stale:
         return
     _stop_background()
@@ -463,16 +478,37 @@ def _dhan_sig():
     return (str(DCFG.get("client_id")), str(DCFG.get("access_token", ""))[-16:])
 
 
+@st.cache_resource(show_spinner=False)
+def _dhan_down() -> dict:
+    return {"until": 0.0, "error": "", "sig": None}  # shared by every session: when Dhan last failed to answer
+
+
+DHAN_RETRY_AFTER = 120  # seconds to wait after a network failure before asking Dhan again
+
+
+def dhan_status_safe(sig: tuple) -> dict:
+    """dhan_status, but a network failure is remembered for 2 minutes. Without this, every page load and every
+    auto-refresh waited on Dhan again (up to a minute with retries) while Dhan was unreachable."""
+    down = _dhan_down()
+    if down["sig"] == sig and time.time() < down["until"]:  # new credentials are always checked straight away
+        raise RuntimeError(down["error"] or "Dhan did not answer")
+    try:
+        return dhan_status(sig)
+    except Exception as e:
+        down.update(until=time.time() + DHAN_RETRY_AFTER, error=str(e)[:200], sig=sig)
+        raise
+
+
 if D.configured(DCFG):
     try:
-        DS = dhan_status(_dhan_sig())
+        DS = dhan_status_safe(_dhan_sig())
         sec_tok = DCFG.get("_secret_token")
         if not DS["ok"] and DS.get("code") in TOKEN_CODES and D.can_auto_token(DCFG):
             ensure_auto_token(force=True)  # rejected (expired, or replaced by a token made elsewhere): make a new one
-            DS = dhan_status(_dhan_sig())
+            DS = dhan_status_safe(_dhan_sig())
         elif not DS["ok"] and DS.get("code") in TOKEN_CODES and sec_tok and sec_tok != DCFG.get("access_token"):
             DCFG["access_token"] = sec_tok  # the token pasted in the app expired; Secrets has a different one
-            DS = dhan_status(_dhan_sig())
+            DS = dhan_status_safe(_dhan_sig())
     except Exception as _e:
         DS = {"ok": False, "data": False, "error": f"Could not reach Dhan ({_e}).", "code": "NETWORK"}
 else:
@@ -867,7 +903,14 @@ def fetch_daily(symbols: tuple) -> dict:
     return out
 
 
-YAHOO_STATE = {"down_until": 0.0, "error": ""}
+@st.cache_resource(show_spinner=False)
+def _yahoo_state() -> dict:
+    return {"down_until": 0.0, "error": ""}
+
+
+# Must survive reruns: as a plain dict here it was reset on every page load (app.py runs top to bottom each time),
+# so "skip Yahoo for 15 minutes after a failure" never took effect and every refresh waited on Yahoo again.
+YAHOO_STATE = _yahoo_state()
 
 
 def _twelve_key() -> str:
@@ -927,10 +970,22 @@ def chart_data(sym: str, tf: str, period: str, interval: str):
         return h.dropna(subset=["Close"]), "Dhan"
     if tf == "25m":
         return None, "Yahoo"
-    df = fetch_history(sym, period, interval)
+    yahoo_down = time.time() < YAHOO_STATE["down_until"]
+    df = None if yahoo_down else fetch_history(sym, period, interval)
+    src = "Yahoo"
+    if (df is None or df.empty) and _twelve_key():  # Yahoo failed (common on cloud servers): Twelve Data
+        bars = {"5d": 7200, "1mo": 3000, "3mo": 1600, "1y": 260, "5y": 270, "max": 400}.get(period, 1500)
+        df = TW.history(sym, interval, _twelve_key(), bars)
+        if df is not None and not df.empty:
+            src = "Twelve Data"
+            if interval not in ("1d", "1wk", "1mo"):
+                df = df.copy()
+                df.index = df.index.tz_localize("UTC").tz_convert("Asia/Kolkata")
+    if df is None or df.empty:
+        return df, src
     if tf in RESAMPLED:
         df = resample_bars(df, RESAMPLED[tf], indian=str(sym).endswith((".NS", ".BO")) or str(sym).startswith("^NSE"))
-    return df, "Yahoo"
+    return df, src
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
@@ -1627,6 +1682,9 @@ def items_from(data: dict, labels: list[tuple[str, str]]) -> list:
     return out
 
 
+# Self-refreshing sections (Scanners, Smart Money, Unusual activity, Money flow): every minute while NSE is open,
+# every 5 minutes otherwise (enough for gold's 15-minute bars, and still picks up the open within 5 minutes).
+LIVE_EVERY = 60 if SS.market_hours() else 300
 PERIODS = {"Today": "Chg %", "1 week": "1W %", "1 month": "1M %", "3 months": "3M %", "1 year": "1Y %"}
 
 
@@ -3237,7 +3295,7 @@ def page_scanners():
     scanner_body(svc, uni)
 
 
-@st.fragment(run_every=60)
+@st.fragment(run_every=LIVE_EVERY)
 def scanner_body(svc, uni):
     now = datetime.now(IST)
     done, total = svc.progress()
@@ -4173,7 +4231,7 @@ def page_activity(view: str = "Unusual activity"):
     (flow_body if view == "Money flow" else activity_body)(svc)
 
 
-@st.fragment(run_every=60)
+@st.fragment(run_every=LIVE_EVERY)
 def activity_body(svc):
     done, total = svc.progress()
     fresh = svc.freshness()
@@ -4288,7 +4346,7 @@ def index_defs() -> dict:
 FLOW_WINDOWS = {"Whole day": None, "Last 60 min": 60, "Last 30 min": 30, "Last 15 min": 15}
 
 
-@st.fragment(run_every=60)
+@st.fragment(run_every=LIVE_EVERY)
 def flow_body(svc):
     done, total = svc.progress()
     if done < total:
@@ -4922,7 +4980,7 @@ def page_smart_money():
     smart_money_body(svc)
 
 
-@st.fragment(run_every=60)
+@st.fragment(run_every=LIVE_EVERY)
 def smart_money_body(svc):
     sf = sector_flow_table()
     if DSTAT.get("hist_left_oi", 0):
@@ -4939,7 +4997,7 @@ def smart_money_body(svc):
     if session is not None:
         live_today = session.date() == datetime.now(IST).date()
         st.caption(("Live session" if live_today else f"Market closed: showing the {session:%a %d %b} session") +
-                   " · refreshes every 30 s")
+                   (" · refreshes every minute" if LIVE_EVERY == 60 else " · refreshes every 5 min"))
 
     # ---- best picks: top R-factor stocks moving with a favoured sector
     st.subheader("Best picks")
@@ -5415,12 +5473,20 @@ with st.sidebar:
 
     st.text_input("Open any symbol", key="quick", on_change=_quick, placeholder="reliance, btc, usdinr, gold")
     auto = st.toggle("Auto-refresh tables & indicators", value=True, key="auto",
-                     help="Live prices stream tick by tick on their own; this refreshes the rest of the page.")
-    every = st.select_slider("Refresh every", options=[5, 10, 15, 30, 60, 120, 300],
-                             value=120 if PUBLIC else (60 if FEED is not None else (10 if DHAN_DATA else 30)),
+                     help="Live prices stream tick by tick on their own; this refreshes the rest of the page. "
+                          "Pages with only Indian market data pause outside market hours.")
+    # Each refresh reruns the whole page (every table and indicator), so refreshing faster than every 30 s made the
+    # app feel slow and jumpy, and a slow page could be reloaded again before it had finished. Live prices are
+    # unaffected: they stream on their own.
+    _every_opts = [30, 60, 120, 300, 600]
+    if st.session_state.get("every") not in _every_opts:
+        st.session_state.pop("every", None)  # a value from an older version (5-15 s) is no longer offered
+    every = st.select_slider("Refresh every", options=_every_opts, value=300 if PUBLIC else 120,
                              format_func=lambda s: f"{s}s" if s < 60 else f"{s // 60} min", key="every",
                              disabled=not auto)
     if st.button("Refresh now", width="stretch"):
+        YAHOO_STATE["down_until"] = 0.0  # an explicit refresh tries Yahoo and Dhan again straight away
+        _dhan_down()["until"] = 0.0
         fetch_live.clear()
         _build_table.clear()
         dhan_quotes.clear()
@@ -5453,7 +5519,11 @@ if DHAN_DATA:  # start loading scanner data in the background so the Scanners pa
     except Exception:
         pass
 SELF_REFRESH = {"dashboard", "scanners", "smart", "apex"}  # these refresh their own sections; a full rerun only reloads
-if auto and getattr(nav, "url_path", "") not in SELF_REFRESH:
+NO_REFRESH = {"account", "dhan", "research", "review"}  # forms and notes: a rerun only interrupts typing
+INDIAN_ONLY = {"fno", "oi", "sectors", "indices", "options", "odds", "portfolio"}  # nothing changes after the close
+_page = getattr(nav, "url_path", "")
+if (auto and _page not in SELF_REFRESH | NO_REFRESH
+        and not (_page in INDIAN_ONLY and not SS.market_hours())):
     @st.fragment(run_every=every)
     def _tick():
         # timed from when the last full run finished, so a slow page can't be refreshed again the moment it loads
@@ -5466,3 +5536,8 @@ st.session_state["_last_full"] = time.time()
 
 if DSTAT.get("error"):
     sb_status.caption(f":orange[{DSTAT['error'][:160]}]")
+elif _twelve_key() and time.time() < YAHOO_STATE["down_until"]:
+    _tw = TW.usage()
+    sb_status.caption(f"Yahoo not answering: global prices from Twelve Data ({_tw['loaded']} of {_tw['active']} "
+                      f"loaded, {_tw['used']}/{_tw['limit']} credits today"
+                      + (", paused until the daily reset at 05:30 IST" if _tw["paused"] else "") + ").")
