@@ -21,6 +21,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import cloudstore
+
 HERE = Path(__file__).resolve().parent
 USERS_FILE = HERE / "users.json"
 STATE_FILE = HERE / "user_state.json"
@@ -42,6 +44,7 @@ def normalize(user_id: str) -> str:
 
 
 def _read(path: Path) -> dict:
+    cloudstore.restore(path)  # missing after a cloud restart: bring it back from Supabase (once, if configured)
     try:
         return json.loads(path.read_text())
     except Exception:
@@ -52,6 +55,7 @@ def _write(path: Path, data: dict):
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2))
     os.replace(tmp, path)
+    cloudstore.save(path.name, data)  # also kept in Supabase when configured, so it survives restarts
 
 
 @functools.lru_cache(maxsize=64)

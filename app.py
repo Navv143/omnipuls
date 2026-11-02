@@ -49,6 +49,8 @@ import indices as IX
 import trend_alert as TA
 import desk as DK
 import twelve as TW
+import cryptocom as CC
+import cloudstore as CS
 import desk_log as DL
 import five_star as FIVE
 import chain_log as CL
@@ -82,7 +84,7 @@ def _reload_changed():
     sys, which survives reruns and cache clears). If a reload fails (Streamlit may be swapping the same module), drop
     it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
-    mods = [U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, DL, FIVE, CL, TO, FADE, GF]  # dependencies before the modules that use them
+    mods = [CS, U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, CC, DL, FIVE, CL, TO, FADE, GF]  # dependencies before the modules that use them
     import hashlib
     seen = sys.__dict__.setdefault("_omni_seen", {})
     started = None
@@ -139,6 +141,16 @@ def _reload_changed():
 
 
 _reload_changed()
+
+
+def _supabase_cfg() -> dict:
+    try:
+        return dict(st.secrets.get("supabase") or {})
+    except Exception:
+        return {}
+
+
+CS.configure(_supabase_cfg().get("url"), _supabase_cfg().get("key"))  # before sign-in, so accounts can be restored
 
 IST = timezone(timedelta(hours=5, minutes=30))
 UP, DOWN, GOLD = "#26A69A", "#EF5350", "#E8B33A"
@@ -400,6 +412,7 @@ if IS_ADMIN and not DATA_FILE.exists() and _OLD.exists():  # keep the watchlist 
 
 
 def load_store() -> dict:
+    CS.restore(DATA_FILE)  # after a cloud restart: the watchlist kept in Supabase
     try:
         return json.loads(DATA_FILE.read_text())
     except Exception:
@@ -409,6 +422,7 @@ def load_store() -> dict:
 def save_store(store: dict):
     try:
         DATA_FILE.write_text(json.dumps(store, indent=2))
+        CS.save(DATA_FILE.name, store)
     except Exception as e:
         st.warning(f"Could not save the watchlist file: {e}")
 
@@ -893,6 +907,9 @@ def fetch_daily(symbols: tuple) -> dict:
             err = e
             YAHOO_STATE.update(down_until=time.time() + 900, error=str(e)[:200])  # skip Yahoo 15 min, don't wait on it
     missing = tuple(s for s in rest if s not in out)
+    if missing:  # crypto: Crypto.com's free public prices, so Twelve Data's daily credits go to forex and gold
+        out.update(CC.daily(missing))
+        missing = tuple(s for s in missing if s not in out)
     if missing and _twelve_key():
         out.update(TW.daily(missing, _twelve_key()))
     if rest and not out and err is not None:
@@ -973,6 +990,13 @@ def chart_data(sym: str, tf: str, period: str, interval: str):
     yahoo_down = time.time() < YAHOO_STATE["down_until"]
     df = None if yahoo_down else fetch_history(sym, period, interval)
     src = "Yahoo"
+    if (df is None or df.empty) and CC.coin_of(sym):  # Yahoo failed: Crypto.com for crypto (free, no key)
+        df = CC.candles(sym, interval, 300)
+        if df is not None and not df.empty:
+            src = "Crypto.com"
+            if interval not in ("1d", "1wk", "1mo"):
+                df = df.copy()
+                df.index = df.index.tz_localize("UTC").tz_convert("Asia/Kolkata")
     if (df is None or df.empty) and _twelve_key():  # Yahoo failed (common on cloud servers): Twelve Data
         bars = {"5d": 7200, "1mo": 3000, "3mo": 1600, "1y": 260, "5y": 270, "max": 400}.get(period, 1500)
         df = TW.history(sym, interval, _twelve_key(), bars)
