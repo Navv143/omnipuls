@@ -47,7 +47,7 @@ def td_symbol(yahoo: str) -> str | None:
     """Yahoo symbol -> Twelve Data symbol, or None when the free plan has no match."""
     if yahoo in SPECIAL:
         return SPECIAL[yahoo]
-    m = re.fullmatch(r"([A-Z0-9]{2,10})-(USD|USDT|EUR|INR)", yahoo)
+    m = re.fullmatch(r"([A-Z]{2,10}?)\d*-(USD|USDT|EUR|INR)", yahoo)  # Yahoo's numbered names: TON11419-USD -> TON
     if m:
         return f"{m.group(1)}/{m.group(2)}"
     m = re.fullmatch(r"([A-Z]{3})([A-Z]{3})=X", yahoo)

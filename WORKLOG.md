@@ -95,6 +95,22 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 2 Nov 2026: Supabase storage and Crypto.com prices
+
+**Built**
+- `cloudstore.py` + `supabase/schema.sql`: accounts (users.json), preferences (user_state.json) and watchlists are
+  also saved to a Supabase table and restored when a cloud restart wipes the files. Off until `[supabase] url` and
+  `key` (secret key) are in Secrets; RLS on with no policies, so only the secret key can read the table. Tested
+  against a stand-in API: account + preference restored after wiping the files, sign-in works.
+- `cryptocom.py`: Crypto.com Exchange public prices (no key, no daily limit) for crypto when Yahoo fails, before
+  Twelve Data; daily tiles and Chart page candles. USD pair, else USDT, from the exchange's instrument list.
+- Twelve Data and Crypto.com now map Yahoo's numbered coin names (TON11419-USD -> TON); they never matched before.
+
+**Open**
+- Supabase project `omnipuls` created (Mumbai, free plan, https://vtiumooustkzsqhqpkbr.supabase.co) with the
+  app_files table; checked that the public key sees 0 rows and cannot write. To do: put `[supabase] url` and the
+  secret key (Project Settings -> API Keys, sb_secret_...) in Streamlit Secrets, and merge this branch.
+
 ## 2 Nov 2026: scanner calculations off the page path, 3x faster
 
 **Why pages were still slow after the refresh fixes:** after each loader pass (every 1-2 min in market hours) the
