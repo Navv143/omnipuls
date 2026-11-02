@@ -1724,6 +1724,49 @@ def _memo(name: str) -> dict:
     return {}
 
 
+@st.cache_resource(show_spinner=False)
+def _heavy_lock():
+    import threading
+    return threading.RLock()  # one heavy recompute at a time, shared by every viewer and background job
+
+
+def _fresh_or_last(memo: dict, key: tuple, compute, tag: str = "v"):
+    """memo[tag] for `key`, whose first item is the group (loader and session) it belongs to.
+
+    The scanner, R-factor and unusual-activity numbers take tens of seconds to rebuild for ~200 stocks, and they had
+    to be rebuilt after every loader pass (each minute or two in market hours) by whichever page view came first, so
+    that view, and every auto-refresh, sat waiting. Now, when a result for the same loader and session exists, it is
+    shown straight away and the new one is built in the background (one at a time); it shows on the next refresh.
+    Only the very first result of the day is built while the page waits."""
+    import threading
+    kk, busy = tag + "_k", tag + "_busy"
+    if memo.get(kk) == key:
+        return memo[tag]
+    old = memo.get(kk)
+    if old is not None and old[0] == key[0] and tag in memo:
+        if not memo.get(busy):
+            memo[busy] = True
+
+            def run():
+                try:
+                    with _heavy_lock():
+                        if memo.get(kk) != key:
+                            memo[tag] = compute()  # value first, then key: a reader never pairs a key with old data
+                            memo[kk] = key
+                except Exception:
+                    pass
+                finally:
+                    memo[busy] = False
+
+            threading.Thread(target=run, daemon=True, name=f"omni-{tag}").start()
+        return memo[tag]
+    with _heavy_lock():
+        if memo.get(kk) != key:
+            memo[tag] = compute()
+            memo[kk] = key
+    return memo[tag]
+
+
 _SCAN_CACHE = _memo("scan")
 
 
@@ -1732,15 +1775,16 @@ def _scan_now(svc):
     bars, nifty_df = svc.bars()
     if not bars or nifty_df is None or nifty_df.empty:
         return None
-    key = (id(svc), svc.last_pass, len(bars))
-    if _SCAN_CACHE.get("k") != key:
-        S, session = _prepared(svc)
+    key = ((id(svc), SC.session_of(nifty_df)), svc.last_pass, len(bars))
+
+    def compute():
+        S, session = _prepared_now(svc)
         N = SC.Stock("NIFTY 50", nifty_df, session)
         rd = SC.radar(S, svc.oi())
         v3, _ = SC.version3(S, N if N.ok else None)
-        _SCAN_CACHE.clear()
-        _SCAN_CACHE.update(k=key, v=(rd, v3, session))
-    return _SCAN_CACHE["v"]
+        return rd, v3, session
+
+    return _fresh_or_last(_SCAN_CACHE, key, compute)
 
 
 def _names(df: pd.DataFrame, n: int = 3, side_col: str | None = None, extra: str | None = None) -> str:
@@ -4199,9 +4243,9 @@ def _activity_data(svc):
         return None
     session = SC.session_of(nifty_df) if nifty_df is not None and not nifty_df.empty else \
         max(df.index.normalize().max() for df in bars.values() if not df.empty)
-    key = (id(svc), svc.last_pass, svc.last_snap, len(bars), session)
-    hit = _ACT_CACHE.get("k") == key
-    if not hit:
+    key = ((id(svc), session), svc.last_pass, svc.last_snap, len(bars))
+
+    def compute():
         R, E, per = A.rank({s: SC.clean(df) for s, df in bars.items()}, session, svc.oi(), svc.snapshots(),
                            U.FNO_SECTOR_OF)
         if not R.empty:
@@ -4210,9 +4254,9 @@ def _activity_data(svc):
         if not E.empty:
             E["Symbol"] = E["Stock"] + ".NS"
             E["Candle"] = np.where(E["Candle"] == "Green", "Bullish", "Bearish")
-        _ACT_CACHE.clear()
-        _ACT_CACHE.update(k=key, v=(R, E, per, session))
-    return _ACT_CACHE["v"]
+        return R, E, per, session
+
+    return _fresh_or_last(_ACT_CACHE, key, compute)
 
 
 def page_activity(view: str = "Unusual activity"):
@@ -4922,11 +4966,21 @@ def _prepared(svc):
     """Per-stock day statistics for the loader's latest bars, built once per loader pass and shared by the radar,
     breakout and R-factor (each rebuild walks every stock's history)."""
     bars, nifty_df = svc.bars()
-    key = (id(svc), svc.last_pass, len(bars))
-    if _PREP_CACHE.get("k") != key:
-        session = SC.session_of(nifty_df)
-        _PREP_CACHE.update(k=key, v=(SC.prepare(bars, session), session))
-    return _PREP_CACHE["v"]
+    session = SC.session_of(nifty_df)
+    key = ((id(svc), session), svc.last_pass, len(bars))
+    return _fresh_or_last(_PREP_CACHE, key, lambda: (SC.prepare(bars, session), session))
+
+
+def _prepared_now(svc):
+    """_prepared for background jobs: always the loader's latest bars (builds them now if needed)."""
+    bars, nifty_df = svc.bars()
+    session = SC.session_of(nifty_df)
+    key = ((id(svc), session), svc.last_pass, len(bars))
+    with _heavy_lock():
+        if _PREP_CACHE.get("v_k") != key:
+            _PREP_CACHE["v"] = (SC.prepare(bars, session), session)
+            _PREP_CACHE["v_k"] = key
+        return _PREP_CACHE["v"]
 
 
 def smart_money_stocks(svc) -> tuple[pd.DataFrame, object]:
@@ -4937,10 +4991,9 @@ def smart_money_stocks(svc) -> tuple[pd.DataFrame, object]:
     if not bars or nifty_df is None or nifty_df.empty:
         return pd.DataFrame(), None
     S, session = _prepared(svc)
-    key = ("rf", id(svc), svc.last_pass, len(bars))
-    if _PREP_CACHE.get("rf_k") != key:
-        _PREP_CACHE.update(rf_k=key, rf=SC.r_factor(S, svc.oi() if hasattr(svc, "oi") else {}))
-    rf = _PREP_CACHE["rf"].copy()
+    key = ((id(svc), session), svc.last_pass, len(bars))
+    rf = _fresh_or_last(_PREP_CACHE, key, lambda: SC.r_factor(_prepared_now(svc)[0], svc.oi() if hasattr(svc, "oi")
+                                                              else {}), tag="rf").copy()
     if rf.empty:
         return rf, session
     rf = rf.drop(columns=["Buildup", "OI chg %", "Side", "Sector"], errors="ignore")

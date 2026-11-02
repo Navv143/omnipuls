@@ -50,8 +50,13 @@ def _clip1(x):
     return np.clip(np.nan_to_num(np.asarray(x, float), nan=0.0), -1, 1)
 
 
+_HHMM = np.array([f"{m // 60:02d}:{m % 60:02d}" for m in range(1440)], dtype=object)
+
+
 def _slot(idx) -> pd.Index:
-    return pd.Index(idx.strftime("%H:%M"))
+    """'HH:MM' of each timestamp (a table lookup: strftime was a large part of the first load of the day)."""
+    idx = pd.DatetimeIndex(idx)
+    return pd.Index(_HHMM[idx.hour * 60 + idx.minute], dtype=pd.StringDtype(na_value=np.nan))
 
 
 def _rsi(c: pd.Series, n=14) -> pd.Series:
@@ -78,10 +83,14 @@ def baseline(sym: str, hist: pd.DataFrame) -> dict | None:
     tp = (h["High"] + h["Low"] + h["Close"]) / 3
     frame = pd.DataFrame({"d": day, "s": slot, "v": h["Volume"].values, "t": (h["Volume"] * tp).values,
                           "r": (h["High"] - h["Low"]).values, "hi": h["High"].values, "lo": h["Low"].values})
-    piv = lambda col: frame.pivot_table(index="d", columns="s", values=col, aggfunc="sum").sort_index(axis=1)  # noqa
-    v, t, r = piv("v"), piv("t"), piv("r")
-    hi = frame.pivot_table(index="d", columns="s", values="hi", aggfunc="max").sort_index(axis=1)
-    lo = frame.pivot_table(index="d", columns="s", values="lo", aggfunc="min").sort_index(axis=1)
+    # One groupby for all five tables (pivot_table, one call per table, was most of the first load of the day).
+    # Same result: sums of only-missing values are 0, missing day/slot pairs stay NaN, all-missing columns dropped.
+    gb = frame.groupby(["d", "s"], sort=True)
+    sums = gb[["v", "t", "r"]].sum().unstack("s")
+    hl = gb.agg(hi=("hi", "max"), lo=("lo", "min")).unstack("s")
+    piv = lambda part, col: part[col].dropna(axis=1, how="all").sort_index(axis=1)  # noqa: E731
+    v, t, r = piv(sums, "v"), piv(sums, "t"), piv(sums, "r")
+    hi, lo = piv(hl, "hi"), piv(hl, "lo")
     rng_sofar = hi.cummax(axis=1) - lo.cummin(axis=1)
     # daily stats from all history (ATR needs 14 days, gaps need 20)
     g = hist.groupby(hist.index.normalize())
@@ -116,7 +125,8 @@ def fut_baseline(sym: str, fhist: pd.DataFrame) -> dict | None:
     day = f.index.normalize()
     d_oi = f["OI"].diff().where(day == pd.Series(day, index=f.index).shift(1).values)  # same-day changes only
     fr = pd.DataFrame({"d": day, "s": _slot(f.index), "x": d_oi.abs().values})
-    slot_abs = fr.pivot_table(index="d", columns="s", values="x", aggfunc="sum").tail(LOOKBACK).mean()
+    slot_abs = (fr.groupby(["d", "s"], sort=True)["x"].sum().unstack("s").dropna(axis=1, how="all")
+                .sort_index(axis=1).tail(LOOKBACK).mean())  # same as pivot_table(aggfunc="sum"), much faster
     last_oi = f.groupby(day)["OI"].last()
     daily_pct = (last_oi.pct_change() * 100).abs().dropna().tail(LOOKBACK)
     b = {"slot_abs": slot_abs, "daily_abs_pct": float(daily_pct.mean()) if len(daily_pct) else np.nan,
