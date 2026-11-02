@@ -970,10 +970,22 @@ def chart_data(sym: str, tf: str, period: str, interval: str):
         return h.dropna(subset=["Close"]), "Dhan"
     if tf == "25m":
         return None, "Yahoo"
-    df = fetch_history(sym, period, interval)
+    yahoo_down = time.time() < YAHOO_STATE["down_until"]
+    df = None if yahoo_down else fetch_history(sym, period, interval)
+    src = "Yahoo"
+    if (df is None or df.empty) and _twelve_key():  # Yahoo failed (common on cloud servers): Twelve Data
+        bars = {"5d": 7200, "1mo": 3000, "3mo": 1600, "1y": 260, "5y": 270, "max": 400}.get(period, 1500)
+        df = TW.history(sym, interval, _twelve_key(), bars)
+        if df is not None and not df.empty:
+            src = "Twelve Data"
+            if interval not in ("1d", "1wk", "1mo"):
+                df = df.copy()
+                df.index = df.index.tz_localize("UTC").tz_convert("Asia/Kolkata")
+    if df is None or df.empty:
+        return df, src
     if tf in RESAMPLED:
         df = resample_bars(df, RESAMPLED[tf], indian=str(sym).endswith((".NS", ".BO")) or str(sym).startswith("^NSE"))
-    return df, "Yahoo"
+    return df, src
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
@@ -5524,3 +5536,8 @@ st.session_state["_last_full"] = time.time()
 
 if DSTAT.get("error"):
     sb_status.caption(f":orange[{DSTAT['error'][:160]}]")
+elif _twelve_key() and time.time() < YAHOO_STATE["down_until"]:
+    _tw = TW.usage()
+    sb_status.caption(f"Yahoo not answering: global prices from Twelve Data ({_tw['loaded']} of {_tw['active']} "
+                      f"loaded, {_tw['used']}/{_tw['limit']} credits today"
+                      + (", paused until the daily reset at 05:30 IST" if _tw["paused"] else "") + ").")

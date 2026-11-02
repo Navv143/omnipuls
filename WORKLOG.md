@@ -110,6 +110,12 @@ Opening setups tab.
 - Module reload after a code update cleared every cache and the live feed whenever a file's time changed (OneDrive
   can touch files without changing them); now only when the content changes.
 - "Refresh now" retries Yahoo and Dhan straight away.
+- Twelve Data fallback (twelve.py): a background worker now loads the symbols pages ask for at 7 calls a minute
+  (before: at most 7 per page load, so 20 coins took several refreshes); refresh spacing stretches so the 800 daily
+  credits last until the reset at 05:30 IST (before: ~51 symbols every 10 min ran out in under 3 hours); "out of
+  credits for the day" pauses calls until the reset; symbols not on the plan are skipped for 6 hours. The Chart page
+  now falls back to Twelve Data for crypto, forex, gold and WTI when Yahoo fails. Sidebar shows loaded symbols and
+  credits used while Yahoo is down.
 
 ## 1 Nov 2026: Navv work shipped, Trading Desk, speed, Twelve Data, top menu
 
