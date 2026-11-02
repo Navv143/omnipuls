@@ -107,7 +107,9 @@ Opening setups tab.
 - Twelve Data and Crypto.com now map Yahoo's numbered coin names (TON11419-USD -> TON); they never matched before.
 
 **Open**
-- Supabase project not created yet (needs the user's go-ahead): create it, run supabase/schema.sql, add Secrets.
+- Supabase project `omnipuls` created (Mumbai, free plan, https://vtiumooustkzsqhqpkbr.supabase.co) with the
+  app_files table; checked that the public key sees 0 rows and cannot write. To do: put `[supabase] url` and the
+  secret key (Project Settings -> API Keys, sb_secret_...) in Streamlit Secrets, and merge this branch.
 
 ## 2 Nov 2026: scanner calculations off the page path, 3x faster
 
