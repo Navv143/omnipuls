@@ -102,3 +102,50 @@ def restore(path: Path) -> bool:
     except Exception as e:
         STATUS["error"] = f"restore {path.name}: {e}"[:200]
         return False
+
+
+# ---------------------------------------------------------------- tables of rows (signal log)
+
+
+def upsert_rows(table: str, rows: list[dict], on_conflict: str):
+    """Add rows to a table in the background; a row whose `on_conflict` columns match one already there replaces it
+    (so a checkpoint logged again after a restart is not stored twice)."""
+    if not enabled() or not rows:
+        return
+
+    def run():
+        try:
+            r = requests.post(f"{_cfg['url']}/rest/v1/{table}", params={"on_conflict": on_conflict},
+                              headers=_headers({"Prefer": "resolution=merge-duplicates,return=minimal"}),
+                              data=json.dumps(rows), timeout=TIMEOUT)
+            if r.status_code >= 300:
+                raise RuntimeError(f"Supabase {table}: {r.status_code} {r.text[:150]}")
+            STATUS.update(error="", last_save=time.time())
+            STATUS["saved"] += 1
+        except Exception as e:
+            STATUS["error"] = str(e)[:200]
+
+    threading.Thread(target=run, daemon=True, name=f"cloudstore-{table}").start()
+
+
+def select_rows(table: str, params: dict | None = None, page: int = 1000, max_rows: int = 50000) -> list[dict] | None:
+    """All rows matching PostgREST `params` (e.g. {"date": "gte.2026-11-01", "order": "id"}), page by page; None when
+    Supabase is not configured or can't be reached."""
+    if not enabled():
+        return None
+    out = []
+    try:
+        while len(out) < max_rows:
+            r = requests.get(f"{_cfg['url']}/rest/v1/{table}", params={**(params or {}), "limit": page,
+                                                                        "offset": len(out)},
+                             headers=_headers(), timeout=TIMEOUT)
+            if r.status_code >= 300:
+                raise RuntimeError(f"Supabase {table}: {r.status_code} {r.text[:150]}")
+            part = r.json()
+            out += part
+            if len(part) < page:
+                return out
+        return out
+    except Exception as e:
+        STATUS["error"] = str(e)[:200]
+        return None
