@@ -95,6 +95,16 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 2 Nov 2026: Trading Desk signals saved to Supabase
+
+- `desk_log.save` also writes every row to the Supabase `desk_log` table (the six desk checkpoints, CE/PE focus,
+  index plans, opening setups, Bank Nifty 5-STAR and fade, Gold Order Flow paper trades). One row per
+  (date, checkpoint, kind, name, side): a checkpoint logged again after a restart replaces the first copy.
+  `desk_log.load` (Desk review page) reads it back, so the history survives restarts. Table created in the
+  `omnipuls` project; public key sees 0 rows. Tested end to end against a stand-in API.
+- Rows are written when the Trading Desk is open at or after each checkpoint (as before): if nobody opens the app
+  that day, nothing is logged.
+
 ## 2 Nov 2026: Supabase storage and Crypto.com prices
 
 **Built**

@@ -18,3 +18,24 @@ end $$;
 drop trigger if exists app_files_touch on public.app_files;
 create trigger app_files_touch before update on public.app_files
   for each row execute function public.app_files_touch();
+
+-- Trading Desk signal log (desk_log.py): the six daily desk checkpoints and the paper trades. One row per
+-- (date, checkpoint, kind, name, side), so a checkpoint logged again after an app restart replaces the first copy.
+create table if not exists public.desk_log (
+  id bigint generated always as identity primary key,
+  date text not null,
+  checkpoint text not null,
+  logged_at text not null default '',
+  kind text not null,
+  name text not null,
+  side text not null default '',
+  price double precision,
+  chg_pct double precision,
+  score double precision,
+  why text not null default '',
+  extra text not null default '',
+  inserted_at timestamptz not null default now(),
+  unique (date, checkpoint, kind, name, side)
+);
+alter table public.desk_log enable row level security;
+create index if not exists desk_log_date on public.desk_log (date);

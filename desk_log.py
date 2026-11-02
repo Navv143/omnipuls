@@ -19,12 +19,47 @@ from pathlib import Path
 
 import requests
 
+import cloudstore
+
 HERE = Path(__file__).resolve().parent
 LOCAL = HERE / "desk_log.csv"
 CHECKS = ("09:20", "09:45", "10:30", "12:00", "13:30", "15:00")
 FIELDS = ["date", "check", "logged_at", "kind", "name", "side", "price", "chg_pct", "score", "why", "extra"]
 _lock = threading.Lock()
 STATUS = {"last": "", "error": ""}
+TABLE = "desk_log"  # Supabase copy (supabase/schema.sql); "check" is a reserved word in SQL, so it is "checkpoint" there
+KEY = "date,checkpoint,kind,name,side"
+NUMERIC = ("price", "chg_pct", "score")
+
+
+def _num(v):
+    try:
+        return None if v in ("", None) else float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _dedupe(rows: list[dict]) -> list[dict]:
+    """One row per key in a batch (Postgres refuses a batch that hits the same key twice): two opening setups on
+    the same stock and side become one row naming both."""
+    out: dict = {}
+    for r in rows:
+        k = tuple(r[c] for c in KEY.split(","))
+        if k in out and r["why"] and r["why"] not in out[k]["why"]:
+            out[k] = {**r, "why": out[k]["why"] + " | " + r["why"]}
+        else:
+            out[k] = r
+    return list(out.values())
+
+
+def _to_db(r: dict) -> dict:
+    d = {k: r.get(k, "") for k in FIELDS}
+    d["checkpoint"] = str(d.pop("check"))
+    for k in NUMERIC:
+        d[k] = _num(d[k])
+    for k in ("date", "logged_at", "kind", "name", "side", "why", "extra"):
+        d[k] = "" if d[k] is None else str(d[k])  # never NULL: the duplicate check needs real values
+    return d
 
 
 def due(now: datetime, done: set) -> str | None:
@@ -85,7 +120,7 @@ def _github_append(rows: list[dict], cfg: dict):
 
 
 def save(rows: list[dict], github: dict | None):
-    """Write locally now and to GitHub in the background (the page never waits on it)."""
+    """Write locally now, and to Supabase and GitHub in the background (the page never waits on either)."""
     if not rows:
         return
     with _lock:
@@ -93,6 +128,7 @@ def save(rows: list[dict], github: dict | None):
         with LOCAL.open("a", encoding="utf-8", newline="") as fh:
             fh.write(_to_csv(rows, header=new))
     STATUS["last"] = f"{rows[0]['date']} {rows[0]['check']}"
+    cloudstore.upsert_rows(TABLE, _dedupe([_to_db(r) for r in rows]), KEY)
     if github and github.get("token"):
         def run():
             try:
@@ -104,9 +140,14 @@ def save(rows: list[dict], github: dict | None):
 
 
 def load(github: dict | None) -> "pd.DataFrame":
-    """Every logged row: the GitHub `logs` branch (all months) when a token is set, plus this machine's file."""
+    """Every logged row: Supabase and/or the GitHub `logs` branch (all months) when set up, plus this machine's
+    file."""
     import pandas as pd
     frames = []
+    db = cloudstore.select_rows(TABLE, {"select": ",".join([f for f in FIELDS if f != "check"] + ["checkpoint"]),
+                                        "order": "id"})
+    if db:
+        frames.append(pd.DataFrame(db).rename(columns={"checkpoint": "check"})[FIELDS])
     if github and github.get("token"):
         repo, branch = github.get("repo", "Navv143/omnipuls"), github.get("branch", "logs")
         h = {"Authorization": f"Bearer {github['token']}", "Accept": "application/vnd.github+json"}
