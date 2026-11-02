@@ -95,6 +95,22 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 2 Nov 2026: slow app and repeated refreshing fixed
+
+**Fixed**
+- Yahoo "skip 15 min after a failure" never worked: its state was a plain dict in app.py, reset on every rerun, so
+  every refresh waited on Yahoo again when it was limiting the server. Now kept across reruns (Global page refresh
+  with Yahoo down: 6.6 s -> 0.7 s).
+- Dhan unreachable: the token check was retried on every page load (up to ~1 min with retries). Now it waits 2 min
+  after a network failure; new credentials are checked at once (refresh with Dhan down: 4.1 s -> 0.6 s).
+- Auto-refresh: whole-page reruns could be as often as every 5 s (default 10-60 s). Now 30 s minimum, default 2 min
+  (5 min on the cloud); off on Account, Dhan Connect, Research and Desk review (it interrupted typing); paused outside
+  NSE hours on Indian-only pages. Scanners / Smart Money / activity sections: every minute in market hours, 5 min
+  otherwise. Live prices still stream tick by tick.
+- Module reload after a code update cleared every cache and the live feed whenever a file's time changed (OneDrive
+  can touch files without changing them); now only when the content changes.
+- "Refresh now" retries Yahoo and Dhan straight away.
+
 ## 1 Nov 2026: Navv work shipped, Trading Desk, speed, Twelve Data, top menu
 
 **Built and shipped**
