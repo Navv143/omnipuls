@@ -390,8 +390,11 @@ function onTicks(upd) {
 }
 function connect() {
   if (!wsPort) return;
-  try { ws = new WebSocket(`ws://${location.hostname || "127.0.0.1"}:${wsPort}`); } catch (e) { return; }
-  ws.onopen = () => ws.send(JSON.stringify({keys: Object.keys(byKey)}));
+  // HTTPS (public server): the same address, /ticks, which the web server passes to the relay; else its own port
+  const url = location.protocol === "https:" ? `wss://${location.host}/ticks`
+                                             : `ws://${location.hostname || "127.0.0.1"}:${wsPort}`;
+  try { ws = new WebSocket(url); } catch (e) { return; }
+  ws.onopen = () => ws.send(JSON.stringify({key: (A && A.wskey) || "", keys: Object.keys(byKey)}));
   ws.onmessage = (e) => { try { onTicks(JSON.parse(e.data)); } catch (err) {} };
   ws.onclose = () => { ws = null; setTimeout(connect, 2000); };
 }
@@ -415,7 +418,7 @@ window.addEventListener("message", (e) => {
   render();
   if (args.ticks && Object.keys(args.ticks).length) onTicks(args.ticks);
   if (args.port && args.port !== wsPort) { wsPort = args.port; if (ws) ws.close(); else connect(); }
-  else if (ws && ws.readyState === 1) ws.send(JSON.stringify({keys: Object.keys(byKey)}));
+  else if (ws && ws.readyState === 1) ws.send(JSON.stringify({key: A.wskey || "", keys: Object.keys(byKey)}));
   if (first) fit();
 });
 const root = document.getElementById("root");

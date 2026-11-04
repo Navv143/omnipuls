@@ -255,6 +255,9 @@ def _is_public() -> bool:
 
 
 PUBLIC = _is_public()
+# Live ticks straight to the browser even on a public server (needs the HTTPS web server that passes /ticks to the
+# relay: deploy/docker-compose.cloud.yml). Without it a public server sends prices every few seconds instead.
+TICKS = os.environ.get("OMNIPULS_TICKS") == "1"
 SECRETS_HELP = "Streamlit Cloud → your app → ⋮ → Settings → Secrets"
 
 
@@ -1681,7 +1684,7 @@ def live(kind: str, items: list, key: str, **kw):
     (Streamlit Cloud) that port isn't reachable, so the widget is re-sent the latest ticks every 3-6 seconds."""
     keys = sorted({it["k"] for it in items if it.get("k")})
     kw.setdefault("chart_url", f"chart?sym=@SYM@&t={auth.link_token(USER['id'], _link_secret())}")
-    if FEED is not None and PUBLIC and keys:
+    if FEED is not None and PUBLIC and not TICKS and keys:
         every = 3.0 if len(items) <= 60 else 6.0
 
         @st.fragment(run_every=every)
@@ -1698,7 +1701,7 @@ def live(kind: str, items: list, key: str, **kw):
         _polled()
         return None
     val = _live(kind=kind, items=items, port=(FEED.relay_port if FEED is not None else 0), key=key, default=None,
-                style=LAYOUT, **kw)
+                style=LAYOUT, wskey=getattr(FEED, "relay_key", ""), **kw)
     if _clicked(val, key):
         st.session_state.pop("goto", None)
         st.switch_page(P["chart"])
@@ -5736,7 +5739,7 @@ if _goto in P and getattr(nav, "url_path", "") != _goto:
 
 _BOOT.empty()
 st.session_state["_booted"] = True
-if DHAN_DATA and PUBLIC:  # record option chains on the cloud copy only (one recorder, one GitHub log)
+if DHAN_DATA and PUBLIC and os.environ.get("OMNIPULS_RECORDER") != "1":  # Docker: recorder.py records instead
     try:
         _chain_recorder()
     except Exception:

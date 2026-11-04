@@ -8,7 +8,9 @@ several times a second.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import os
+import secrets
 import json
 import socket
 import struct
@@ -147,6 +149,7 @@ class DhanFeed:
         self.fatal = False
         self.started = time.time()
         self.relay_port = int(os.environ.get("OMNIPULS_RELAY_PORT") or 0) or _free_port()  # fixed in Docker
+        self.relay_key = secrets.token_urlsafe(18)  # only pages the app drew (signed-in users) know it
         self._stop = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._ws = None
@@ -314,6 +317,9 @@ class DhanFeed:
                         req = json.loads(msg)
                     except ValueError:
                         continue
+                    if not hmac.compare_digest(str(req.get("key") or ""), self.relay_key):
+                        await ws.close(code=4001, reason="not signed in")  # on a public server: no ticks for strangers
+                        return
                     keys = set(req.get("keys") or [])
                     self._clients[ws] = keys
                     snap = {k: self._compact(self.ticks[k]) for k in keys if k in self.ticks and self.ticks[k].get("ltp")}

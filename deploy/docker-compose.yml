@@ -26,6 +26,7 @@ services:
       OMNIPULS_DATA: /app/data
       OMNIPULS_PUBLIC: "0"          # office network: live prices tick by tick
       OMNIPULS_RELAY_PORT: "8765"
+      OMNIPULS_RECORDER: "1"        # recorder.py records option chains, so the app doesn't as well
       TZ: Asia/Kolkata
     ports:
       - "${APP_PORT:-8501}:8501"    # the app:            http://<server>:8501

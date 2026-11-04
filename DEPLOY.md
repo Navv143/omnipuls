@@ -1,5 +1,7 @@
 # Omnipuls on the office server (Docker)
 
+**Renting a cloud server with your own domain instead? Follow HOSTINGER.md** (HTTPS, live ticks, one setup script).
+
 Three services run from one image:
 
 | Service | What it does |
