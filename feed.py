@@ -8,6 +8,7 @@ several times a second.
 from __future__ import annotations
 
 import asyncio
+import os
 import json
 import socket
 import struct
@@ -145,7 +146,7 @@ class DhanFeed:
         self.connected_at = 0.0
         self.fatal = False
         self.started = time.time()
-        self.relay_port = _free_port()
+        self.relay_port = int(os.environ.get("OMNIPULS_RELAY_PORT") or 0) or _free_port()  # fixed in Docker
         self._stop = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._ws = None

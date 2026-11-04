@@ -19,8 +19,9 @@ import time
 from pathlib import Path
 
 import requests
+import paths
 
-CACHE = Path(__file__).with_name("index_cache.json")
+CACHE = paths.state("index_cache.json")
 AS_OF = "29 Oct 2026"
 
 # key -> (display name, Dhan IDX_I security id, NSE API name, NSE constituent CSV names)

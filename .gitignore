@@ -35,3 +35,6 @@ research/results/*_log.txt
 activity_history/
 index_cache.json
 desk_log.csv
+
+# Docker / office server
+market_data/

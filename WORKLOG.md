@@ -95,6 +95,27 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 4 Nov 2026: market data recorder, Docker for the office server, Today's plan card
+
+**Built**
+- "Today's plan" card at the top of the Trading Desk: only the tested setups, each signal / waiting / none with entry,
+  stop and target, and a plain "no trade" when none fired; the rest is labelled "Market context" (untested).
+- `recorder.py`: 1-minute candles after each close (indices, all F&O stocks, stock + index futures near/next with OI,
+  Nifty / Bank Nifty options 2 expiries x 15 strikes each side with OI), option chains of 5 indices every minute
+  (IV, greeks, bid/ask, OI) and full quotes of every instrument every minute (buy/sell quantity), as Parquet in
+  market_data/. Backfills missed candle days; skips holidays; shares the Dhan token with the app via
+  dhan_config.json (the app now adopts a newer saved token instead of fighting it). Tested against a simulated
+  Dhan API (candles with OI, options, chains with one index failing, quotes, daily join, holiday, token renewal).
+- `paths.py` + OMNIPULS_STATE: all files the app writes can live in one folder outside the code (default unchanged).
+- Docker: `Dockerfile`, `deploy/docker-compose.yml` (app on 8501 + tick relay 8765, recorder, updater pulling `main`
+  every 5 minutes), `DEPLOY.md`. Built and run here: app healthy and renders, accounts saved to the state volume,
+  recorder waits for Dhan; updater tested on a local repo.
+
+**Open**
+- One-time setup on the office server (10.195.82.89) by someone who can log in: DEPLOY.md. Not reachable from the
+  cloud session (private address).
+- After it runs: remove pin / totp_secret from the Streamlit Cloud Secrets (one Dhan token at a time).
+
 ## 2 Nov 2026: Trading Desk signals saved to Supabase
 
 - `desk_log.save` also writes every row to the Supabase `desk_log` table (the six desk checkpoints, CE/PE focus,

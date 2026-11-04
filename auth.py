@@ -22,10 +22,11 @@ from datetime import datetime
 from pathlib import Path
 
 import cloudstore
+import paths
 
 HERE = Path(__file__).resolve().parent
-USERS_FILE = HERE / "users.json"
-STATE_FILE = HERE / "user_state.json"
+USERS_FILE = paths.state("users.json")
+STATE_FILE = paths.state("user_state.json")
 ITERATIONS = 240_000
 MAX_FAILS, LOCK_SECONDS = 5, 300
 ROLES = ("admin", "user")

@@ -20,9 +20,10 @@ from pathlib import Path
 import requests
 
 import cloudstore
+import paths
 
 HERE = Path(__file__).resolve().parent
-LOCAL = HERE / "desk_log.csv"
+LOCAL = paths.state("desk_log.csv")
 CHECKS = ("09:20", "09:45", "10:30", "12:00", "13:30", "15:00")
 FIELDS = ["date", "check", "logged_at", "kind", "name", "side", "price", "chg_pct", "score", "why", "extra"]
 _lock = threading.Lock()

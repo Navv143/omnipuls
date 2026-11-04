@@ -20,10 +20,11 @@ from pathlib import Path
 import pandas as pd
 
 import dhan as D
+import paths
 
 IST = timezone(timedelta(hours=5, minutes=30))
-CACHE = Path(__file__).with_name("scan_cache")
-SNAP_HIST = Path(__file__).with_name("activity_history")
+CACHE = paths.state("scan_cache")
+SNAP_HIST = paths.state("activity_history")
 NIFTY = "__NIFTY__"
 VERSION = 3  # bump when ScanService changes, so a running app replaces its old loader
 INSTANCES: list = []
