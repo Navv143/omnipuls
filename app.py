@@ -166,40 +166,55 @@ st.logo(str(ASSETS / "omnipuls_logo.png"), icon_image=str(ASSETS / "omnipuls_mar
 st.markdown(
     """
 <style>
+  /* ---------- Omnipuls design tokens: every colour, size and corner in the app comes from here ---------- */
+  :root {
+    --om-bg:#0B1220; --om-surface:#121C2E; --om-surface-2:#162238; --om-sunken:#101A2B;
+    --om-border:#22314A; --om-border-soft:#1C2A42; --om-border-strong:#2A3A56;
+    --om-text:#E6EDF7; --om-text-2:#C9D6EA; --om-text-3:#AFC0DA; --om-muted:#8EA1BF; --om-faint:#7F93B2;
+    --om-up:#26A69A; --om-down:#EF5350; --om-warn:#E8B33A; --om-accent:#3B82F6; --om-neutral:#94A3B8;
+    --om-up-soft:rgba(38,166,154,.16); --om-down-soft:rgba(239,83,80,.16); --om-accent-soft:rgba(59,130,246,.16);
+    --fs-2xs:.68rem; --fs-xs:.74rem; --fs-sm:.85rem; --fs-md:.95rem; --fs-lg:1.15rem; --fs-xl:1.35rem;
+    --fs-2xl:1.75rem; --fs-3xl:2.1rem;
+    --r-sm:8px; --r-md:12px; --r-lg:16px; --r-pill:999px;
+    --font-num:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  html, body, [data-testid="stAppViewContainer"] {font-feature-settings:"tnum" 1, "cv11" 1;}
+  [data-testid="stDataFrame"], [data-testid="stTable"], .cell, .tape {font-variant-numeric: tabular-nums;}
+  h1, h2, h3 {letter-spacing:-.01em;}
   .block-container {padding-top: 1.4rem; padding-bottom: 2rem;}
-  [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums; font-size: 1.35rem;}
-  [data-testid="stMetricLabel"] p {font-size: .76rem; letter-spacing: .05em; text-transform: uppercase; opacity: .78;}
+  [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums; font-size:var(--fs-xl);}
+  [data-testid="stMetricLabel"] p {font-size:var(--fs-xs); letter-spacing: .05em; text-transform: uppercase; opacity: .78;}
   .status-row {display:flex; flex-wrap:wrap; gap:.45rem; margin:.1rem 0 .8rem;}
-  .pill {padding:.16rem .6rem; border-radius:999px; font-size:.76rem; border:1px solid rgba(128,128,128,.35);}
-  .pill.open {color:#26A69A; border-color:#26A69A;}
-  .pill.closed {color:#EF5350; border-color:#EF5350;}
-  .pill.pre {color:#E8B33A; border-color:#E8B33A;}
-  .big-price {font-size:2.1rem; font-weight:700; font-variant-numeric: tabular-nums; line-height:1.1;}
-  .chg-up {color:#26A69A; font-weight:600;} .chg-down {color:#EF5350; font-weight:600;}
-  .muted {opacity:.65; font-size:.85rem;}
+  .pill {padding:.16rem .6rem; border-radius:999px; font-size:var(--fs-xs); border:1px solid rgba(128,128,128,.35);}
+  .pill.open {color:var(--om-up); border-color:var(--om-up);}
+  .pill.closed {color:var(--om-down); border-color:var(--om-down);}
+  .pill.pre {color:var(--om-warn); border-color:var(--om-warn);}
+  .big-price {font-size:var(--fs-3xl); font-weight:700; font-variant-numeric: tabular-nums; line-height:1.1;}
+  .chg-up {color:var(--om-up); font-weight:600;} .chg-down {color:var(--om-down); font-weight:600;}
+  .muted {opacity:.65; font-size:var(--fs-sm);}
   .tape {overflow:hidden; white-space:nowrap; border-block:1px solid rgba(128,128,128,.25);
          padding:.45rem 0; margin-bottom:1rem; mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);}
   .tape-track {display:inline-block; animation: tape 45s linear infinite; font-variant-numeric: tabular-nums;}
   .tape:hover .tape-track {animation-play-state: paused;}
-  .tape-item {display:inline-block; margin-right:2.2rem; font-size:.92rem;}
+  .tape-item {display:inline-block; margin-right:2.2rem; font-size:var(--fs-md);}
   .tape-item b {margin-right:.4rem;}
   @keyframes tape {from {transform: translateX(0);} to {transform: translateX(-50%);}}
   @media (prefers-reduced-motion: reduce) {.tape-track {animation: none;}}
-  .live-dot {display:inline-block; width:.5rem; height:.5rem; border-radius:50%; background:#26A69A;
+  .live-dot {display:inline-block; width:.5rem; height:.5rem; border-radius:50%; background:var(--om-up);
              margin-right:.35rem; animation: pulse 1.6s ease-in-out infinite;}
   @keyframes pulse {50% {opacity:.25;}}
   .bbar {display:flex; height:8px; border-radius:4px; overflow:hidden; margin-top:.55rem; background:rgba(128,128,128,.2);}
   .bbar span {display:block; height:100%;}
   .bbar.big {height:12px; margin:.2rem 0 .4rem;}
   .cell {padding-top:.45rem; font-variant-numeric: tabular-nums;}
-  .hdr {font-size:.72rem; letter-spacing:.05em; text-transform:uppercase; opacity:.6;}
+  .hdr {font-size:var(--fs-xs); letter-spacing:.05em; text-transform:uppercase; opacity:.6;}
   /* ---------- phones and small tablets ---------- */
   @media (max-width: 640px) {
     .block-container {padding: .8rem .7rem 3rem !important;}
-    h1 {font-size: 1.55rem !important;} h2 {font-size: 1.25rem !important;} h3 {font-size: 1.08rem !important;}
-    [data-testid="stMetricValue"] {font-size: 1.1rem;}
-    .big-price {font-size: 1.7rem;}
-    .status-row {gap:.3rem;} .pill {font-size:.68rem; padding:.12rem .5rem;}
+    h1 {font-size:1.55rem !important;} h2 {font-size:var(--fs-xl) !important;} h3 {font-size:1.08rem !important;}
+    [data-testid="stMetricValue"] {font-size:1.1rem;}
+    .big-price {font-size:1.7rem;}
+    .status-row {gap:.3rem;} .pill {font-size:var(--fs-2xs); padding:.12rem .5rem;}
     /* metric cards: two per row instead of one long column */
     [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [data-testid="stMetric"]) {
       flex-wrap: wrap !important; gap: .5rem !important; }
@@ -210,10 +225,10 @@ st.markdown(
     [class*="st-key-rows_"] [data-testid="stHorizontalBlock"] {flex-wrap: nowrap !important; gap: .35rem !important;}
     [class*="st-key-rows_"] [data-testid="stColumn"] {min-width: 0 !important;}
     [class*="st-key-rows_wide"] [data-testid="stHorizontalBlock"] {min-width: 760px;}
-    [class*="st-key-rows_"] .cell, [class*="st-key-rows_"] p, [class*="st-key-rows_"] button {font-size: .82rem !important;}
+    [class*="st-key-rows_"] .cell, [class*="st-key-rows_"] p, [class*="st-key-rows_"] button {font-size:var(--fs-sm) !important;}
   }
   /* ---------- sign-in screen ---------- */
-  .signin-note {opacity:.7; font-size:.85rem;}
+  .signin-note {opacity:.7; font-size:var(--fs-sm);}
 </style>
 """,
     unsafe_allow_html=True,
@@ -1839,48 +1854,48 @@ def _names(df: pd.DataFrame, n: int = 3, side_col: str | None = None, extra: str
 
 DESK_CSS = """
 <style>
-.dk-hero{border:1px solid #22314A;border-radius:16px;padding:18px 22px;margin:4px 0 14px;
-  background:radial-gradient(120% 140% at 0% 0%,var(--dk-glow) 0%,rgba(19,29,47,.0) 55%),linear-gradient(180deg,#121C2E,#0E1626)}
+.dk-hero{border:1px solid var(--om-border);border-radius:var(--r-lg);padding:18px 22px;margin:4px 0 14px;
+  background:radial-gradient(120% 140% at 0% 0%,var(--dk-glow) 0%,rgba(19,29,47,.0) 55%),linear-gradient(180deg,var(--om-surface),var(--om-sunken))}
 .dk-row{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between}
-.dk-kicker{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:#7F93B2}
-.dk-verdict{font-size:2.1rem;font-weight:800;line-height:1.1;color:var(--dk-c)}
-.dk-score{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:1.6rem;font-weight:700;color:var(--dk-c);text-align:right}
-.dk-desc{color:#C9D6EA;font-size:.92rem;margin-top:4px;max-width:640px}
-.dk-scale-note{font-family:Sora,sans-serif;font-size:.74rem;font-weight:400;color:#7F93B2}
+.dk-kicker{font-size:var(--fs-xs);letter-spacing:.14em;text-transform:uppercase;color:var(--om-faint)}
+.dk-verdict{font-size:var(--fs-3xl);font-weight:800;line-height:1.1;color:var(--dk-c)}
+.dk-score{font-family:var(--font-num);font-size:var(--fs-2xl);font-weight:700;color:var(--dk-c);text-align:right}
+.dk-desc{color:var(--om-text-2);font-size:var(--fs-md);margin-top:4px;max-width:640px}
+.dk-scale-note{font-size:var(--fs-xs);font-weight:400;color:var(--om-faint)}
 .dk-scale{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}
-.dk-band{border:1px solid #22314A;border-radius:8px;padding:6px 8px;background:#101A2B;text-align:center;font-size:.74rem;color:#8EA1BF;line-height:1.3}
-.dk-band b{display:block;font-weight:600;color:#AFC0DA}
-.dk-band span{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.72rem}
-.dk-band.on{border-color:var(--b);background:color-mix(in srgb,var(--b) 18%,#101A2B);color:#E6EDF7}
+.dk-band{border:1px solid var(--om-border);border-radius:var(--r-sm);padding:6px 8px;background:var(--om-sunken);text-align:center;font-size:var(--fs-xs);color:var(--om-muted);line-height:1.3}
+.dk-band b{display:block;font-weight:600;color:var(--om-text-3)}
+.dk-band span{font-family:var(--font-num);font-size:var(--fs-xs)}
+.dk-band.on{border-color:var(--b);background:color-mix(in srgb,var(--b) 18%,var(--om-sunken));color:var(--om-text)}
 .dk-band.on b{color:var(--b)}
-@media (max-width:640px){.dk-scale{grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}.dk-band{padding:4px 2px;font-size:.62rem}.dk-band span{font-size:.6rem}}
+@media (max-width:640px){.dk-scale{grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}.dk-band{padding:4px 2px;font-size:var(--fs-2xs)}.dk-band span{font-size:.6rem}}
 .dk-gauge{position:relative;height:8px;border-radius:6px;margin:12px 0 6px;
-  background:linear-gradient(90deg,#EF5350 0%,#3A475E 50%,#26A69A 100%)}
+  background:linear-gradient(90deg,var(--om-down) 0%,#3A475E 50%,var(--om-up) 100%)}
 .dk-gauge i{position:absolute;top:-5px;width:4px;height:18px;border-radius:2px;background:#fff;box-shadow:0 0 8px #fff}
 .dk-parts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.dk-chip{font-size:.78rem;padding:4px 10px;border-radius:999px;border:1px solid #2A3A56;background:#162238;color:#C9D6EA}
+.dk-chip{font-size:var(--fs-sm);padding:4px 10px;border-radius:999px;border:1px solid var(--om-border-strong);background:var(--om-surface-2);color:var(--om-text-2)}
 .dk-chip b{color:var(--c)}
 .dk-idx{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
-.dk-card{border:1px solid #22314A;border-radius:12px;padding:10px 12px;background:#121C2E}
-.dk-card .n{font-size:.75rem;color:#8EA1BF;letter-spacing:.04em}
-.dk-card .p{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:1.15rem;font-weight:700;color:#E6EDF7}
-.dk-card .c{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.85rem}
-.dk-plan{border:1px solid #22314A;border-left:4px solid var(--c);border-radius:12px;padding:12px 14px;background:#121C2E;
+.dk-card{border:1px solid var(--om-border);border-radius:var(--r-md);padding:10px 12px;background:var(--om-surface)}
+.dk-card .n{font-size:var(--fs-xs);color:var(--om-muted);letter-spacing:.04em}
+.dk-card .p{font-family:var(--font-num);font-size:var(--fs-lg);font-weight:700;color:var(--om-text)}
+.dk-card .c{font-family:var(--font-num);font-size:var(--fs-sm)}
+.dk-plan{border:1px solid var(--om-border);border-left:4px solid var(--c);border-radius:var(--r-md);padding:12px 14px;background:var(--om-surface);
   margin-bottom:10px}
 .dk-plan .h{display:flex;justify-content:space-between;align-items:baseline}
-.dk-plan .side{font-weight:800;font-size:1.25rem;color:var(--c)}
-.dk-plan .t{color:#AFC0DA;font-size:.86rem;margin-top:4px}
-.dk-list{border:1px solid #22314A;border-radius:14px;overflow:hidden;background:#101A2B}
-.dk-list .hd{padding:10px 14px;font-weight:700;letter-spacing:.06em;font-size:.82rem;
-  background:linear-gradient(90deg,var(--c) -400%,#16233A 60%);color:#E6EDF7;display:flex;justify-content:space-between}
-.dk-item{padding:10px 14px;border-top:1px solid #1C2A42}
+.dk-plan .side{font-weight:800;font-size:var(--fs-xl);color:var(--c)}
+.dk-plan .t{color:var(--om-text-3);font-size:var(--fs-sm);margin-top:4px}
+.dk-list{border:1px solid var(--om-border);border-radius:var(--r-md);overflow:hidden;background:var(--om-sunken)}
+.dk-list .hd{padding:10px 14px;font-weight:700;letter-spacing:.06em;font-size:var(--fs-sm);
+  background:linear-gradient(90deg,var(--c) -400%,var(--om-surface-2) 60%);color:var(--om-text);display:flex;justify-content:space-between}
+.dk-item{padding:10px 14px;border-top:1px solid var(--om-border-soft)}
 .dk-item .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.dk-item .s{font-weight:700;color:#E6EDF7}
-.dk-item .num{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.85rem;color:#C9D6EA}
-.dk-item .why{font-size:.76rem;color:#8EA1BF;margin-top:3px}
-.dk-dots{letter-spacing:2px;color:var(--c);font-size:.8rem}
-.dk-empty{padding:14px;color:#7F93B2;font-size:.85rem}
-.dk-note{border:1px solid #2A3A56;border-radius:14px;padding:14px 18px;background:#121C2E}
+.dk-item .s{font-weight:700;color:var(--om-text)}
+.dk-item .num{font-family:var(--font-num);font-size:var(--fs-sm);color:var(--om-text-2)}
+.dk-item .why{font-size:var(--fs-xs);color:var(--om-muted);margin-top:3px}
+.dk-dots{letter-spacing:2px;color:var(--c);font-size:var(--fs-sm)}
+.dk-empty{padding:14px;color:var(--om-faint);font-size:var(--fs-sm)}
+.dk-note{border:1px solid var(--om-border-strong);border-radius:var(--r-md);padding:14px 18px;background:var(--om-surface)}
 .dk-note p{margin:.25rem 0}
 </style>
 """
@@ -5640,23 +5655,26 @@ def _sign_out():
 
 
 MV_CSS = """<style>
-.mv-idea{border-radius:14px;padding:16px 18px;margin:4px 0 16px;border:1px solid var(--mvc);
+.mv-idea{border-radius:var(--r-md);padding:16px 18px;margin:4px 0 16px;border:1px solid var(--mvc);
   background:linear-gradient(135deg,var(--mvg),transparent 70%)}
-.mv-idea .k{font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
-.mv-idea h3{margin:.15rem 0 .4rem;font-size:1.3rem;color:var(--mvc)}
-.mv-idea p{margin:.25rem 0;font-size:.95rem;line-height:1.45}
+.mv-idea .k{font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+.mv-idea h3{margin:.15rem 0 .4rem;font-size:var(--fs-xl);color:var(--mvc)}
+.mv-idea p{margin:.25rem 0;font-size:var(--fs-md);line-height:1.45}
 .mv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;margin:6px 0 10px}
-.mv-card{border:1px solid rgba(148,163,184,.22);border-left:4px solid var(--mvc);border-radius:12px;
+.mv-card{border:1px solid rgba(148,163,184,.22);border-left:4px solid var(--mvc);border-radius:var(--r-md);
   padding:12px 14px;background:rgba(148,163,184,.06)}
-.mv-card .t{font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;opacity:.8;display:flex;
+.mv-card .t{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.05em;opacity:.8;display:flex;
   justify-content:space-between;align-items:center;gap:8px}
-.mv-card .v{font-size:1.35rem;font-weight:600;margin:3px 0 1px;color:var(--mvc)}
-.mv-card .d{font-size:.78rem;opacity:.72}
-.mv-card .m{font-size:.9rem;margin-top:8px;line-height:1.45}
-.mv-ev{font-size:.66rem;padding:1px 8px;border-radius:999px;border:1px solid var(--evc);color:var(--evc);
+.mv-card .v{font-size:var(--fs-xl);font-weight:600;margin:3px 0 1px;color:var(--mvc)}
+.mv-card .d{font-size:var(--fs-sm);opacity:.72}
+.mv-card .m{font-size:var(--fs-sm);margin-top:8px;line-height:1.45;color:var(--om-text-2)}
+.mv-pt{padding-left:14px;position:relative;margin-top:3px}
+.mv-pt:before{content:"›";position:absolute;left:2px;color:var(--om-faint)}
+.mv-pt.lead{font-weight:600;color:var(--om-text);font-size:var(--fs-md)}
+.mv-ev{font-size:var(--fs-2xs);padding:1px 8px;border-radius:999px;border:1px solid var(--evc);color:var(--evc);
   white-space:nowrap;text-transform:none;letter-spacing:0}
 </style>"""
-MV_EV_COLOR = {"tested": "#0f9d58", "edge": "#1a73e8", "context": "#94A3B8"}
+MV_EV_COLOR = {"tested": "var(--om-up)", "edge": "var(--om-accent)", "context": "var(--om-neutral)"}
 
 
 def _mv_tone_color(tone: int) -> str:
@@ -5668,7 +5686,13 @@ def _mv_card(r: dict) -> str:
     return (f"<div class='mv-card' style='--mvc:{_mv_tone_color(r['tone'])}'><div class='t'><span>{r['title']}</span>"
             f"<span class='mv-ev' style='--evc:{MV_EV_COLOR[ev]}'>{MV.EVIDENCE[ev]}</span></div>"
             f"<div class='v'>{r['value']}</div><div class='d'>{r.get('detail', '')}</div>"
-            f"<div class='m'>→ {_md_inline(r['meaning'])}</div></div>")
+            f"<div class='m'>{_mv_meaning(r['meaning'])}</div></div>")
+
+
+def _mv_meaning(text: str) -> str:
+    """One point per line, the first (most important) in bold."""
+    parts = [x for x in text.split("\n") if x.strip()]
+    return "".join(f"<div class='mv-pt{' lead' if i == 0 else ''}'>{_md_inline(x)}</div>" for i, x in enumerate(parts))
 
 
 @st.cache_data(ttl=120, show_spinner=False)
@@ -5831,12 +5855,12 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("dashboard", page_dashboard, "Trading Desk", ":material/space_dashboard:"),
     ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
     ("smart", page_smart_money, "Smart Money Sectors", ":material/insights:"),
-    ("scanners", page_scanners, "Setups & Scanners", ":material/radar:"),
+    ("scanners", page_scanners, "Signals & Scanners", ":material/radar:"),
     ("options", page_option_chain, "Option Chain", ":material/table_chart:"),
-    ("odds", page_odds, "Trade odds", ":material/casino:"),
+    ("odds", page_odds, "Trade Odds", ":material/casino:"),
     ("fno", page_fno, "F&O Stocks", ":material/candlestick_chart:"),
     ("oi", page_oi, "OI Analysis", ":material/stacked_bar_chart:"),
-    ("sectors", page_sectors, "Sector Performance", ":material/donut_small:"),
+    ("sectors", page_sectors, "Sectors", ":material/donut_small:"),
     ("indices", page_indices, "NSE Indices", ":material/account_balance:"),
     ("global", page_global, "Global Markets", ":material/public:"),
     ("mcx", page_mcx, "MCX Commodities", ":material/diamond:"),
@@ -5855,11 +5879,11 @@ _start = os.environ.get("NAVV_START_PAGE", "view")
 if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "view"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
-nav = st.navigation({
-    "Trade": [P["view"], P["dashboard"], P["apex"], P["smart"], P["scanners"], P["odds"], P["options"]] + ([P["review"]] if IS_ADMIN else []),
-    "Markets": [P["fno"], P["oi"], P["sectors"], P["indices"], P["global"]],
-    "Dhan": [P["mcx"], P["cdsfut"]] + ([P["portfolio"], P["dhan"]] if IS_ADMIN else []),
-    "Tools": [P["chart"], P["screener"], P["watchlist"], P["account"]] + ([P["research"]] if IS_ADMIN else []),
+nav = st.navigation({  # grouped by what you are doing: today's trading, the market, tools, your account
+    "Today": [P["view"], P["dashboard"], P["scanners"], P["options"]],
+    "Markets": [P["indices"], P["sectors"], P["smart"], P["apex"], P["fno"], P["oi"], P["global"], P["mcx"], P["cdsfut"]],
+    "Tools": [P["chart"], P["screener"], P["watchlist"], P["odds"]],
+    "Account": [P["account"]] + ([P["portfolio"], P["dhan"], P["review"], P["research"]] if IS_ADMIN else []),
 }, position="top")
 
 with st.sidebar:
