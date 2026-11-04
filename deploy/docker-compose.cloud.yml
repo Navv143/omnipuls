@@ -1,0 +1,31 @@
+# Cloud server (Hostinger VPS) add-on: HTTPS on your domain with live ticks, nothing else open to the internet.
+# Start with:  docker compose -f docker-compose.yml -f docker-compose.cloud.yml up -d --build
+# (deploy/setup.sh does it for you). Needs DOMAIN=... in deploy/.env and the domain's DNS pointing at the server.
+services:
+  app:
+    ports: !reset []                # not reachable directly: only through Caddy (HTTPS)
+    environment:
+      OMNIPULS_PUBLIC: "1"          # public server: no "create admin account" screen, admin comes from Secrets
+      OMNIPULS_TICKS: "1"           # but live prices tick by tick, through wss://DOMAIN/ticks
+
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2}
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: "${DOMAIN:?put DOMAIN=app.yourdomain.com in deploy/.env}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

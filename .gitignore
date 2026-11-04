@@ -38,3 +38,6 @@ desk_log.csv
 
 # Docker / office server
 market_data/
+
+# Server settings (domain) written by deploy/setup.sh
+deploy/.env

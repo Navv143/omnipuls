@@ -95,6 +95,18 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 4 Nov 2026: Hostinger VPS + own domain (HTTPS, live ticks)
+
+- Sizing measured: app 155 MB idle, recorder 114 MB, full market + all scanners about +300 MB, ~15 s CPU for the
+  first calculation of the day; peak ~1.5-2 GB with the OS. Choice: Hostinger KVM 2 (2 vCPU, 8 GB, 100 GB NVMe).
+- `deploy/docker-compose.cloud.yml` + `deploy/Caddyfile`: Caddy in front (free HTTPS for DOMAIN), the app not
+  reachable directly; live ticks go through wss://DOMAIN/ticks. `OMNIPULS_TICKS=1` streams ticks on a public server
+  (PUBLIC stays on, so no "create admin" screen).
+- Tick relay now needs a per-feed secret key that only pages the app drew carry: strangers are cut off (tested).
+- `deploy/setup.sh`: one command on a fresh Ubuntu VPS (Docker, firewall 22/80/443, swap, domain check, Secrets,
+  start). `HOSTINGER.md`: buying and setup guide. Tested here: page over HTTPS through Caddy, port 8501 closed,
+  ticks through wss with key, stranger rejected.
+
 ## 4 Nov 2026: market data recorder, Docker for the office server, Today's plan card
 
 **Built**
