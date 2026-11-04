@@ -39,3 +39,11 @@ create table if not exists public.desk_log (
 );
 alter table public.desk_log enable row level security;
 create index if not exists desk_log_date on public.desk_log (date);
+
+-- Setup Finder (bot.py): one row per run with the full result (rules tried, best rules on unseen days, Nifty MACD).
+create table if not exists public.bot_results (
+  run_at text primary key,
+  result jsonb not null,
+  inserted_at timestamptz not null default now()
+);
+alter table public.bot_results enable row level security;

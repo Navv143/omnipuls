@@ -95,6 +95,22 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 5 Nov 2026: landing page, Open = High/Low column, Setup Finder (research bot)
+
+- Landing page (PR #11): logo (SVG), headline and short summary, feature chips, rotating slides of the real
+  features, feature tiles; sign-in is a compact card whose button opens the form (first on phones).
+- Open = High / Open = Low (PR #12): `ind.ohl_flag`, in radar, R-factor, breakout and unusual-activity rows and
+  automatically in any table with the day's open / high / low; shown only when a stock qualifies.
+- Setup Finder `bot.py`: a year of 5-min Nifty 100 + Nifty bars from Dhan (cached, topped up nightly); events at
+  10:00 / 10:30 / 11:00 / 12:00 with money-flow buying share, net flow vs usual turnover, volume vs usual by that
+  time, range so far vs usual day, move in ATR, gap, open = high / low, sector and market flow; ~6,900 rules after
+  0.12% costs; tuned on the first 60% of days, judged only on the last 40% + neighbour robustness; Nifty MACD crosses
+  with / without Nifty 100 flow. Results: <data>/bot/latest.json and Supabase bot_results. Tested: planted edge found
+  and confirmed on unseen days; no-edge data -> 0 passed (losses = costs).
+- recorder.py runs the bot in its own process every evening after 16:30 (or when the app asks), never in market
+  hours. App: "Setup Finder" page (Today menu) with results and "Run tonight"; a passed rule's live matches join the
+  Market View as Tested signals and count in the trade idea.
+
 ## 5 Nov 2026: build-up carries yesterday, Nifty flow × MACD, money rotation, short texts
 
 - Index build-up: computes yesterday's session from the same 1-minute downloads (no extra calls) and reads the
