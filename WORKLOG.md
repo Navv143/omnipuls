@@ -95,6 +95,19 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 5 Nov 2026: design system, fonts, menu (look and feel, phase 1)
+
+- Audit: 47 hard-coded colours, 34 font sizes, 11 corner radii, 5 separate style blocks; card figures asked for
+  JetBrains Mono, which was never loaded.
+- Design tokens (`:root` in the global CSS: colours, type scale, radii, number font); Trading Desk and Market View
+  styles now use only tokens; evidence badges use the app's own green / blue.
+- Fonts (.streamlit/config.toml): Inter for text and numbers (tabular digits app-wide), Sora for headings (brand),
+  JetBrains Mono loaded for card figures; heading scale and weights, 0.6rem radius, colour-blind-safe chart colours.
+- Menu regrouped by task: Today (Market View, Trading Desk, Signals & Scanners, Option Chain), Markets, Tools,
+  Account (admin pages). URLs unchanged.
+- Market View cards: one point per line, the key point in bold; shorter wording.
+- Mobbin (design research) needs a paid Mobbin plan; not used.
+
 ## 5 Nov 2026: Market View (one page: every signal and reading, with what it means)
 
 - New first page and start page, "Market View": (1) Trade idea right now: tested signals if any fired, otherwise

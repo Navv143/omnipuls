@@ -9,7 +9,17 @@ textColor = "#E6EDF7"
 borderColor = "#22314A"
 dataframeHeaderBackgroundColor = "#1E293B"
 dataframeHeaderTextColor = "#E6EDF7"
-font = "Sora:https://fonts.googleapis.com/css2?family=Sora:wght@300..700&display=swap"
+# Type: Inter for text and numbers (clear at small sizes, fixed-width digits so ticking prices don't jump),
+# Sora for headings (the brand font of the logo), JetBrains Mono for figures in cards and code.
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap"
+headingFont = "Sora:https://fonts.googleapis.com/css2?family=Sora:wght@500..700&display=swap"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400..700&display=swap"
+headingFontSizes = ["1.9rem", "1.45rem", "1.15rem", "1rem", "0.95rem", "0.9rem"]
+headingFontWeights = [700, 650, 600, 600, 600, 600]
+baseRadius = "0.6rem"
+buttonRadius = "0.6rem"
+# Charts: up / down / accent first, then a colour-blind-safe set
+chartCategoricalColors = ["#3B82F6", "#26A69A", "#EF5350", "#E8B33A", "#A78BFA", "#22D3EE", "#F472B6", "#94A3B8", "#FB923C", "#4ADE80"]
 showSidebarBorder = true
 
 [theme.sidebar]

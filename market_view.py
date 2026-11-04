@@ -65,37 +65,35 @@ def index_read(name: str, bars: pd.DataFrame | None, fut: pd.DataFrame | None = 
     lines, tone = [], 0
     if not np.isnan(pdh) and last > pdh:
         tone = 0 if bank else 1  # Bank Nifty breaks tend to reverse: no bullish lean, wait for the fade
-        lines.append("Above yesterday's high. " + (
-            "On Bank Nifty such breaks usually FAIL: watch for a close back below it (the tested fade setup, sell)."
-            if bank else "Nifty breaks often slip back (about half within 30 minutes): wait for it to hold, "
-                         "not a signal on its own."))
+        lines.append("Above yesterday's high: " + (
+            "Bank Nifty breaks usually fail. A close back below is the tested fade (sell)."
+            if bank else "Nifty breaks often slip back. Wait for it to hold; not a signal on its own."))
     elif not np.isnan(pdl) and last < pdl:
         tone = 0 if bank else -1
-        lines.append("Below yesterday's low. " + (
-            "On Bank Nifty such breaks usually FAIL: watch for a close back above it (the tested fade setup, buy)."
-            if bank else "Nifty breaks often slip back (about half within 30 minutes): wait for it to hold, "
-                         "not a signal on its own."))
+        lines.append("Below yesterday's low: " + (
+            "Bank Nifty breaks usually fail. A close back above is the tested fade (buy)."
+            if bank else "Nifty breaks often slip back. Wait for it to hold; not a signal on its own."))
     else:
         lines.append("Inside yesterday's range: no break yet.")
     if not np.isnan(orh) and len(today) > 3:
         broke = (not np.isnan(pdh) and last > pdh) or (not np.isnan(pdl) and last < pdl)
         if last > orh:
-            lines.append("Above the 9:15-9:30 range.")
+            lines.append("Above the opening range (9:15-9:30).")
             tone = tone if (tone or broke) else 1
         elif last < orl:
-            lines.append("Below the 9:15-9:30 range.")
+            lines.append("Below the opening range (9:15-9:30).")
             tone = tone if (tone or broke) else -1
     if vwap_side is not None:
-        lines.append(f"Futures {'above' if vwap_side > 0 else 'below'} VWAP: "
-                     f"{'buyers' if vwap_side > 0 else 'sellers'} in control today.")
+        lines.append(f"{'Buyers' if vwap_side > 0 else 'Sellers'} in control (futures "
+                     f"{'above' if vwap_side > 0 else 'below'} VWAP).")
     if not np.isnan(move_atr) and abs(move_atr) >= 0.6:
-        lines.append(f"Moved {move_atr:+.1f} ATR from the open: a trend day is forming. With futures OI rising this is "
-                     "the tested option-buying setup (Trend day + OI).")
+        lines.append(f"Trend day forming ({move_atr:+.1f} ATR from the open): the tested option buy if futures OI "
+                     "is rising.")
     evidence = "context"  # the tested signals themselves are in the plan; this card describes where price is
     return {"title": name, "value": f"{last:,.2f}", "chg": chg,
             "detail": f"{_f(chg)}% today · {(last / op - 1) * 100:+.2f}% from open · day range position "
                       f"{pos * 100:.0f}% · yday H/L {_f(pdh, 0)} / {_f(pdl, 0)}",
-            "meaning": " ".join(lines), "tone": tone, "evidence": evidence,
+            "meaning": "\n".join(lines), "tone": tone, "evidence": evidence,
             "levels": {"pdh": pdh, "pdl": pdl, "orh": orh, "orl": orl, "atr": atr, "move_atr": move_atr}}
 
 
