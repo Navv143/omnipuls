@@ -33,8 +33,10 @@ if [ -z "${DOMAIN:-}" ]; then
   echo "DOMAIN=$DOMAIN" > deploy/.env
 fi
 MYIP=$(curl -fsS -4 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
-DNSIP=$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}')
-if [ "$DNSIP" != "$MYIP" ]; then
+# ask public DNS (the server's own /etc/hosts maps its hostname to 127.0.1.1, which is not what the internet sees)
+DNSIP=$(curl -fsS -m 10 "https://dns.google/resolve?name=$DOMAIN&type=A" 2>/dev/null | grep -o '"data":"[0-9.]*"' | head -1 | cut -d'"' -f4)
+[ -n "$DNSIP" ] || DNSIP=$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk '$1 !~ /^127\./ {print $1; exit}')
+if [ "${SKIP_DNS_CHECK:-0}" != 1 ] && [ "$DNSIP" != "$MYIP" ]; then
   echo "!! $DOMAIN points to '${DNSIP:-nothing}', but this server is $MYIP."
   echo "   Add a DNS 'A' record: $DOMAIN -> $MYIP (see HOSTINGER.md), wait a few minutes, then run this script again."
   echo "   (HTTPS can only start once the domain points here.)"
