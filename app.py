@@ -50,6 +50,7 @@ import trend_alert as TA
 import desk as DK
 import twelve as TW
 import market_view as MV
+import bot as BOT
 import paths as PATHS
 import cryptocom as CC
 import cloudstore as CS
@@ -86,7 +87,7 @@ def _reload_changed():
     sys, which survives reruns and cache clears). If a reload fails (Streamlit may be swapping the same module), drop
     it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
-    mods = [CS, U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, CC, MV, DL, FIVE, CL, TO, FADE, GF]  # dependencies before the modules that use them
+    mods = [CS, U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, CC, MV, BOT, DL, FIVE, CL, TO, FADE, GF]  # dependencies before the modules that use them
     import hashlib
     seen = sys.__dict__.setdefault("_omni_seen", {})
     started = None
@@ -1399,6 +1400,7 @@ HOWTO = {  # one line under each page's status bar: what the page is for and how
     "view": "Start here. Trade only what the top box calls a tested signal; the rest helps you pick the side.",
     "dashboard": "The full desk: mood, index plans and focus lists. Today's plan card lists the tested setups.",
     "scanners": "Each tab is one setup with today's signals. Follow entry, stop and exit exactly as shown.",
+    "bot": "What the research bot found last night. Trade only a rule marked Pass, and paper-trade it first.",
     "options": "Pick an index and expiry. Most puts written = support, most calls written = resistance.",
     "apex": "Trade with the side that dominates the first hour; 'Since yesterday' adds yesterday's positions.",
     "smart": "Sectors where fresh futures money is going, and their strongest stocks.",
@@ -5803,6 +5805,96 @@ def _sign_out():
         del st.session_state[k]
 
 
+# ---------------------------------------------------------------- Setup Finder (bot.py results)
+
+
+def _bot_live(svc, rule: dict) -> pd.DataFrame:
+    """Today's stocks matching the bot's passed rule; rebuilt in the background once per loader pass."""
+    bars, nifty_df = svc.bars()
+    if not bars or nifty_df is None or nifty_df.empty:
+        return pd.DataFrame()
+    key = ((id(svc), SC.session_of(nifty_df)), svc.last_pass, json.dumps(rule, sort_keys=True))
+    return _fresh_or_last(_memo("bot_live"), key, lambda: BOT.live_matches(rule, svc.bars()[0], U.FNO_SECTOR_OF))
+
+
+def _pct(x) -> str:
+    return "—" if x is None or (isinstance(x, float) and np.isnan(x)) else f"{x:+.3f}%"
+
+
+def page_bot():
+    status_strip()
+    st.header("Setup Finder")
+    res = BOT.latest()
+    l, r = st.columns([3, 1], vertical_alignment="center")
+    l.caption("Our research bot tests about 5,000 money-flow rules every evening and keeps only those that still make "
+              "money on days it never saw while choosing.")
+    if IS_ADMIN and r.button("Run tonight", icon=":material/smart_toy:", width="stretch",
+                             help="Runs after 16:30, or within a minute when the market is closed."):
+        PATHS.state("bot_request").touch()
+        st.success("Requested: the server runs the bot after market hours (results in about 10-20 minutes).")
+    if not res:
+        st.info("No results yet: the bot runs on the server every evening after 16:30 (first run downloads a year of "
+                "5-minute data, about 15 minutes).", icon=":material/hourglass_top:")
+        return
+    if res.get("error"):
+        st.warning(f"Last run failed ({res.get('run_at', '')[:16]}): {res['error']}. It tries again tomorrow.")
+        return
+    st.caption(f"Last run {res['run_at'][:16].replace('T', ' ')} · {res['rules_tried']:,} rules · {res['events']:,} "
+               f"stock-moments over {res['days']} days · judged on unseen days from {res['split']} · "
+               f"{res.get('seconds', 0) // 60} min")
+    best = res.get("best")
+    if best:
+        te = best["test"]
+        st.markdown(
+            f"<div class='mv-idea' style='--mvc:var(--om-up);--mvg:var(--om-up-soft)'><div class='k'>Passed on unseen "
+            f"days</div><h3>{te['per_trade_pct']:+.2f}% a trade after costs · {te['win_pct']:.0f}% wins · "
+            f"{te['n']} trades (t {te['t']})</h3><p>{best['text']}.</p><p class='d'>Robust: "
+            f"{best['neighbours_positive_pct']:.0f}% of the rules one setting away also made money. Paper-trade it "
+            "before real money.</p></div>", unsafe_allow_html=True)
+        if DHAN_DATA:
+            try:
+                svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
+                m = _bot_live(svc, best["rule"])
+                if not m.empty:
+                    st.markdown("**Matching now**")
+                    st.dataframe(m.round(2), hide_index=True, width="stretch")
+                elif datetime.now(IST).strftime("%H:%M") >= best["rule"]["t"]:
+                    st.caption("No stock matches the rule today.")
+                else:
+                    st.caption(f"Matches appear at {best['rule']['t']}.")
+            except Exception as e:
+                st.caption(f"Live matches unavailable: {e}")
+    else:
+        st.info("No rule passed on the unseen days, so there is no bot setup to trade. That is the honest result: the "
+                "rules below looked good on the first part of the year but did not hold up.", icon=":material/block:")
+    rows = [{"Verdict": {"pass": "✅ Pass", "watch": "👀 Watch", "fail": "✖ Fail"}[x["verdict"]], "Rule": x["text"],
+             "Unseen days / trade": _pct(x["test"].get("per_trade_pct")), "Trades": x["test"].get("n", 0),
+             "Win %": x["test"].get("win_pct"), "t": x["test"].get("t"),
+             "Tuning days / trade": _pct(x["train"].get("per_trade_pct")),
+             "Robust %": x["neighbours_positive_pct"]} for x in res.get("top", [])]
+    if rows:
+        st.subheader("Best rules, judged on unseen days")
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
+                     column_config={"Rule": st.column_config.TextColumn(width="large")})
+    b = res.get("baseline", {})
+    if b:
+        st.caption(f"For comparison, {b.get('rule')}: {_pct(b.get('test', {}).get('per_trade_pct'))} a trade on unseen "
+                   f"days ({b.get('test', {}).get('n', 0)} trades).")
+    nm = res.get("nifty_macd") or {}
+    if nm:
+        st.subheader("Nifty: MACD crosses with and without money flow")
+        st.dataframe(pd.DataFrame([{"Crosses": {"all_crosses": "All crosses", "flow_backed": "Money flow agrees",
+                                                "flow_against": "Money flow disagrees"}[k],
+                                    "Unseen days / trade": _pct(v["test"].get("per_trade_pct")),
+                                    "Trades": v["test"].get("n", 0), "Win %": v["test"].get("win_pct"),
+                                    "Tuning days / trade": _pct(v["train"].get("per_trade_pct"))}
+                                   for k, v in nm.items()]), hide_index=True, width="stretch")
+    note("Rules combine: decision time (10:00-12:00), move from the open in ATR, money-flow buying share, volume vs "
+         "the usual by that time, range so far vs the usual day, sector and market money agreeing, top 1 or 3 a day "
+         "by net flow; stop 0.5 or 1 ATR, exit 15:20, 0.12% costs. Tuned on the first 60% of days, judged on the "
+         "last 40%. Pass = +0.05%+ a trade, t 2+, 40+ trades on unseen days and 60%+ of neighbours positive.")
+
+
 # ---------------------------------------------------------------- Market View: one page, every signal and reading
 
 
@@ -5920,7 +6012,8 @@ def _mv_chain(sid: int, seg: str):
     return spot, ch, D.max_pain(ch)
 
 
-def _mv_signals(plan_rows: list, ce: pd.DataFrame, pe: pd.DataFrame, sc, picks: pd.DataFrame) -> pd.DataFrame:
+def _mv_signals(plan_rows: list, ce: pd.DataFrame, pe: pd.DataFrame, sc, picks: pd.DataFrame,
+                bot_rows: list | None = None) -> pd.DataFrame:
     """Every signal from every scanner in one table, the tested ones first."""
     rows = []
     order = {"fired": 0, "closed": 1, "wait": 2, "none": 3, "nodata": 4}
@@ -5928,6 +6021,8 @@ def _mv_signals(plan_rows: list, ce: pd.DataFrame, pe: pd.DataFrame, sc, picks: 
     for r in sorted(plan_rows, key=lambda r: order[r["state"]]):
         rows.append({"Signal": r["name"], "Status": status[r["state"]], "Evidence": "Tested",
                      "Details": r["text"].replace("**", ""), "_o": order[r["state"]]})
+    for b in bot_rows or []:
+        rows.append({**b, "_o": 4})
     if sc is not None:
         _, v3, _ = sc
         for _, r in (v3 if v3 is not None else pd.DataFrame()).head(5).iterrows():
@@ -6009,8 +6104,23 @@ def market_view_body(svc, t: pd.DataFrame):
     money = [MV.flow_read(secflow), MV.activity_read(R)]
     every = [r for r in idx_reads + market + money + chains if r]
 
-    # ---- 1. the trade idea
-    idea = MV.trade_idea(plan_rows, verdict, every)
+    bot_rows = []
+    try:
+        res = BOT.latest()
+        best = (res or {}).get("best")
+        if best:
+            te = best["test"]
+            for _, r in _bot_live(svc, best["rule"]).iterrows():
+                bot_rows.append({"Signal": f"Setup Finder: {r['Stock']} {r['Side']}", "Status": "● SIGNAL",
+                                 "Evidence": "Tested", "Details": f"entry {r['Entry']:,.2f}, stop {r['Stop']:,.2f}, "
+                                 f"exit 15:20 · bot rule {te['per_trade_pct']:+.2f}%/trade on unseen days"})
+    except Exception:
+        pass
+    # ---- 1. the trade idea (Setup Finder matches count as tested signals)
+    idea_rows = plan_rows + ([{"name": "Setup Finder (bot, passed on unseen days)", "state": "fired", "where": "",
+                               "text": "; ".join(r["Signal"].split(": ", 1)[1] + " (" + r["Details"].split(" · ")[0] + ")"
+                                                 for r in bot_rows)}] if bot_rows else [])
+    idea = MV.trade_idea(idea_rows, verdict, every)
     c = UP if idea["tone"] > 0 else DOWN if idea["tone"] < 0 else "#94A3B8"
     g = {UP: "rgba(38,166,154,.18)", DOWN: "rgba(239,83,80,.18)"}.get(c, "rgba(148,163,184,.10)")
     now = datetime.now(IST)
@@ -6020,7 +6130,7 @@ def market_view_body(svc, t: pd.DataFrame):
 
     # ---- 2. all signals
     st.subheader("All signals, one list")
-    sig = _mv_signals(plan_rows, ce, pe, sc, picks)
+    sig = _mv_signals(plan_rows, ce, pe, sc, picks, bot_rows)
     if sig.empty:
         st.caption("No signals yet.")
     elif MOBILE:  # phones: a list, so evidence and details aren't cut off by a wide table
@@ -6085,6 +6195,7 @@ def page_view():
 
 PAGE_DEFS = [  # (url, function, menu title, icon)
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
+    ("bot", page_bot, "Setup Finder", ":material/smart_toy:"),
     ("dashboard", page_dashboard, "Trading Desk", ":material/space_dashboard:"),
     ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
     ("smart", page_smart_money, "Smart Money Sectors", ":material/insights:"),
@@ -6113,7 +6224,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "view"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({  # grouped by what you are doing: today's trading, the market, tools, your account
-    "Today": [P["view"], P["dashboard"], P["scanners"], P["options"]],
+    "Today": [P["view"], P["dashboard"], P["scanners"], P["bot"], P["options"]],
     "Markets": [P["indices"], P["sectors"], P["smart"], P["apex"], P["fno"], P["oi"], P["global"], P["mcx"], P["cdsfut"]],
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["odds"]],
     "Account": [P["account"]] + ([P["portfolio"], P["dhan"], P["review"], P["research"]] if IS_ADMIN else []),

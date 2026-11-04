@@ -347,6 +347,41 @@ def _git_head() -> str:
         return ""
 
 
+BOT_AFTER = os.environ.get("REC_BOT_AFTER", "16:30")
+BOT_REQUEST = paths.state("bot_request")
+
+
+def bot_due(now: datetime) -> bool:
+    """The Setup Finder runs once a day after BOT_AFTER (any day, so weekends catch up), or when the app asks, never
+    in market hours."""
+    if market_open(now) or os.environ.get("REC_BOT", "1") != "1":
+        return False
+    if BOT_REQUEST.exists():
+        return True
+    last = ""
+    try:
+        last = json.loads((DATA / "bot" / "latest.json").read_text()).get("run_at", "")[:10]
+    except Exception:
+        pass
+    return now.strftime("%H:%M") >= BOT_AFTER and last != now.strftime("%Y-%m-%d")
+
+
+def run_bot():
+    """bot.py in its own process (memory is freed when it ends; a crash can't stop the recorder)."""
+    BOT_REQUEST.unlink(missing_ok=True)
+    log("Setup Finder: starting")
+    try:
+        r = subprocess.run([sys.executable, str(paths.HERE / "bot.py")], cwd=str(paths.HERE), timeout=4 * 3600)
+        STATUS["bot"] = {"time": datetime.now(IST), "exit": r.returncode}
+    except Exception as e:
+        _error("Setup Finder", e)
+    (DATA / "bot").mkdir(parents=True, exist_ok=True)
+    marker = DATA / "bot" / "latest.json"
+    if not marker.exists():  # failed before writing results: don't retry in a tight loop today
+        marker.write_text(json.dumps({"run_at": datetime.now(IST).isoformat(timespec="seconds"), "error": "run failed",
+                                      "top": []}))
+
+
 def market_open(now: datetime) -> bool:
     return now.weekday() < 5 and "09:15" <= now.strftime("%H:%M") <= "15:30"
 
@@ -412,6 +447,8 @@ def run():
             if now.weekday() < 5 and now.strftime("%H:%M") >= CANDLES_AFTER and not _candle_file(today).exists() \
                     and not _candle_file(today).with_suffix(".holiday").exists():
                 record_candles(dh, today, uni)
+            if bot_due(now):
+                run_bot()
         except Exception as e:
             _error("loop", e)
             if os.environ.get("REC_DEBUG"):
