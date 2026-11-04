@@ -237,3 +237,87 @@ def trade_idea(plan_rows: list[dict], verdict: dict, reads: list[dict]) -> dict:
         lines.append("Watching: " + "; ".join(r["name"] for r in watch[:4]) + ".")
     return {"tone": int(np.sign(score)) if pd.notna(score) and abs(score) >= 20 else 0,
             "headline": "No tested signal yet", "lines": lines, "evidence": "context"}
+
+
+# ---------------------------------------------------------------- Nifty 50 money flow candle by candle, with MACD
+
+
+def macd(close: pd.Series, fast: int = 12, slow: int = 26, sig: int = 9) -> pd.DataFrame:
+    e1, e2 = close.ewm(span=fast, adjust=False).mean(), close.ewm(span=slow, adjust=False).mean()
+    m = e1 - e2
+    s = m.ewm(span=sig, adjust=False).mean()
+    return pd.DataFrame({"macd": m, "signal": s, "hist": m - s}, index=close.index)
+
+
+def index_flow(per: dict, weights: dict) -> pd.DataFrame:
+    """Per 5-minute candle (index 'HH:MM'): money into / out of the index's stocks in ₹ crore, and the weighted flow
+    (each stock's net flow as % of its usual day's turnover × its index weight), with running totals."""
+    parts = []
+    for sym, w in (weights or {}).items():
+        c = per.get(sym)
+        if c is None or c.empty or "Time" not in c:
+            continue
+        usual = float(c["Usual Day Turnover Cr"].iloc[-1]) if "Usual Day Turnover Cr" in c else np.nan
+        parts.append(pd.DataFrame({
+            "inflow": c["Inflow Cr"].to_numpy(float), "outflow": c["Outflow Cr"].to_numpy(float),
+            "net": c["Net Flow Cr"].to_numpy(float),
+            "wflow": (w / 100 * c["Net Flow Cr"] / usual * 100).to_numpy(float) if usual and usual > 0 else 0.0},
+            index=c["Time"].to_numpy()))
+    if not parts:
+        return pd.DataFrame()
+    f = pd.concat(parts).groupby(level=0).sum().sort_index()
+    f["cum"] = f["net"].cumsum()
+    f["wcum"] = f["wflow"].cumsum()
+    return f
+
+
+def flow_macd(price: pd.DataFrame | None, flow: pd.DataFrame) -> tuple[pd.DataFrame, list[dict], dict | None]:
+    """Today's index candles with MACD (warmed up on earlier days), the MACD crosses, and what they mean together
+    with the money flow."""
+    d = _clean(price)
+    if d.empty:
+        return pd.DataFrame(), [], None
+    m = macd(d["Close"])
+    day = d.index.normalize().max()
+    today = d[d.index.normalize() == day].join(m)
+    today["t"] = today.index.strftime("%H:%M")
+    if not flow.empty:
+        today = today.join(flow, on="t")
+    side = np.sign(today["macd"] - today["signal"])
+    crosses = []
+    for i in range(1, len(today)):
+        if side.iloc[i] != side.iloc[i - 1] and side.iloc[i] != 0:
+            t = today["t"].iloc[i]
+            back = today["net"].iloc[max(0, i - 5):i + 1].sum() if "net" in today else np.nan
+            crosses.append({"t": t, "dir": int(side.iloc[i]), "price": float(today["Close"].iloc[i]),
+                            "flow30": float(back) if pd.notna(back) else np.nan})
+    read = None
+    if "net" in today and today["net"].notna().any():
+        last30 = float(today["net"].tail(6).sum())
+        cum = float(today["cum"].dropna().iloc[-1]) if today["cum"].notna().any() else np.nan
+        px_chg = float(today["Close"].iloc[-1] / today["Open"].iloc[0] - 1) * 100
+        lines, tone = [], 0
+        if crosses:
+            c = crosses[-1]
+            up = c["dir"] > 0
+            backed = (c["flow30"] > 0) if up else (c["flow30"] < 0)
+            lines.append(f"MACD crossed {'up' if up else 'down'} at {c['t']}: " + (
+                f"money {'flowing in' if up else 'leaving'} with it (₹{c['flow30']:+,.0f} Cr in the 30 min before), the move is "
+                "backed." if backed else
+                f"but money is {'still leaving' if up else 'still coming in'} (₹{c['flow30']:+,.0f} Cr in the 30 min before), "
+                "the cross is weak."))
+            tone = (1 if up else -1) if backed else 0
+        else:
+            lines.append("No MACD cross today yet.")
+        lines.append(f"Last 30 minutes: ₹{last30:+,.0f} Cr into the Nifty 50 stocks; whole day ₹{cum:+,.0f} Cr.")
+        if px_chg > 0.2 and cum < 0:
+            lines.append("Nifty is up but money is leaving its stocks: a rally without buying, often fades.")
+            tone = 0 if tone > 0 else tone
+        elif px_chg < -0.2 and cum > 0:
+            lines.append("Nifty is down but money is coming into its stocks: selling is being absorbed.")
+            tone = 0 if tone < 0 else tone
+        lines.append("MACD crosses alone made no money in testing; the flow-backed version is being tested.")
+        read = {"title": "Nifty 50: money flow × MACD", "value": f"₹{cum:+,.0f} Cr today",
+                "detail": f"Nifty {px_chg:+.2f}% from open · {len(crosses)} MACD cross(es) today",
+                "meaning": "\n".join(lines), "tone": tone, "evidence": "context"}
+    return today, crosses, read
