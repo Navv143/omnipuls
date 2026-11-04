@@ -14,6 +14,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 import numpy as np
 import pandas as pd
+import indicators as ind
 
 # The Nifty 100 stocks the intraday research was run on (5-minute data, Feb 2015 - Apr 2026).
 NIFTY100 = ["ABB", "ADANIENSOL", "ADANIENT", "ADANIGREEN", "ADANIPORTS", "ADANIPOWER", "AMBUJACEM", "APOLLOHOSP",
@@ -222,6 +223,7 @@ def track(stock: Stock, side: int, entry_time, entry: float, stop: float | None,
 
 def _row(stock, side, signal_t, entry_t, entry, stop, extra=None, trail=None):
     r = {"Stock": stock.sym, "Side": "BUY / CE" if side > 0 else "SELL / PE", "Signal": signal_t.strftime("%H:%M"),
+         "O=H/L": ind.ohl_flag(stock.open, stock.today["High"].max(), stock.today["Low"].min()),
          "Entry": entry, "Stop": stop}
     if entry_t is None:
         r.update({"Status": "Waiting for next bar", "Exit/LTP": stock.ltp, "P&L %": 0.0, "Exit time": ""})
@@ -418,6 +420,7 @@ def radar(S: dict, oi: dict | None = None, at: dtime | None = None, lookback: in
         vol_now, rvol_now = t["Volume"].sum(), t["Volume"].tail(recent).sum()
         rng_now = (t["High"].max() - t["Low"].min()) / s.open
         r = {"Stock": s.sym, "Side": "BUY / CE" if side > 0 else "SELL / PE", "Price": px, "Move %": move * 100,
+             "O=H/L": ind.ohl_flag(s.open, s.today["High"].max(), s.today["Low"].min()),
              "From open %": (px / s.open - 1) * 100, "Move / ATR": abs(move) / s.atr_pct if s.atr_pct else np.nan,
              "Volume vs usual": vol_now / vol_u if vol_u > 0 else np.nan,
              "Last 30 min vol vs usual": rvol_now / rvol_u if rvol_u > 0 else np.nan,

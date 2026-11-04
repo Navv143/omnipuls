@@ -1555,6 +1555,7 @@ COLSPEC = {
     "Price": ("LTP", "price", "ltp"), "Chg": ("Chg", "signed", "chg"), "Chg %": ("Chg %", "pct", "pct"),
     "Gap %": ("Gap %", "pct", None), "1W %": ("1W %", "pct", None), "1M %": ("1M %", "pct", None),
     "3M %": ("3M %", "pct", None), "1Y %": ("1Y %", "pct", None), "From 52W High %": ("From 52W high", "pct", None),
+    "O=H/L": ("Open = H/L", "text", None),
     "From 52W Low %": ("From 52W low", "pct", None), "Open": ("Open", "price", None), "Day High": ("High", "price", None),
     "Day Low": ("Low", "price", None), "Prev Close": ("Prev close", "price", None), "52W High": ("52W high", "price", None),
     "52W Low": ("52W low", "price", None), "Avg Price": ("Avg price", "price", None),
@@ -1621,7 +1622,12 @@ def _py(v):
 def show_table(df: pd.DataFrame, cols: list, key: str, height: int | None = None, signed=None, search_hint: str = ""):
     """Every market table: layout-styled rows, search, sort, filters, gainers/losers chips, CSV, live ticks,
     click a name to open its chart."""
+    if "O=H/L" not in df.columns and {"Open", "Day High", "Day Low"} <= set(df.columns):
+        df = df.assign(**{"O=H/L": [ind.ohl_flag(o, h, l) for o, h, l in zip(df["Open"], df["Day High"], df["Day Low"])]})
     cols = [c for c in cols if c in df.columns]
+    if "O=H/L" in df.columns and "O=H/L" not in cols and df["O=H/L"].astype(str).str.len().gt(0).any():
+        after = next((c for c in ("Chg %", "Price", "Move %") if c in cols), None)  # show it next to the move
+        cols.insert(cols.index(after) + 1 if after else min(1, len(cols)), "O=H/L")
     name_col = next((c for c in ("Stock", "Name") if c in cols), cols[0] if cols else None)
     spec = []
     for c in cols:
