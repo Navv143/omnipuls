@@ -181,6 +181,8 @@ st.markdown(
   html, body, [data-testid="stAppViewContainer"] {font-feature-settings:"tnum" 1, "cv11" 1;}
   [data-testid="stDataFrame"], [data-testid="stTable"], .cell, .tape {font-variant-numeric: tabular-nums;}
   h1, h2, h3 {letter-spacing:-.01em;}
+  .om-howto {font-size:var(--fs-sm); color:var(--om-text-3); margin:-.2rem 0 .5rem; padding:.45rem .75rem;
+             border-left:3px solid var(--om-accent); background:var(--om-accent-soft); border-radius:0 var(--r-sm) var(--r-sm) 0;}
   .block-container {padding-top: 1.4rem; padding-bottom: 2rem;}
   [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums; font-size:var(--fs-xl);}
   [data-testid="stMetricLabel"] p {font-size:var(--fs-xs); letter-spacing: .05em; text-transform: uppercase; opacity: .78;}
@@ -1283,19 +1285,41 @@ def market_status(now_ist: datetime) -> list[tuple[str, str, str]]:
             ("Crypto", "Open 24×7", "open")]
 
 
+_NOTES: list = []  # method / research texts of this page run, shown together in one collapsed box at the bottom
+
+
 def note(*args, **kw):
-    """How a reading is computed or what the research found: shown to the admin only, so the methods stay private."""
-    if IS_ADMIN:
-        st.caption(*args, **kw)
+    """How a reading is computed or what the research found (admin only). Collected into the page's collapsed
+    "How it works" box instead of filling the page."""
+    if IS_ADMIN and args and all(args[0] != a[1][0] for a in _NOTES):
+        _NOTES.append(("caption", args, kw))
 
 
 def note_md(*args, **kw):
-    if IS_ADMIN:
-        st.markdown(*args, **kw)
+    if IS_ADMIN and args and all(args[0] != a[1][0] for a in _NOTES):
+        _NOTES.append(("markdown", args, kw))
+
+
+HOWTO = {  # one line under each page's status bar: what the page is for and how to use it
+    "view": "Start here. Trade only what the top box calls a tested signal; the rest helps you pick the side.",
+    "dashboard": "The full desk: mood, index plans and focus lists. Today's plan card lists the tested setups.",
+    "scanners": "Each tab is one setup with today's signals. Follow entry, stop and exit exactly as shown.",
+    "options": "Pick an index and expiry. Most puts written = support, most calls written = resistance.",
+    "apex": "Trade with the side that dominates the first hour; 'Since yesterday' adds yesterday's positions.",
+    "smart": "Sectors where fresh futures money is going, and their strongest stocks.",
+    "fno": "All F&O stocks: filter, sort, and open Unusual activity or Money flow from the switch at the top.",
+    "oi": "Futures OI build-up by stock: long build-up and short covering are bullish, the other two bearish.",
+    "chart": "Pick a symbol and timeframe; levels and indicators are drawn on the chart.",
+    "screener": "Choose a ready scan or set filters; click a row to open its chart.",
+    "watchlist": "Your symbols and price alerts; alerts pop up while the app is open.",
+}
 
 
 def status_strip():
     now = datetime.now(IST)
+    _how = HOWTO.get(getattr(globals().get("nav"), "url_path", "") or "")
+    if _how:
+        st.markdown(f"<div class='om-howto'>{_how}</div>", unsafe_allow_html=True)
     pills = "".join(f'<span class="pill {cls}">{m}: {s}</span>' for m, s, cls in market_status(now))
     live = '<span class="pill"><span class="live-dot"></span>Live</span>' if st.session_state.get("auto", True) else ""
     st.markdown(f'<div class="status-row">{live}{pills}<span class="pill">{now:%a %d %b %Y, %H:%M:%S} IST</span></div>',
@@ -5100,10 +5124,8 @@ def page_apex():
     if not DHAN_DATA:
         need_dhan()
         return
-    note("Who is building positions, from the change in open interest every 3 minutes (not volume). Green: puts "
-               "written, calls closed, futures long build-up or short covering. Red: calls written, puts closed, "
-               "futures short build-up or long unwinding. Options: the strikes each side of the money, nearest "
-               "expiry. Refreshes about every 2.5 minutes.")
+    st.caption("Who is adding positions every 3 minutes, from open interest. Green = bullish build-up, red = bearish. "
+               "Trade with the side that dominates the first hour.")
     c1, c2 = st.columns([2, 3])
     index = c1.selectbox("Index", list(AP.INDICES), key="apex_idx")
     strikes = c2.slider("Strikes each side of the money", 2, 10, 5, key="apex_strikes")
@@ -5128,28 +5150,57 @@ def page_apex():
                    delta_color="normal" if pd.isna(share) or share >= 50 else "inverse")
     st.caption(f"{info['index']} · {info['session']:%a %d %b} · expiry {pd.Timestamp(info['expiry']):%d %b} · strikes "
                f"{info['strikes'][0]:g}-{info['strikes'][-1]:g} · updated {info['updated']}")
+
+    # positions already open: carried from yesterday's close (OI is the stock of open positions; bars are the change)
+    pv, nw = info.get("prev") or {}, info.get("now") or {}
+    if pv.get("session"):
+        st.markdown(f"##### Carried from yesterday ({pv['session']:%a %d %b})")
+        k = st.columns(4)
+        k[0].metric("Yesterday's build-up", f"{pv['net']:+,.0f} lots",
+                    f"{pv['share']:.0f}% bullish" if pd.notna(pv.get("share")) else None,
+                    delta_color="normal" if pd.isna(pv.get("share")) or pv["share"] >= 50 else "inverse", border=True)
+        k[1].metric("Futures OI open", f"{nw.get('fut_oi', np.nan):,.0f} lots" if pd.notna(nw.get("fut_oi")) else "—",
+                    f"{nw['fut_oi'] - pv['fut_oi']:+,.0f} today vs yday close {pv['fut_oi']:,.0f}"
+                    if pd.notna(nw.get("fut_oi")) and pd.notna(pv.get("fut_oi")) else None, delta_color="off",
+                    border=True)
+        k[2].metric("Option OI open (calls / puts)",
+                    f"{nw.get('ce_oi', 0):,.0f} / {nw.get('pe_oi', 0):,.0f}",
+                    f"yday close {pv.get('ce_oi', 0):,.0f} / {pv.get('pe_oi', 0):,.0f} lots", delta_color="off",
+                    border=True)
+        k[3].metric("PCR at these strikes", f"{nw.get('pcr', np.nan):.2f}" if pd.notna(nw.get("pcr")) else "—",
+                    f"yday close {pv['pcr']:.2f}" if pd.notna(pv.get("pcr")) else None, delta_color="off", border=True)
+        st.caption("OI is the total of positions still open, so it already includes everything built on earlier days. "
+                   "The bars below are only today's change; 'Since yesterday' adds yesterday's net build-up to the "
+                   "running total.")
+    view = st.segmented_control("Running total", ["Today only", "Since yesterday"], default="Since yesterday",
+                                key="apex_cum") or "Since yesterday"
+    cum = bars["cum_2d"] if view == "Since yesterday" and "cum_2d" in bars else bars["cum"]
+
     from plotly.subplots import make_subplots
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.55, 0.45], vertical_spacing=0.03)
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.55, 0.45], vertical_spacing=0.03,
+                        specs=[[{}], [{"secondary_y": True}]])
     x = bars.index.strftime("%H:%M")
     fig.add_trace(go.Candlestick(x=x, open=bars["Open"], high=bars["High"], low=bars["Low"], close=bars["Close"],
                                  increasing_line_color=UP, decreasing_line_color=DOWN, name=index), 1, 1)
     fig.add_trace(go.Bar(x=x, y=bars["bull"], marker_color=UP, name="Bullish build-up"), 2, 1)
     fig.add_trace(go.Bar(x=x, y=-bars["bear"], marker_color=DOWN, name="Bearish build-up"), 2, 1)
+    fig.add_trace(go.Scatter(x=x, y=cum, name=f"Running total ({view.lower()})", line=dict(color=GOLD, width=2)),
+                  2, 1, secondary_y=True)
     fig.update_layout(template=plot_template(), height=620, barmode="relative", showlegend=False,
                       margin=dict(l=10, r=10, t=10, b=10), xaxis_rangeslider_visible=False)
     fig.update_xaxes(type="category", nticks=14)
-    fig.update_yaxes(title_text="Lots", row=2, col=1)
+    fig.update_yaxes(title_text="Lots per bar", row=2, col=1, secondary_y=False)
+    fig.update_yaxes(title_text="Running total", row=2, col=1, secondary_y=True, showgrid=False)
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
     with st.expander("Bar data"):
         t = bars.reset_index(names="Time")
         t["Time"] = t["Time"].dt.strftime("%H:%M")
-        data_table(t[["Time", "Close", "opt_bull", "opt_bear", "fut_bull", "fut_bear", "net", "cum"]].round(1),
+        data_table(t[["Time", "Close", "opt_bull", "opt_bear", "fut_bull", "fut_bear", "net", "cum"]
+                     + (["cum_2d"] if "cum_2d" in t else [])].round(1),
                    "apex_bars", labels={"opt_bull": "Options bull", "opt_bear": "Options bear", "fut_bull":
-                                        "Futures bull", "fut_bear": "Futures bear", "net": "Net", "cum": "Cumulative"},
-                   signed=("net", "cum"), height=360)
-    note("How TradeFinder uses it: trade the index in the direction that dominates the first 30-60 minutes, "
-               "wait for the shakeout against it, trail the stop. Not backtested here: Dhan keeps no option OI history "
-               "for expired contracts, so only the latest session can be shown.")
+                                        "Futures bull", "fut_bear": "Futures bear", "net": "Net", "cum": "Today total",
+                                        "cum_2d": "Since yesterday"},
+                   signed=("net", "cum", "cum_2d"), height=360)
 
     st.page_link(P["smart"], label="Smart money sectors and their best R-factor stocks", icon=":material/insights:")
 
@@ -5695,6 +5746,69 @@ def _mv_meaning(text: str) -> str:
     return "".join(f"<div class='mv-pt{' lead' if i == 0 else ''}'>{_md_inline(x)}</div>" for i, x in enumerate(parts))
 
 
+def nifty_flow_fig(today: pd.DataFrame, crosses: list, height: int = 560):
+    """Nifty candles with MACD-cross markers, money into / out of the Nifty 50 stocks per candle (colour = side,
+    strength = size) with the running total, and the MACD panel."""
+    from plotly.subplots import make_subplots
+    x = today["t"]
+    fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.48, 0.3, 0.22], vertical_spacing=0.025,
+                        specs=[[{}], [{"secondary_y": True}], [{}]])
+    fig.add_trace(go.Candlestick(x=x, open=today["Open"], high=today["High"], low=today["Low"], close=today["Close"],
+                                 increasing_line_color=UP, decreasing_line_color=DOWN, name="Nifty 50"), 1, 1)
+    for c in crosses:
+        up = c["dir"] > 0
+        backed = (c["flow30"] > 0) if up else (c["flow30"] < 0)
+        fig.add_trace(go.Scatter(x=[c["t"]], y=[c["price"]], mode="markers+text", showlegend=False,
+                                 marker=dict(symbol="triangle-up" if up else "triangle-down", size=14,
+                                             color=(UP if up else DOWN) if backed else "#94A3B8",
+                                             line=dict(width=1, color="#0B1220")),
+                                 text=["MACD ↑" if up else "MACD ↓"], textposition="bottom center" if up else "top center",
+                                 textfont=dict(size=10), hovertemplate=f"{c['t']}: MACD {'up' if up else 'down'}, "
+                                 f"flow 30 min ₹{c['flow30']:+,.0f} Cr" + (" (backed)" if backed else " (not backed)")
+                                 + "<extra></extra>"), 1, 1)
+    if "net" in today and today["net"].notna().any():
+        net = today["net"].fillna(0)
+        mx = max(float(net.abs().max()), 1e-9)
+        cols = [f"rgba(38,166,154,{0.35 + 0.65 * abs(v) / mx:.2f})" if v >= 0 else
+                f"rgba(239,83,80,{0.35 + 0.65 * abs(v) / mx:.2f})" for v in net]
+        fig.add_trace(go.Bar(x=x, y=net, marker_color=cols, name="Money per candle ₹ Cr",
+                             hovertemplate="%{x}: ₹%{y:+,.1f} Cr<extra></extra>"), 2, 1)
+        fig.add_trace(go.Scatter(x=x, y=today["cum"], name="Running total ₹ Cr", line=dict(color=GOLD, width=2),
+                                 hovertemplate="%{x}: total ₹%{y:+,.0f} Cr<extra></extra>"), 2, 1, secondary_y=True)
+    fig.add_trace(go.Bar(x=x, y=today["hist"], marker_color=np.where(today["hist"] >= 0, UP, DOWN), opacity=0.55,
+                         name="MACD histogram"), 3, 1)
+    fig.add_trace(go.Scatter(x=x, y=today["macd"], line=dict(color="#3B82F6", width=1.4), name="MACD"), 3, 1)
+    fig.add_trace(go.Scatter(x=x, y=today["signal"], line=dict(color="#E8B33A", width=1.2), name="Signal"), 3, 1)
+    fig.update_layout(template=plot_template(), height=height, showlegend=False, margin=dict(l=10, r=10, t=10, b=10),
+                      xaxis_rangeslider_visible=False, bargap=0.15)
+    fig.update_xaxes(type="category", nticks=12)
+    fig.update_yaxes(title_text="Money ₹ Cr", row=2, col=1, secondary_y=False)
+    fig.update_yaxes(title_text="Total", row=2, col=1, secondary_y=True, showgrid=False)
+    fig.update_yaxes(title_text="MACD", row=3, col=1)
+    return fig
+
+
+def money_rotation_fig(secflow: pd.DataFrame, height: int = 380):
+    """Where the money moves: sectors losing money (red, left) to sectors receiving it (green, right)."""
+    links = A.rotation_links(secflow) if secflow is not None and not secflow.empty else []
+    if not links:
+        return None
+    srcs = list(dict.fromkeys(a for a, _, _ in links))
+    dsts = list(dict.fromkeys(b for _, b, _ in links))
+    net = secflow.set_index("Sector")["Net Flow Cr"].to_dict()
+    labels = [f"{x}  ₹{net.get(x, 0):+,.0f} Cr" for x in srcs] + [f"{x}  ₹{net.get(x, 0):+,.0f} Cr" for x in dsts]
+    fig = go.Figure(go.Sankey(
+        arrangement="snap",
+        node=dict(label=labels, pad=14, thickness=16, line=dict(width=0),
+                  color=["rgba(239,83,80,.85)"] * len(srcs) + ["rgba(38,166,154,.85)"] * len(dsts)),
+        link=dict(source=[srcs.index(a) for a, _, _ in links], target=[len(srcs) + dsts.index(b) for _, b, _ in links],
+                  value=[v for _, _, v in links], color="rgba(38,166,154,.22)",
+                  hovertemplate="%{source.label} → %{target.label}: ₹%{value:,.0f} Cr<extra></extra>")))
+    fig.update_layout(template=plot_template(), height=height, margin=dict(l=10, r=10, t=10, b=10),
+                      font=dict(size=12))
+    return fig
+
+
 @st.cache_data(ttl=120, show_spinner=False)
 def _mv_chain(sid: int, seg: str):
     """Nearest-expiry chain for the Market View, reused for 2 minutes (the recorder also calls Dhan's chain API)."""
@@ -5820,6 +5934,24 @@ def market_view_body(svc, t: pd.DataFrame):
                      column_config={"Details": st.column_config.TextColumn(width="large")})
     st.caption("Tested = made money after costs in testing (trade these). Small edge = real but thin. "
                "Context = not tested as a signal: use it to choose the side, not as an entry.")
+
+    # ---- Nifty 50: where the money goes candle by candle, against price and MACD
+    nf_today, nf_cross, nf_read = MV.flow_macd(idx_b.get("NIFTY"), MV.index_flow(per, (index_defs().get("NIFTY") or {})
+                                                                                   .get("w", {})))
+    if not nf_today.empty:
+        st.subheader("Nifty 50: money flow candle by candle")
+        if nf_read:
+            st.markdown("<div class='mv-grid' style='grid-template-columns:1fr'>" + _mv_card(nf_read) + "</div>",
+                        unsafe_allow_html=True)
+        st.plotly_chart(nifty_flow_fig(nf_today, nf_cross, 460 if MOBILE else 560), width="stretch",
+                        key="mv_nifty_flow", config={"displayModeBar": False})
+        st.caption("Green / red bars: money into / out of the Nifty 50 stocks in each 5-minute candle (darker = more). "
+                   "▲▼ MACD crosses: coloured when money flow backs them, grey when it doesn't.")
+    rot = money_rotation_fig(secflow, 320 if MOBILE else 380)
+    if rot is not None:
+        st.subheader("Where the money moves")
+        st.plotly_chart(rot, width="stretch", key="mv_rotation", config={"displayModeBar": False})
+        st.caption("Red: sectors money is leaving. Green: sectors it is going to. Width = rupees. Updates every minute.")
 
     # ---- 3. key data, each with what it means
     for title, group in (("Indices", idx_reads + [market[0]]), ("Who is buying", market[1:] + money),
@@ -5982,6 +6114,11 @@ if (auto and _page not in SELF_REFRESH | NO_REFRESH
 
 nav.run()
 st.session_state["_last_full"] = time.time()
+if _NOTES:  # every method / research text of this page, out of the way until asked for
+    with st.expander("How it works: method and research", icon=":material/info:"):
+        for kind, args, kw in _NOTES:
+            (st.caption if kind == "caption" else st.markdown)(*args, **kw)
+        st.caption("Full rules of every setup: research/FINAL_SETUPS.md in the repository.")
 
 if DSTAT.get("error"):
     sb_status.caption(f":orange[{DSTAT['error'][:160]}]")

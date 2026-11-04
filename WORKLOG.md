@@ -95,6 +95,20 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 5 Nov 2026: build-up carries yesterday, Nifty flow × MACD, money rotation, short texts
+
+- Index build-up: computes yesterday's session from the same 1-minute downloads (no extra calls) and reads the
+  positions open at yesterday's close (option OI at the strikes from the chain's previous OI, futures OI). Page
+  shows "Carried from yesterday" (yesterday's net build-up and bullish share, futures and option OI then vs now,
+  PCR) and a running total "Since yesterday" (default) or "Today only".
+- Market View: "Nifty 50: money flow candle by candle" (Nifty candles with MACD-cross markers, coloured when the
+  30 minutes of flow before the cross agree; money into / out of the Nifty 50 stocks per candle, darker = bigger,
+  with the running total; MACD panel) with a plain-words reading; "Where the money moves" (sectors money leaves,
+  red, to sectors it goes to, green). MACD alone was rejected in testing; the flow-backed version is labelled
+  untested until tested.
+- Method / research texts (note, note_md) collected into one collapsed "How it works" box at the bottom of each
+  page; one-line how-to under the status bar of each main page.
+
 ## 5 Nov 2026: design system, fonts, menu (look and feel, phase 1)
 
 - Audit: 47 hard-coded colours, 34 font sizes, 11 corner radii, 5 separate style blocks; card figures asked for
