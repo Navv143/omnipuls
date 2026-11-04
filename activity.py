@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import indicators as ind
 
 LOOKBACK = 20
 W_ACT = {"cumvol": 0.30, "range": 0.25, "cvol": 0.15, "crng": 0.10, "gap": 0.10, "oi": 0.10}
@@ -301,6 +302,7 @@ def rank(bars: dict, session, futs: dict | None = None, snaps: pd.DataFrame | No
             continue
         per[sym] = c
         last = c.iloc[-1].to_dict()
+        last["O=H/L"] = ind.ohl_flag(c["Open"].iloc[0], c["High"].max(), c["Low"].min())
         last.update({"Stock": sym, "Sector": (sectors or {}).get(sym, ""), "Price": last["Close"],
                      "Peak Smart": c["Smart"].abs().max() * np.sign(c.loc[c["Smart"].abs().idxmax(), "Smart"]),
                      "Signals": ""})

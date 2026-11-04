@@ -209,3 +209,21 @@ def screener_row(df: pd.DataFrame) -> dict | None:
         "Signals": ", ".join(tags),
         "Spark": [float(x) for x in c.tail(30)],
     }
+
+
+def ohl_flag(o, h, l, tol_pct: float = 0.05) -> str:
+    """'O=L ▲' when the day opened at its low (buyers held from the open), 'O=H ▼' when it opened at its high,
+    '' otherwise. Equal within tol_pct % of the open (about one tick on most F&O stocks)."""
+    try:
+        o, h, l = float(o), float(h), float(l)
+    except (TypeError, ValueError):
+        return ""
+    if not (o > 0 and h >= l) or o != o or h != h or l != l:
+        return ""
+    tol = o * tol_pct / 100
+    at_low, at_high = abs(o - l) <= tol, abs(o - h) <= tol
+    if at_low and not at_high:
+        return "O=L ▲"
+    if at_high and not at_low:
+        return "O=H ▼"
+    return ""
