@@ -2141,6 +2141,144 @@ def _md_inline(s: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
 
 
+def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
+    """State of each TESTED setup (research/FINAL_SETUPS.md), in plain words: fired (with entry, stop, target),
+    waiting (window still open) or none. Each part is guarded so one failure never hides the others."""
+    now = datetime.now(IST)
+    hm = now.strftime("%H:%M")
+    rows = []
+
+    def add(name, state, text, where):
+        rows.append({"name": name, "state": state, "text": text, "where": where})
+
+    # 1. opening setups: decided at 9:15, entered at the opening price
+    try:
+        if og is None:
+            add("Opening setups (gap fade, panic gap-down, sector overreaction)", "wait" if hm < "09:15" else "nodata",
+                "Decided at 9:15 from the opening gaps; enter at the opening price (pre-open orders 9:00–9:08)."
+                if hm < "09:15" else "No opening prices yet.", "Scanners → Opening setups")
+        else:
+            _, sig, _ = og
+            for key, meta in SU.SETUPS.items():
+                df = sig.get(key)
+                if df is None or df.empty:
+                    add(meta["name"], "none", "No signal today.", "Scanners → Opening setups")
+                    continue
+                parts = []
+                for _, r in df.iterrows():
+                    buy = str(r["side"]).upper().startswith("BUY")
+                    parts.append(f"**{r['sym']} {'BUY' if buy else 'SELL'}** at the open ₹{float(r['entry']):,.2f}, "
+                                 f"stop ₹{float(r['stop_px']):,.2f}, exit 15:20 (now {float(r['pnl_now%']):+.2f}%)")
+                add(meta["name"], "fired", "; ".join(parts) + ". Only valid at the opening price.",
+                    "Scanners → Opening setups")
+    except Exception as e:
+        add("Opening setups", "nodata", f"Not available ({str(e)[:80]}).", "Scanners → Opening setups")
+
+    bn = idx_b.get("BANKNIFTY")
+    # 2. Bank Nifty failed-break fade (signals 9:20-14:30, close back inside within 30 min)
+    try:
+        r = FADE.evaluate(bn, now.replace(tzinfo=None)) if bn is not None and not bn.empty else {"status": "no data"}
+        if r.get("trades"):
+            tr = r["trades"][-1]
+            pts = f"{tr['pts']:+.0f} pts" if pd.notna(tr.get("pts")) else ""
+            add("Bank Nifty failed-break fade", "fired" if tr["state"] == "open" else "closed",
+                f"**{'BUY' if tr['side'] > 0 else 'SELL'}** at {tr['time']} from {tr['entry']:,.0f} "
+                f"({tr['level'].lower()} broken at {tr['break_time']}, back inside), stop {tr['stop']:,.0f}, "
+                f"target {tr['target']:,.0f}: {tr['state']} {pts}.", "Scanners → Bank Nifty fade")
+        elif r.get("status") == "ok":
+            late = hm > "15:00"
+            add("Bank Nifty failed-break fade", "none" if late else "wait",
+                " · ".join(f"{s['level']} {s['price']:,.0f}: {s['state']}" for s in r["sides"]),
+                "Scanners → Bank Nifty fade")
+        else:
+            add("Bank Nifty failed-break fade", "nodata", f"{r.get('status', 'no data')}.", "Scanners → Bank Nifty fade")
+    except Exception as e:
+        add("Bank Nifty failed-break fade", "nodata", f"Not available ({str(e)[:80]}).", "Scanners → Bank Nifty fade")
+
+    # 3. Bank Nifty 5-STAR momentum (all six checks on one 5-min candle, 9:30-15:00)
+    try:
+        internals, _ = _five_star_data(svc)
+        r = FIVE.evaluate(bn, internals) if bn is not None and not bn.empty else {"status": "no data"}
+        sg = r.get("signal")
+        if sg:
+            add("Bank Nifty 5-STAR momentum", "fired" if sg["state"] == "open" else "closed",
+                f"**{'BUY' if sg['side'] > 0 else 'SELL'}** at {sg['time']} from {sg['entry']:,.0f}, stop "
+                f"{sg['stop']:,.0f} (trail with Supertrend, exit by 15:15): {sg['state']} {sg['pts']:+.0f} pts.",
+                "Scanners → Bank Nifty 5-STAR")
+        elif r.get("last"):
+            last = r["last"]
+            done = hm > "15:00"
+            add("Bank Nifty 5-STAR momentum", "none" if done else "wait",
+                ("No signal today." if done else f"Last candle {last['time']}: {last['checks']} of 6 checks "
+                 f"(leaning {last['lean']}). Fires when all 6 agree, 9:30–15:00."), "Scanners → Bank Nifty 5-STAR")
+        else:
+            add("Bank Nifty 5-STAR momentum", "nodata", f"{r.get('status', 'no data')}.", "Scanners → Bank Nifty 5-STAR")
+    except Exception as e:
+        add("Bank Nifty 5-STAR momentum", "nodata", f"Not available ({str(e)[:80]}).", "Scanners → Bank Nifty 5-STAR")
+
+    # 4. index trend day + futures OI rising (option buys, first signal 10:30-13:00)
+    for k, r in trend:
+        try:
+            name = f"Trend day + OI, {TREND_NAMES[k]} (options)"
+            if r.get("status") == "SIGNAL":
+                add(name, "fired", f"**BUY {r['side']} {r['strike']:,.0f}** (signal {r.get('sig_time', '')} at "
+                    f"{r.get('sig_px', float('nan')):,.0f}): ATM option, stop −30%, trail 30% from the peak after +30%, "
+                    "exit 15:15.", "Scanners → Index trend-day")
+            else:
+                mv = (f" Move {r['move_atr']:+.2f} ATR, needs ±{r['thr']:.1f}." if pd.notna(r.get("move_atr")) else "")
+                add(name, "none" if hm > "13:00" else "wait", f"{str(r.get('status', '—')).capitalize()}.{mv}",
+                    "Scanners → Index trend-day")
+        except Exception as e:
+            add(f"Trend day + OI, {k}", "nodata", f"Not available ({str(e)[:80]}).", "Scanners → Index trend-day")
+
+    # 5. Gold Order Flow (15-min, runs almost round the clock)
+    try:
+        g = _gold_flow() or {}
+        trs = [x for x in g.get("trades", []) if x.get("entry") is not None]
+        tr = trs[-1] if trs else None
+        stt = g.get("state") or {}
+        if tr is not None and tr["state"] == "open":
+            add("Gold Order Flow (15-min)", "fired",
+                f"**{'BUY' if tr['side'] > 0 else 'SELL'}** from {tr['entry']:,.1f}, stop {tr['stop']:,.1f}, target "
+                f"{tr['target']:,.1f}: open, {tr['pct']:+.2f}%.", "Scanners → Gold Order Flow")
+        else:
+            add("Gold Order Flow (15-min)", "wait",
+                f"No open trade. Flow: {stt.get('flow', '—')}, structure: {stt.get('structure', '—')}"
+                + (f" (needs {'bullish' if 'Buy' in str(stt.get('flow')) else 'bearish'} structure to fire)."
+                   if stt else "."), "Scanners → Gold Order Flow")
+    except Exception as e:
+        add("Gold Order Flow (15-min)", "nodata", f"Not available ({str(e)[:80]}).", "Scanners → Gold Order Flow")
+    return rows
+
+
+def todays_plan(svc, idx_b: dict, og, trend: list):
+    """The first thing on the desk: only the setups that held up in testing, and a plain 'no trade' when none has
+    fired. Everything below it (verdict, focus lists, activity, flow) is context, not a tested signal."""
+    rows = _plan_rows(svc, idx_b, og, trend)
+    hm = datetime.now(IST).strftime("%H:%M")
+    fired = [r for r in rows if r["state"] == "fired"]
+    waiting = [r for r in rows if r["state"] == "wait"]
+    icon = {"fired": ":green[● SIGNAL]", "closed": ":blue[● DONE]", "wait": ":orange[○ waiting]",
+            "none": ":gray[– none today]", "nodata": ":gray[? no data]"}
+    with st.container(border=True):
+        st.subheader("Today's plan: tested setups only")
+        if fired:
+            st.markdown(f"#### :green[{len(fired)} tested setup{'s' if len(fired) > 1 else ''} with a live signal]")
+        elif waiting and SS.market_hours():
+            st.markdown("#### No tested setup has fired yet. No trade until one does.")
+        elif SS.market_hours() or hm < "09:15":
+            st.markdown("#### No tested setup today. No trade is the right call.")
+        else:
+            st.markdown("#### Market closed: the last session's tested setups")
+        order = {"fired": 0, "closed": 1, "wait": 2, "none": 3, "nodata": 4}
+        for r in sorted(rows, key=lambda r: order[r["state"]]):
+            st.markdown(f"{icon[r['state']]} &nbsp; **{r['name']}**: {r['text']} "
+                        f"<span class='muted'>({r['where']})</span>", unsafe_allow_html=True)
+        st.caption("Only setups that made money after costs in testing (research/FINAL_SETUPS.md); most days have one "
+                   "or none, and no signal means no edge. Paper-trade them first: every signal and result is saved to "
+                   "the desk log. Not investment advice.")
+
+
 @st.fragment(run_every=120)
 def dashboard_desk(svc, t: pd.DataFrame):
     """One screen for a running market: how strong it is, what every scanner says now, where the money goes."""
@@ -2159,7 +2297,6 @@ def dashboard_desk(svc, t: pd.DataFrame):
     sc = _scan_now(svc)
     rf, _ = smart_money_stocks(svc)
     picks = best_picks(rf, sf) if not rf.empty and not sf.empty else pd.DataFrame()
-    trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og)
     vix = idx_b.get("INDIAVIX")
     trend = []
     for k in ("NIFTY", "BANKNIFTY"):
@@ -2167,6 +2304,11 @@ def dashboard_desk(svc, t: pd.DataFrame):
         if spot is None or spot.empty:
             continue
         trend.append((k, TA.evaluate(k, spot, fut_b.get(k), vix, None, TA.days_to_expiry(k, spot.index.max()))))
+    todays_plan(svc, idx_b, og, trend)
+    st.markdown("##### Market context")
+    st.caption("Readings that describe the market (verdict, CE / PE focus lists, activity, money flow). Useful for "
+               "context, but not tested as signals on their own: trade the plan above, not these.")
+    trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og)
 
     # ---- 2. every scanner, one line each
     st.subheader("Signals right now")
