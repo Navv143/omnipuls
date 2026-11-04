@@ -292,30 +292,117 @@ def lan_url() -> str | None:
         return None
 
 
+LANDING_CSS = """<style>
+[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl']{display:none}
+.block-container{padding-top:2.2rem}
+.om-hero .logo svg{width:min(300px,78vw);height:auto}
+.om-hero h1{font-size:clamp(1.7rem,3.4vw,2.6rem);line-height:1.15;margin:.9rem 0 .5rem;font-weight:700;
+  background:linear-gradient(90deg,#E6EDF7 0%,#9FD8FF 60%,#2EE6F6 100%);-webkit-background-clip:text;
+  background-clip:text;color:transparent}
+.om-hero .sub{font-size:var(--fs-md);color:var(--om-text-3);max-width:560px;line-height:1.55}
+.om-chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px}
+.om-chips span{font-size:var(--fs-xs);padding:4px 11px;border-radius:999px;border:1px solid var(--om-border-strong);
+  color:var(--om-text-2);background:var(--om-surface-2)}
+.om-slides{position:relative;height:250px;border:1px solid var(--om-border);border-radius:var(--r-lg);overflow:hidden;
+  background:radial-gradient(120% 120% at 0% 0%,rgba(46,230,246,.10),transparent 55%),var(--om-surface)}
+.om-slide{position:absolute;inset:0;padding:18px 20px;opacity:0;animation:om-fade 20s infinite}
+.om-slide:nth-child(2){animation-delay:5s}.om-slide:nth-child(3){animation-delay:10s}.om-slide:nth-child(4){animation-delay:15s}
+@keyframes om-fade{0%{opacity:0;transform:translateY(6px)}3%{opacity:1;transform:none}22%{opacity:1}25%{opacity:0}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.om-slide{animation:none;position:relative;opacity:1}.om-slides{height:auto}}
+.om-slide .k{font-size:var(--fs-2xs);letter-spacing:.12em;text-transform:uppercase;color:#2EE6F6}
+.om-slide h3{margin:.25rem 0 .2rem;font-size:var(--fs-lg)}
+.om-slide p{margin:0 0 10px;font-size:var(--fs-sm);color:var(--om-text-3)}
+.om-bars{display:flex;align-items:center;gap:5px;height:110px}
+.om-bars i{flex:1;border-radius:3px}
+.om-row{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;margin-top:6px;border-radius:8px;
+  background:var(--om-sunken);border:1px solid var(--om-border-soft);font-size:var(--fs-sm)}
+.om-row b{font-family:var(--font-num)}
+.om-tag{font-size:var(--fs-2xs);padding:2px 8px;border-radius:999px}
+.om-feat{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+.om-feat div{border:1px solid var(--om-border);border-radius:var(--r-md);padding:10px 12px;background:var(--om-surface);
+  font-size:var(--fs-xs);color:var(--om-text-3)}
+.om-feat b{display:block;color:var(--om-text);font-size:var(--fs-sm);margin-bottom:2px}
+@media (max-width:640px){.om-feat{grid-template-columns:1fr 1fr}.om-slides{height:270px}}
+.om-card{border:1px solid var(--om-border);border-radius:var(--r-lg);padding:22px 22px 8px;margin-top:8px;
+  background:linear-gradient(180deg,var(--om-surface),var(--om-sunken))}
+.om-card h3{margin:0 0 .2rem}.om-card .s{font-size:var(--fs-sm);color:var(--om-text-3);margin-bottom:.9rem}
+.om-foot{font-size:var(--fs-xs);color:var(--om-faint);margin-top:18px}
+</style>"""
+
+
+def _landing_hero() -> tuple[str, str]:
+    """(top: logo, headline, summary; rest: chips, feature slides, tiles)."""
+    try:
+        logo = (Path(__file__).resolve().parent / "brand" / "concept1_momentum_logo_dark_bg.svg").read_text()
+    except Exception:
+        logo = ""
+    up, dn = "rgba(38,166,154,", "rgba(239,83,80,"
+    flow = [6, 9, 7, 4, 2, -1, -3, -6, -8, -5, -2, 1, 4, 7, 10, 8, 5]
+    flow_bars = "".join(f"<i style='height:{abs(v) * 5 + 6}px;background:{(up if v >= 0 else dn)}"
+                        f"{0.45 + abs(v) / 20:.2f});align-self:{'flex-end' if v >= 0 else 'flex-start'}'></i>"
+                        for v in flow)
+    oi = [(5, 2), (7, 3), (4, 6), (8, 2), (9, 1), (6, 4), (3, 7), (7, 2), (10, 1), (8, 3), (6, 2), (9, 2)]
+    oi_bars = "".join(f"<i style='display:flex;flex-direction:column;justify-content:center;gap:2px;background:none'>"
+                      f"<span style='height:{b * 5}px;background:#26A69A;border-radius:3px'></span>"
+                      f"<span style='height:{r * 5}px;background:#EF5350;border-radius:3px'></span></i>" for b, r in oi)
+    top = f"""<div class='om-hero'>
+  <div class='logo'>{logo}</div>
+  <h1>See where the smart money moves, before the crowd.</h1>
+  <div class='sub'>Omnipuls reads live Dhan data for every F&amp;O stock and index: money flow, open interest, unusual
+  activity and option writers, and turns it into tested trade setups with entry, stop and target.</div></div>"""
+    return top, f"""
+<div class='om-hero'>
+  <div class='om-chips'><span>Live tick-by-tick</span><span>Money flow</span><span>OI build-up</span>
+  <span>Unusual activity</span><span>Option chain</span><span>Tested setups only</span></div>
+  <div class='om-slides'>
+    <div class='om-slide'><div class='k'>Money flow</div><h3>Money in and out, candle by candle</h3>
+      <p>Nifty 50 flow against price and MACD, and which sectors money leaves for which.</p>
+      <div class='om-bars'>{flow_bars}</div></div>
+    <div class='om-slide'><div class='k'>Index build-up</div><h3>Who is building positions</h3>
+      <p>Options and futures OI every 3 minutes, with what was carried from yesterday.</p>
+      <div class='om-bars'>{oi_bars}</div></div>
+    <div class='om-slide'><div class='k'>Unusual activity</div><h3>Stocks moving on 3× their usual volume</h3>
+      <p>Smart score from volume, range, OI and order book vs the same time on 20 days.</p>
+      <div class='om-row'><span>SBIN · long build-up</span><b style='color:#26A69A'>+62</b></div>
+      <div class='om-row'><span>TCS · short build-up</span><b style='color:#EF5350'>−48</b></div>
+      <div class='om-row'><span>HDFCBANK · 71% buying</span><b style='color:#26A69A'>+41</b></div></div>
+    <div class='om-slide'><div class='k'>Tested setups</div><h3>Only what made money after costs</h3>
+      <p>Each setup backtested on years of data; no signal means no trade.</p>
+      <div class='om-row'><span>Trend day + OI · Nifty CE</span><span class='om-tag' style='background:rgba(38,166,154,.18);color:#26A69A'>Signal</span></div>
+      <div class='om-row'><span>Bank Nifty failed-break fade</span><span class='om-tag' style='background:rgba(232,179,58,.16);color:#E8B33A'>Waiting</span></div>
+      <div class='om-row'><span>Gap fade at the open</span><span class='om-tag' style='background:rgba(148,163,184,.16);color:#94A3B8'>None today</span></div></div>
+  </div>
+  <div class='om-feat'>
+    <div><b>Market View</b>Every signal and reading on one page, with what it means.</div>
+    <div><b>Option chain</b>Support and resistance from where writers sit.</div>
+    <div><b>Scanners</b>Opening setups, breakouts, 5-STAR and more.</div>
+  </div>
+</div>"""
+
+
 def login_screen():
-    st.markdown("<style>[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl']{display:none}</style>",
-                unsafe_allow_html=True)
+    st.markdown(LANDING_CSS, unsafe_allow_html=True)
     if MOBILE:
-        mid = st.container()
+        left, right = st.container(), st.container()
     else:
-        _, mid, _ = st.columns([1, 1.15, 1])
-    with mid:
-        st.write("")
-        st.image(str(ASSETS / "omnipuls_logo.png"), width=250)
+        left, _, right = st.columns([1.45, 0.08, 1])
+    top, rest = _landing_hero()
+    with left:
+        st.markdown(top, unsafe_allow_html=True)
+        if not MOBILE:
+            st.markdown(rest, unsafe_allow_html=True)
+    with right:
+        if not MOBILE:
+            st.markdown("<div style='height:7.5rem'></div>", unsafe_allow_html=True)
         if not auth.has_users() and PUBLIC:
-            st.subheader("Set up the admin account")
-            st.markdown("This copy of Omnipuls is on a public server, so accounts can't be created from this "
-                        f"screen. Add your admin account to the app's Secrets (**{SECRETS_HELP}**), save, and "
-                        "reload this page:")
+            st.markdown("<div class='om-card'><h3>Set up the admin account</h3><div class='s'>This server is public, "
+                        "so accounts are added in the app's Secrets, not here.</div></div>", unsafe_allow_html=True)
             st.code('[users.navneet]\nname = "Navneet"\nrole = "admin"\npassword = "choose-a-strong-password"',
                     language="toml")
-            st.markdown('<div class="signin-note">Secrets are private to your Streamlit account and are never '
-                        'stored in GitHub. Change the user ID, name and password to your own.</div>',
-                        unsafe_allow_html=True)
+            st.caption(f"Add it in {SECRETS_HELP}, save, and reload this page.")
         elif not auth.has_users():
-            st.subheader("Create your admin account")
-            st.markdown('<div class="signin-note">This is the first start. The admin can add other users, '
-                        'connect Dhan and see the portfolio.</div>', unsafe_allow_html=True)
+            st.markdown("<div class='om-card'><h3>Create your admin account</h3><div class='s'>First start: the admin "
+                        "adds users, connects Dhan and sees the portfolio.</div></div>", unsafe_allow_html=True)
             with st.form("setup_form"):
                 name = st.text_input("Your name", key="su_name")
                 uid = st.text_input("User ID", key="su_uid", placeholder="e.g. navneet")
@@ -334,23 +421,31 @@ def login_screen():
                         st.session_state.user = auth.verify(uid, pw)
                         st.rerun()
         else:
-            st.subheader("Sign in")
-            with st.form("login_form"):
-                uid = st.text_input("User ID", key="li_uid", autocomplete="username")
-                pw = st.text_input("Password", type="password", key="li_pw", autocomplete="current-password")
-                ok = st.form_submit_button("Sign in", type="primary", width="stretch")
-            if ok:
-                wait = auth.locked_for(uid)
-                user = None if wait else auth.verify(uid, pw)
-                if user:
-                    st.session_state.user = user
+            st.markdown("<div class='om-card'><h3>Welcome back</h3><div class='s'>Sign in to open today's Market View."
+                        "</div></div>", unsafe_allow_html=True)
+            if not st.session_state.get("_show_login"):
+                if st.button("Sign in", type="primary", width="stretch", icon=":material/login:", key="show_login"):
+                    st.session_state["_show_login"] = True
                     st.rerun()
-                wait = auth.locked_for(uid)
-                st.error(f"Too many wrong passwords. Try again in {wait // 60 + 1} min." if wait
-                         else "Wrong user ID or password.")
-            st.markdown('<div class="signin-note">Forgot your password? Ask the admin to reset it under '
-                        '<b>Account</b>. The admin can reset their own by running <code>reset_password.py</code> '
-                        'on the computer that runs Omnipuls.</div>', unsafe_allow_html=True)
+            else:
+                with st.form("login_form", border=False):
+                    uid = st.text_input("User ID", key="li_uid", autocomplete="username")
+                    pw = st.text_input("Password", type="password", key="li_pw", autocomplete="current-password")
+                    ok = st.form_submit_button("Sign in", type="primary", width="stretch", icon=":material/login:")
+                if ok:
+                    wait = auth.locked_for(uid)
+                    user = None if wait else auth.verify(uid, pw)
+                    if user:
+                        st.session_state.user = user
+                        st.rerun()
+                    wait = auth.locked_for(uid)
+                    st.error(f"Too many wrong passwords. Try again in {wait // 60 + 1} min." if wait
+                             else "Wrong user ID or password.")
+                st.caption("Forgot your password? Ask the admin to reset it under Account.")
+        if MOBILE:  # phones: sign in first, then the feature tour
+            st.markdown(rest, unsafe_allow_html=True)
+        st.markdown("<div class='om-foot'>Private app · data from Dhan · for information only, not investment advice."
+                    "</div>", unsafe_allow_html=True)
 
 
 @st.cache_resource(show_spinner=False)
