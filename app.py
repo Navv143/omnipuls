@@ -49,6 +49,7 @@ import indices as IX
 import trend_alert as TA
 import desk as DK
 import twelve as TW
+import market_view as MV
 import paths as PATHS
 import cryptocom as CC
 import cloudstore as CS
@@ -85,7 +86,7 @@ def _reload_changed():
     sys, which survives reruns and cache clears). If a reload fails (Streamlit may be swapping the same module), drop
     it from sys.modules and rerun, so app.py's own import loads the new file."""
     import importlib
-    mods = [CS, U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, CC, DL, FIVE, CL, TO, FADE, GF]  # dependencies before the modules that use them
+    mods = [CS, U, D, ind, auth, fno, F, SC, SU, SS, AP, A, IX, TA, DK, TW, CC, MV, DL, FIVE, CL, TO, FADE, GF]  # dependencies before the modules that use them
     import hashlib
     seen = sys.__dict__.setdefault("_omni_seen", {})
     started = None
@@ -5634,7 +5635,199 @@ def _sign_out():
     for k in list(st.session_state.keys()):
         del st.session_state[k]
 
+
+# ---------------------------------------------------------------- Market View: one page, every signal and reading
+
+
+MV_CSS = """<style>
+.mv-idea{border-radius:14px;padding:16px 18px;margin:4px 0 16px;border:1px solid var(--mvc);
+  background:linear-gradient(135deg,var(--mvg),transparent 70%)}
+.mv-idea .k{font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+.mv-idea h3{margin:.15rem 0 .4rem;font-size:1.3rem;color:var(--mvc)}
+.mv-idea p{margin:.25rem 0;font-size:.95rem;line-height:1.45}
+.mv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;margin:6px 0 10px}
+.mv-card{border:1px solid rgba(148,163,184,.22);border-left:4px solid var(--mvc);border-radius:12px;
+  padding:12px 14px;background:rgba(148,163,184,.06)}
+.mv-card .t{font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;opacity:.8;display:flex;
+  justify-content:space-between;align-items:center;gap:8px}
+.mv-card .v{font-size:1.35rem;font-weight:600;margin:3px 0 1px;color:var(--mvc)}
+.mv-card .d{font-size:.78rem;opacity:.72}
+.mv-card .m{font-size:.9rem;margin-top:8px;line-height:1.45}
+.mv-ev{font-size:.66rem;padding:1px 8px;border-radius:999px;border:1px solid var(--evc);color:var(--evc);
+  white-space:nowrap;text-transform:none;letter-spacing:0}
+</style>"""
+MV_EV_COLOR = {"tested": "#0f9d58", "edge": "#1a73e8", "context": "#94A3B8"}
+
+
+def _mv_tone_color(tone: int) -> str:
+    return UP if tone > 0 else DOWN if tone < 0 else "#94A3B8"
+
+
+def _mv_card(r: dict) -> str:
+    ev = r.get("evidence", "context")
+    return (f"<div class='mv-card' style='--mvc:{_mv_tone_color(r['tone'])}'><div class='t'><span>{r['title']}</span>"
+            f"<span class='mv-ev' style='--evc:{MV_EV_COLOR[ev]}'>{MV.EVIDENCE[ev]}</span></div>"
+            f"<div class='v'>{r['value']}</div><div class='d'>{r.get('detail', '')}</div>"
+            f"<div class='m'>→ {_md_inline(r['meaning'])}</div></div>")
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _mv_chain(sid: int, seg: str):
+    """Nearest-expiry chain for the Market View, reused for 2 minutes (the recorder also calls Dhan's chain API)."""
+    exps = [e for e in oc_expiries(sid, seg) if str(e) >= datetime.now(IST).strftime("%Y-%m-%d")]
+    if not exps:
+        return 0.0, pd.DataFrame(), None
+    spot, ch = D.option_chain(sid, seg, exps[0], DCFG)
+    return spot, ch, D.max_pain(ch)
+
+
+def _mv_signals(plan_rows: list, ce: pd.DataFrame, pe: pd.DataFrame, sc, picks: pd.DataFrame) -> pd.DataFrame:
+    """Every signal from every scanner in one table, the tested ones first."""
+    rows = []
+    order = {"fired": 0, "closed": 1, "wait": 2, "none": 3, "nodata": 4}
+    status = {"fired": "● SIGNAL", "closed": "Done today", "wait": "Waiting", "none": "None today", "nodata": "No data"}
+    for r in sorted(plan_rows, key=lambda r: order[r["state"]]):
+        rows.append({"Signal": r["name"], "Status": status[r["state"]], "Evidence": "Tested",
+                     "Details": r["text"].replace("**", ""), "_o": order[r["state"]]})
+    if sc is not None:
+        _, v3, _ = sc
+        for _, r in (v3 if v3 is not None else pd.DataFrame()).head(5).iterrows():
+            rows.append({"Signal": f"Breakout V3: {r.get('Stock', '')} {r.get('Side', '')}", "Status": "● SIGNAL",
+                         "Evidence": "Small edge", "Details": "Top-2 mover, 15-min breakout with volume, exit 15:20",
+                         "_o": 5})
+    for df, side in ((ce, "CE / long"), (pe, "PE / short")):
+        for _, r in (df if df is not None else pd.DataFrame()).iterrows():
+            rows.append({"Signal": f"{side} focus: {r['Stock']} ({r['Chg %']:+.2f}%)", "Status": "Confluence",
+                         "Evidence": "Context", "Details": str(r.get("Why", "")), "_o": 6})
+    for _, r in (picks if picks is not None else pd.DataFrame()).head(5).iterrows():
+        rows.append({"Signal": f"Smart-money pick: {r.get('Stock', '')} {r.get('Side', '')}", "Status": "Confluence",
+                     "Evidence": "Context", "Details": "Top R-factor stock moving with a favoured sector", "_o": 7})
+    return pd.DataFrame(rows).sort_values("_o", kind="stable").drop(columns="_o") if rows else pd.DataFrame()
+
+
+@st.fragment(run_every=LIVE_EVERY)
+def market_view_body(svc, t: pd.DataFrame):
+    st.markdown(MV_CSS, unsafe_allow_html=True)
+    sf = sector_flow_table()
+    box = apex_live(_dhan_sig())
+    share = AP.dominance(box["bars"])[0] if box.get("bars") is not None else None
+    act = _activity_data(svc)
+    R = act[0] if act else pd.DataFrame()
+    per = act[2] if act else {}
+    flow = A.flow_window(per, None) if per else pd.DataFrame()
+    if not flow.empty:
+        flow["Sector"] = flow["Stock"].map(U.FNO_SECTOR_OF).fillna("Other")
+        flow = flow[flow["Stock"].isin(set(U.FNO_SECTOR_OF))]
+    secflow = A.sector_flow(flow) if not flow.empty else pd.DataFrame()
+    idx_b, fut_b = svc.idx_bars(), svc.ifut_bars()
+    og = opening_signals()
+    sc = _scan_now(svc)
+    rf, _ = smart_money_stocks(svc)
+    picks = best_picks(rf, sf) if not rf.empty and not sf.empty else pd.DataFrame()
+    vix_b = idx_b.get("INDIAVIX")
+    trend = []
+    for k in ("NIFTY", "BANKNIFTY"):
+        spot = idx_b.get(k)
+        if spot is not None and not spot.empty:
+            trend.append((k, TA.evaluate(k, spot, fut_b.get(k), vix_b, None, TA.days_to_expiry(k, spot.index.max()))))
+
+    snaps = {k: _idx_snapshot(idx_b.get(k)) for k in ("NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "INDIAVIX")}
+    adv = int((t["Chg %"] > 0).sum()) if not t.empty and "Chg %" in t else None
+    dec = int((t["Chg %"] < 0).sum()) if not t.empty and "Chg %" in t else None
+    buy_share = (flow["Inflow Cr"].sum() / (flow["Inflow Cr"].sum() + flow["Outflow Cr"].sum()) * 100
+                 if not flow.empty else None)
+    fut_money = float(sf["Smart money (Rs cr)"].sum()) if not sf.empty else None
+    n, vx = snaps.get("NIFTY") or {}, snaps.get("INDIAVIX") or {}
+    verdict = DK.regime(share, adv, dec, buy_share, fut_money, vx.get("chg"), n.get("from_open"), n.get("atr"))
+    sec_flag = sf.set_index("Sector")["Flow"].to_dict() if not sf.empty else {}
+    ce, pe = DK.focus(R, flow, sc[0] if sc is not None else pd.DataFrame(), picks, sec_flag)
+    plans = []
+    for k, name in (("NIFTY", "Nifty"), ("BANKNIFTY", "Bank Nifty")):
+        x = snaps.get(k)
+        tr = dict(trend).get(k)
+        if x:
+            plans.append(DK.index_plan(name, x["last"], TA.STEP.get(k, 50), verdict, tr, share if k == "NIFTY" else None))
+    try:  # the desk log (Supabase) keeps recording when people use this page instead of the Trading Desk
+        _log_desk(snaps, verdict, plans, ce, pe)
+        if datetime.now(IST).weekday() < 5:
+            _log_paper(svc, idx_b, og, datetime.now(IST).replace(tzinfo=None))
+    except Exception as e:
+        DL.STATUS["error"] = f"market view log: {e}"[:200]
+    plan_rows = _plan_rows(svc, idx_b, og, trend)
+
+    # ---- readings with what they mean
+    idx_reads = [MV.index_read(name, idx_b.get(k), fut_b.get(k)) for k, name in
+                 (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"), ("FINNIFTY", "Fin Nifty"), ("SENSEX", "Sensex"))]
+    chains = []
+    for k, sid in (("NIFTY", 13), ("BANKNIFTY", 25)):
+        try:
+            spot, ch, mp = _mv_chain(sid, "IDX_I")
+            chains.append(MV.chain_read(TREND_NAMES.get(k, k), spot, ch, mp))
+        except Exception:
+            chains.append(None)
+    market = [MV.vix_read(snaps.get("INDIAVIX")), MV.buildup_read(share), MV.breadth_read(adv, dec),
+              MV.futures_money_read(sf)]
+    money = [MV.flow_read(secflow), MV.activity_read(R)]
+    every = [r for r in idx_reads + market + money + chains if r]
+
+    # ---- 1. the trade idea
+    idea = MV.trade_idea(plan_rows, verdict, every)
+    c = UP if idea["tone"] > 0 else DOWN if idea["tone"] < 0 else "#94A3B8"
+    g = {UP: "rgba(38,166,154,.18)", DOWN: "rgba(239,83,80,.18)"}.get(c, "rgba(148,163,184,.10)")
+    now = datetime.now(IST)
+    st.markdown(f"<div class='mv-idea' style='--mvc:{c};--mvg:{g}'><div class='k'>Trade idea right now · "
+                f"{now:%a %d %b %H:%M} IST</div><h3>{idea['headline']}</h3>"
+                + "".join(f"<p>{_md_inline(x)}</p>" for x in idea["lines"]) + "</div>", unsafe_allow_html=True)
+
+    # ---- 2. all signals
+    st.subheader("All signals, one list")
+    sig = _mv_signals(plan_rows, ce, pe, sc, picks)
+    if sig.empty:
+        st.caption("No signals yet.")
+    elif MOBILE:  # phones: a list, so evidence and details aren't cut off by a wide table
+        ev_c = {"Tested": MV_EV_COLOR["tested"], "Small edge": MV_EV_COLOR["edge"], "Context": MV_EV_COLOR["context"]}
+        st.markdown("<div class='mv-grid'>" + "".join(
+            f"<div class='mv-card' style='--mvc:{UP if r['Status'] == '● SIGNAL' else '#94A3B8'};padding:9px 12px'>"
+            f"<div class='t'><span>{r['Status']}</span><span class='mv-ev' style='--evc:{ev_c.get(r['Evidence'], '#94A3B8')}'>"
+            f"{r['Evidence']}</span></div><div style='font-weight:600;margin:3px 0'>{r['Signal']}</div>"
+            f"<div class='d'>{r['Details']}</div></div>" for _, r in sig.iterrows()) + "</div>", unsafe_allow_html=True)
+    else:
+        st.dataframe(sig, hide_index=True, width="stretch", height=min(42 + 35 * len(sig), 460),
+                     column_config={"Details": st.column_config.TextColumn(width="large")})
+    st.caption("Tested = made money after costs in testing (trade these). Small edge = real but thin. "
+               "Context = not tested as a signal: use it to choose the side, not as an entry.")
+
+    # ---- 3. key data, each with what it means
+    for title, group in (("Indices", idx_reads + [market[0]]), ("Who is buying", market[1:] + money),
+                         ("Option chains", chains)):
+        cards = [r for r in group if r]
+        if cards:
+            st.subheader(title)
+            st.markdown("<div class='mv-grid'>" + "".join(_mv_card(r) for r in cards) + "</div>",
+                        unsafe_allow_html=True)
+    st.caption("Refreshes every minute in market hours. Research behind each line: research/FINAL_SETUPS.md. "
+               "For information only, not investment advice.")
+
+
+def page_view():
+    status_strip()
+    st.header("Market View")
+    if not DHAN_DATA:
+        st.info("Connect Dhan for the Market View: it needs live index, futures, OI and stock data.",
+                icon=":material/link:")
+        return
+    ft, _ = safe(fno_table)
+    t = ft[0] if ft else pd.DataFrame()
+    svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
+    idx = index_defs()
+    svc.set_universe(tuple(sorted(set(scan_universe("All F&O stocks")) | {m for d in idx.values() for m in d["w"]})))
+    svc.set_indices({**{k: d["id"] for k, d in idx.items()}, "INDIAVIX": 21})
+    svc.touch()
+    market_view_body(svc, t)
+
+
 PAGE_DEFS = [  # (url, function, menu title, icon)
+    ("view", page_view, "Market View", ":material/dashboard_customize:"),
     ("dashboard", page_dashboard, "Trading Desk", ":material/space_dashboard:"),
     ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
     ("smart", page_smart_money, "Smart Money Sectors", ":material/insights:"),
@@ -5657,13 +5850,13 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("research", page_research, "Research notes", ":material/lock:"),
     ("review", page_desk_review, "Desk review", ":material/fact_check:"),
 ]
-# Start page: Dashboard, or set NAVV_START_PAGE (e.g. fno, crypto) to open somewhere else.
-_start = os.environ.get("NAVV_START_PAGE", "dashboard")
+# Start page: Market View, or set NAVV_START_PAGE (e.g. fno, crypto) to open somewhere else.
+_start = os.environ.get("NAVV_START_PAGE", "view")
 if _start not in {d[0] for d in PAGE_DEFS}:
-    _start = "dashboard"
+    _start = "view"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({
-    "Trade": [P["dashboard"], P["apex"], P["smart"], P["scanners"], P["odds"], P["options"]] + ([P["review"]] if IS_ADMIN else []),
+    "Trade": [P["view"], P["dashboard"], P["apex"], P["smart"], P["scanners"], P["odds"], P["options"]] + ([P["review"]] if IS_ADMIN else []),
     "Markets": [P["fno"], P["oi"], P["sectors"], P["indices"], P["global"]],
     "Dhan": [P["mcx"], P["cdsfut"]] + ([P["portfolio"], P["dhan"]] if IS_ADMIN else []),
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["account"]] + ([P["research"]] if IS_ADMIN else []),
@@ -5750,7 +5943,7 @@ if DHAN_DATA:  # start loading scanner data in the background so the Scanners pa
             st.session_state.get("scan_uni", "All F&O stocks")))
     except Exception:
         pass
-SELF_REFRESH = {"dashboard", "scanners", "smart", "apex"}  # these refresh their own sections; a full rerun only reloads
+SELF_REFRESH = {"view", "dashboard", "scanners", "smart", "apex"}  # these refresh their own sections; a full rerun only reloads
 NO_REFRESH = {"account", "dhan", "research", "review"}  # forms and notes: a rerun only interrupts typing
 INDIAN_ONLY = {"fno", "oi", "sectors", "indices", "options", "odds", "portfolio"}  # nothing changes after the close
 _page = getattr(nav, "url_path", "")

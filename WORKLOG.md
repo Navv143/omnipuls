@@ -95,6 +95,20 @@ Opening setups tab.
 - Unusual activity / money flow studies: confirmation tools (big movers on 2-3x usual activity continue; sector flow
   persists slightly), not stand-alone signals.
 
+## 5 Nov 2026: Market View (one page: every signal and reading, with what it means)
+
+- New first page and start page, "Market View": (1) Trade idea right now: tested signals if any fired, otherwise
+  the mood, the bias and an honest "wait" with what to watch; (2) All signals, one list: tested setups, Version 3
+  breakouts, CE/PE focus, smart-money picks, each labelled Tested / Small edge / Context (a card list on phones);
+  (3) cards for Nifty, Bank Nifty, Fin Nifty, Sensex (vs yesterday's high/low, opening range, futures VWAP, move in
+  ATR), India VIX, Nifty build-up, F&O breadth, fresh futures money, sector money flow, unusual activity and the
+  Nifty / Bank Nifty option chains (support / resistance by OI, PCR, max pain), each with "-> what it means".
+- Interpretations in `market_view.py`, grounded in research/FINAL_SETUPS.md (Bank Nifty breaks tend to fail, Nifty
+  breaks ~half slip back, trend day + OI is the tested option buy, sector flow persists a little, unusual movers
+  continue). Untested readings say so.
+- The page also writes the desk log (Supabase), so recording continues when people use it instead of the desk.
+- Running the server (Hostinger, srv2128506.hstgr.cloud) since 4 Nov evening; setup.sh DNS check fixed (PR #7).
+
 ## 4 Nov 2026: Hostinger VPS + own domain (HTTPS, live ticks)
 
 - Sizing measured: app 155 MB idle, recorder 114 MB, full market + all scanners about +300 MB, ~15 s CPU for the
