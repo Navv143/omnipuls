@@ -12,8 +12,9 @@ import urllib.request
 from pathlib import Path
 
 import universe as U
+import paths
 
-CACHE = Path(__file__).with_name("fno_cache.json")
+CACHE = paths.state("fno_cache.json")
 URLS = [
     "https://nsearchives.nseindia.com/content/fo/fo_mktlots.csv",
     "https://archives.nseindia.com/content/fo/fo_mktlots.csv",

@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+import paths
 
 try:  # check HTTPS certificates against the operating system's store (needed behind antivirus/proxy inspection)
     import truststore
@@ -32,8 +33,8 @@ except ImportError:
 BASE = "https://api.dhan.co/v2"
 MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 HERE = Path(__file__).resolve().parent
-CONFIG = HERE / "dhan_config.json"
-CACHE = HERE / "dhan_cache"
+CONFIG = paths.state("dhan_config.json")
+CACHE = paths.state("dhan_cache")
 IST = timezone(timedelta(hours=5, minutes=30))
 
 # Seconds between calls per API family (Dhan limits: quote 1/s, data 5/s, option chain 1 per 3 s)

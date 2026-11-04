@@ -49,6 +49,7 @@ import indices as IX
 import trend_alert as TA
 import desk as DK
 import twelve as TW
+import paths as PATHS
 import cryptocom as CC
 import cloudstore as CS
 import desk_log as DL
@@ -154,7 +155,7 @@ CS.configure(_supabase_cfg().get("url"), _supabase_cfg().get("key"))  # before s
 
 IST = timezone(timedelta(hours=5, minutes=30))
 UP, DOWN, GOLD = "#26A69A", "#EF5350", "#E8B33A"
-DATA_FILE = Path(__file__).with_name("watchlist.json")  # replaced per user after sign-in
+DATA_FILE = PATHS.state("watchlist.json")  # replaced per user after sign-in
 
 ASSETS = Path(__file__).resolve().parent / "assets"
 st.set_page_config(page_title="Omnipuls", page_icon=str(ASSETS / "omnipuls_icon.png"), layout="wide",
@@ -402,8 +403,8 @@ st.markdown(f"""<style>
 # ---------------------------------------------------------------- persistence
 
 
-DATA_FILE = Path(__file__).with_name(f"watchlist_{USER['id']}.json")
-_OLD = Path(__file__).with_name("watchlist.json")
+DATA_FILE = PATHS.state(f"watchlist_{USER['id']}.json")
+_OLD = PATHS.state("watchlist.json")
 if IS_ADMIN and not DATA_FILE.exists() and _OLD.exists():  # keep the watchlist from before accounts existed
     try:
         DATA_FILE.write_text(_OLD.read_text())
@@ -453,6 +454,15 @@ def ensure_auto_token(force: bool = False):
     box = _auto_token()
     now = datetime.now(IST)
     with box["lock"]:
+        try:  # a newer token saved by another process (the data recorder) wins over the one in memory, so the two
+            disk_exp = datetime.fromisoformat(str(DCFG.get("token_expiry")))  # don't keep replacing each other's
+        except ValueError:
+            disk_exp = None
+        if disk_exp is not None and disk_exp.tzinfo is None:
+            disk_exp = disk_exp.replace(tzinfo=IST)
+        if (DCFG.get("access_token") and disk_exp and DCFG["access_token"] != box["token"]
+                and (box["expiry"] is None or disk_exp > box["expiry"]) and disk_exp - now > timedelta(hours=1)):
+            box.update(token=DCFG["access_token"], expiry=disk_exp)
         fresh = bool(box["token"] and box["expiry"] and box["expiry"] - now > timedelta(hours=1))
         if not fresh and not force:
             try:
@@ -3660,7 +3670,7 @@ def with_sector_money(rd: pd.DataFrame) -> pd.DataFrame:
     return rd
 
 
-RADAR_LOG = Path(__file__).with_name("radar_log.csv")
+RADAR_LOG = PATHS.state("radar_log.csv")
 
 
 @st.cache_data(ttl=90, show_spinner=False)

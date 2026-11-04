@@ -1,0 +1,9 @@
+.git
+.venv
+__pycache__
+research/data
+research/cache
+market_data
+scan_cache
+dhan_cache
+activity_history

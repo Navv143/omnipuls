@@ -1,0 +1,53 @@
+# Omnipuls on the office server. First time (see DEPLOY.md):  cd omnipuls/deploy && docker compose up -d --build
+# After that nothing is done on the server: the updater pulls every merge to `main` from GitHub within 5 minutes.
+name: omnipuls
+
+x-base: &base
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  image: omnipuls:latest
+  working_dir: /app/code
+  restart: unless-stopped
+  volumes:
+    - ..:/app/code                               # this repository folder (kept up to date by `updater`)
+    - state:/app/state                           # accounts, Dhan token, watchlists, logs, caches
+    - ${DATA_DIR:-../market_data}:/app/data      # recorded market data (roughly 30-40 MB a trading day)
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+services:
+  app:
+    <<: *base
+    command: ["sh", "deploy/run_app.sh"]
+    environment:
+      OMNIPULS_STATE: /app/state
+      OMNIPULS_DATA: /app/data
+      OMNIPULS_PUBLIC: "0"          # office network: live prices tick by tick
+      OMNIPULS_RELAY_PORT: "8765"
+      TZ: Asia/Kolkata
+    ports:
+      - "${APP_PORT:-8501}:8501"    # the app:            http://<server>:8501
+      - "8765:8765"                 # live tick stream to the browser
+
+  recorder:
+    <<: *base
+    command: ["python", "recorder.py"]
+    environment:
+      OMNIPULS_STATE: /app/state
+      OMNIPULS_DATA: /app/data
+      REC_RESTART_ON_UPDATE: "1"
+      REC_BACKFILL_DAYS: "${REC_BACKFILL_DAYS:-5}"
+      TZ: Asia/Kolkata
+
+  updater:
+    <<: *base
+    command: ["sh", "deploy/updater.sh"]
+    environment:
+      OMNIPULS_STATE: /app/state
+      DEPLOY_BRANCH: "${DEPLOY_BRANCH:-main}"
+      TZ: Asia/Kolkata
+
+volumes:
+  state: {}
