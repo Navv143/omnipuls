@@ -200,6 +200,17 @@ def live(ix_bars: dict, stocks: dict, weights: dict, vix: pd.DataFrame | None, c
         r = t.iloc[-1]
         sg = t[t["step5"] & (t["m"] + 5 >= FIRST) & (t["m"] + 5 <= LAST)]
         first = sg.iloc[0] if len(sg) else None
+        plan = None
+        if first is not None:
+            import funnel as FN
+            full = _clean(ix_bars.get(k))
+            dd = full.groupby(full.index.normalize()).agg(h=("High", "max"), l=("Low", "min"), c=("Close", "last"))
+            pc = dd["c"].shift(1)
+            trd = pd.concat([dd["h"] - dd["l"], (dd["h"] - pc).abs(), (dd["l"] - pc).abs()], axis=1).max(axis=1)
+            atr14 = float(trd.iloc[-15:-1].mean()) if len(trd) > 5 else np.nan
+            upto = t[t.index <= first.name].tail(6)
+            plan = FN.trade_plan(int(first["side"]), float(first["Close"]), atr14, float(upto["Low"].min()),
+                                 float(upto["High"].max()))
         rows.append({"key": k, "name": name, "price": float(r["Close"]), "move_pct": float(r["move_pct"]),
                      "side": int(r["side"]), "time": f"{(int(r['m']) + 5) // 60:02d}:{(int(r['m']) + 5) % 60:02d}",
                      "day_x": float(r["day_x"]), "now_x": float(r["now_x"]), "range_x": float(r["range_x"]),
@@ -211,7 +222,7 @@ def live(ix_bars: dict, stocks: dict, weights: dict, vix: pd.DataFrame | None, c
                      "steps": [bool(r[f"step{i}"]) for i in (1, 2, 3, 4, 5)],
                      "signal": None if first is None else {"time": f"{(int(first['m']) + 5) // 60:02d}:{(int(first['m']) + 5) % 60:02d}",
                                                            "side": "LONG" if first["side"] > 0 else "SHORT",
-                                                           "price": float(first["Close"])}})
+                                                           "price": float(first["Close"]), "plan": plan}})
     return rows
 
 

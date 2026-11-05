@@ -74,7 +74,8 @@ def atr_step(df: pd.DataFrame | None, lookback: int = 20, recent: int = 3) -> di
             "atr_now": atr_now, "atr_now_usual": float(usual_now.mean()) if len(usual_now) else np.nan,
             "now_x": atr_now / float(usual_now.mean()) if len(usual_now) and usual_now.mean() > 0 else np.nan,
             "range_pct": rng_today / o * 100, "range_x": rng_today / float(usual_rng.mean()) if usual_rng.mean() > 0 else np.nan,
-            "room_atr": room, "prev_rng_atr": prev_rng, "gap_pct": (o / prev - 1) * 100 if prev == prev else np.nan}
+            "room_atr": room, "prev_rng_atr": prev_rng, "gap_pct": (o / prev - 1) * 100 if prev == prev else np.nan,
+            "atr14": atr14, "swing_low": float(today["Low"].iloc[-6:].min()), "swing_high": float(today["High"].iloc[-6:].max())}
 
 
 def flow_step(c: pd.DataFrame | None, recent: int = 3) -> dict | None:
@@ -170,7 +171,60 @@ def build(bars: dict, per: dict, sectors: dict, cfg: dict | None = None) -> tupl
                        "wide day yesterday (continuation often fails)" if r["prev_rng_atr"] >= 1.25 else "")
         return " · ".join(x for x in out if x)
     t["why"] = t.apply(why, axis=1)
+    plans = [trade_plan(int(r["side"]), float(r["price"]), r.get("atr14"), r.get("swing_low"), r.get("swing_high"))
+             for _, r in t.iterrows()]
+    for k in ("entry", "sl", "tp1", "tp2", "risk_pct"):
+        t[k] = [p[k] if p else np.nan for p in plans]
     sec = sec.reset_index()
     sec["buy_share"] = sec["sec_in"] / (sec["sec_in"] + sec["sec_out"]).replace(0, np.nan) * 100
     t = t.sort_values(["step5", "step4", "score"], ascending=False)
     return t, sec.sort_values("sec_net", ascending=False)
+
+
+PLAN = {"min_atr": 0.3, "max_atr": 0.6, "buffer_atr": 0.1, "tp1_r": 1.0, "tp2_r": 2.0}
+
+
+def trade_plan(side: int, entry: float, atr14: float, swing_low: float, swing_high: float, cfg: dict | None = None) -> dict | None:
+    """Entry at the signal price; stop just beyond the last 30 minutes' swing low (long) / high (short), kept between
+    0.3 and 0.6 of the daily ATR; targets at 1R and 2R; exit at 15:15 if neither is hit."""
+    c = {**PLAN, **(cfg or {})}
+    if not side or not atr14 or not np.isfinite(atr14) or atr14 <= 0 or not np.isfinite(entry):
+        return None
+    raw = (entry - swing_low + c["buffer_atr"] * atr14) if side > 0 else (swing_high - entry + c["buffer_atr"] * atr14)
+    risk = float(np.clip(raw if np.isfinite(raw) else c["max_atr"] * atr14, c["min_atr"] * atr14, c["max_atr"] * atr14))
+    sl = entry - side * risk
+    return {"side": "LONG" if side > 0 else "SHORT", "entry": round(entry, 2), "sl": round(sl, 2),
+            "tp1": round(entry + side * c["tp1_r"] * risk, 2), "tp2": round(entry + side * c["tp2_r"] * risk, 2),
+            "risk_pct": round(risk / entry * 100, 2), "exit": "15:15"}
+
+
+def simulate(side: int, entry: float, sl: float, tp1: float, tp2: float, after: pd.DataFrame, cost_pct: float = 0.12) -> dict:
+    """Walk the candles after entry: stop first if a candle touches both; half off at TP1 (stop to entry), rest at TP2
+    or the 15:15 close. Result in R and % after costs."""
+    risk = abs(entry - sl)
+    if after is None or after.empty or risk <= 0:
+        return {}
+    m = after.index.hour * 60 + after.index.minute
+    after = after[m <= 915]
+    half, stop, done = None, sl, None
+    for _, b in after.iterrows():
+        lo, hi = float(b["Low"]), float(b["High"])
+        hit_stop = lo <= stop if side > 0 else hi >= stop
+        hit1 = hi >= tp1 if side > 0 else lo <= tp1
+        hit2 = hi >= tp2 if side > 0 else lo <= tp2
+        if hit_stop:
+            done = stop
+            break
+        if half is None and hit1:
+            half, stop = tp1, entry
+        if half is not None and hit2:
+            done = tp2
+            break
+    if done is None:
+        done = float(after["Close"].iloc[-1]) if len(after) else entry
+    exit_px = done if half is None else (half + done) / 2
+    r = side * (exit_px - entry) / risk
+    pct = side * (exit_px / entry - 1) * 100 - cost_pct
+    outcome = ("stop" if done == sl and half is None else "TP2" if done == tp2 else
+               "TP1 then stop at entry" if half is not None and done == entry else "TP1 then 15:15" if half is not None else "15:15")
+    return {"r": round(r, 2), "pct": round(pct, 3), "outcome": outcome}

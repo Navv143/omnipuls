@@ -661,6 +661,10 @@ FUNNEL_CSS = """<style>
 .wc .g div{background:var(--om-sunken);border:1px solid var(--om-border-soft);border-radius:8px;padding:4px 8px}
 .wc .g small{display:block;font-size:.58rem;letter-spacing:.07em;text-transform:uppercase;color:var(--om-faint)}
 .wc .g b{font-family:var(--font-num);font-size:var(--fs-sm)}
+.wc .plan{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:8px}
+.wc .plan div{border-radius:8px;padding:4px 7px;border:1px solid var(--om-border-soft);background:var(--om-sunken)}
+.wc .plan small{display:block;font-size:.56rem;letter-spacing:.07em;text-transform:uppercase;color:var(--om-faint)}
+.wc .plan b{font-family:var(--font-num);font-size:var(--fs-xs)}
 </style>"""
 
 
@@ -689,6 +693,8 @@ def watch_card(r: dict, show_why: bool = False) -> str:
             f"<div><small>Score</small><b style='color:{c}'>{r.get('score', 0):.0f} / 100</b></div>"
             f"<div><small>Sector net</small><b style='color:{tone_color(r['sec_net'])}'>₹{r['sec_net']:+,.0f} Cr</b></div>"
             f"<div><small>Stock net</small><b style='color:{tone_color(r['net'])}'>₹{r['net']:+,.1f} Cr {rising}</b></div></div>"
+            + (plan_html({k: r[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")})
+               if r.get("entry") == r.get("entry") and r.get("entry") is not None and r.get("sl") == r.get("sl") else "")
             + (f"<div class='px' style='margin-top:7px;font-family:Inter,sans-serif;font-size:var(--fs-xs)'>{_e(r['why'])}</div>"
                if r.get("why") and show_why else "") + "</div>")
 
@@ -714,7 +720,8 @@ def index_card(r: dict, weak: bool = False) -> str:
             + (" <span class='mx-mini'>weak in tests</span>" if weak else "") + f"</span>{badge}</div>"
             f"<div class='px'>{_num(r['price'])} · {_sgn(r['move_pct'])} from open · {_e(r['time'])}{vix}</div>"
             f"<div class='votes' style='display:flex;flex-direction:column;gap:4px;margin-top:8px'>{chips}</div>"
-            + (f"<div class='px' style='margin-top:6px'>Signal at {sig['time']} @ {_num(sig['price'])} · exit 15:15</div>" if sig else "")
+            + (f"<div class='px' style='margin-top:6px'>Signal at {sig['time']} @ {_num(sig['price'])}</div>" if sig else "")
+            + (plan_html(sig.get("plan")) if sig else "")
             + "</div>")
 
 
@@ -748,3 +755,15 @@ def level_ladder(levels: list, spot: float, sup: dict | None, res: dict | None) 
                      (("pivots", LEVEL_COLOR["pivot"]), ("volume profile", LEVEL_COLOR["volume"]), ("OI", LEVEL_COLOR["oi"]),
                       ("yesterday", LEVEL_COLOR["day"])))
     return f"<div class='ld'><div class='lg'>{legend}</div>{''.join(rows)}</div>"
+
+
+def plan_html(p: dict | None) -> str:
+    """Entry / stop / targets block for a card."""
+    if not p:
+        return ""
+    return (f"<div class='plan'><div><small>Entry</small><b>{_num(p['entry'])}</b></div>"
+            f"<div><small>Stop</small><b style='color:var(--om-down)'>{_num(p['sl'])}</b></div>"
+            f"<div><small>Target 1</small><b style='color:var(--om-up)'>{_num(p['tp1'])}</b></div>"
+            f"<div><small>Target 2</small><b style='color:var(--om-up)'>{_num(p['tp2'])}</b></div></div>"
+            f"<div class='px' style='font-size:var(--fs-2xs);margin-top:4px'>risk {p['risk_pct']:.2f}% · half off at target 1, "
+            f"stop to entry · exit {p.get('exit', '15:15')}</div>")

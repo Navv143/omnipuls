@@ -72,3 +72,15 @@ nightly on a year of Dhan data.
 HDFC+ICICI money as the leader, shorter holds (30-90 min) and fading money divergences did not help. The failed-break
 fade matches the older research (Bank Nifty breaks usually fail). Re-tested nightly on the Dhan year and, with the
 OI step, on the server's index snapshots (Supabase index_log) after a week of data.
+
+## Momentum Funnel with a trade plan (5 Nov 2026, `research/funnel_backtest.py`)
+Plan: entry next candle's open; stop beyond the last 30 minutes' swing low / high (0.3-0.6 daily ATR); half off at 1R
+(stop to entry), rest at 2R or 15:15; 0.12% costs. Yahoo 5-minute, 235 F&O stocks, 46 days (31 Aug - 4 Nov).
+| Cut | Trades | %/trade | Win % | By day t | 1st / 2nd half % |
+|---|---|---|---|---|---|
+| Every first signal per stock-day (~46 a day) | 2,102 | +0.04 | 51 | 0.6 | -0.09 / +0.17 |
+| First 3 of the day | 138 | +0.21 | 57 | 1.4 | -0.10 / +0.51 |
+| First 5 of the day | 230 | +0.18 | 56 | 1.5 | +0.00 / +0.36 |
+| Signals at 9:30 | 701 | +0.08 | 51 | 0.7 | +0.07 / +0.09 |
+| Top 3 by ATR × range | 138 | -0.01 | 51 | -0.1 | +0.06 / -0.08 |
+No cut is positive in both halves with t ≥ 2: not proven. The live record (Supabase trade_signals) decides.

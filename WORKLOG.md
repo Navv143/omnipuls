@@ -434,3 +434,15 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   generic feature names (Market View, Smart watchlist, Index intelligence, Bots, AI Desk, Sectors), a generic
   preview (stocks covered → shortlisted → watchlist; signals without their rules) and a generic "how it works".
   Setup details stay inside the app, behind sign-in.
+
+## 5 Nov 2026: Trade plans and signal record; AI Desk Indian-first
+
+- Trade plan for every funnel stock, index funnel signal and the Bank Nifty fade (`funnel.trade_plan`): entry at the
+  signal, stop beyond the last 30 minutes' swing (0.3-0.6 daily ATR; the fade: beyond the day's extreme), target 1 = 1R
+  (half off, stop to entry), target 2 = 2R, exit 15:15. Shown on the watchlist / index cards, Market View and the Bank
+  Nifty tab.
+- Server records each signal once (source + symbol a day), tracks it live and scores it at 15:35 (`funnel.simulate`):
+  <data>/bots/trades/<day>.json and Supabase `trade_signals`; "Signal record" on Momentum Funnel (stocks / indices).
+- First backtest of the funnel with the plan (research/funnel_backtest.py): about break-even, not proven.
+- AI Desk: Indian indices and 16 Indian stocks first, then crypto, forex, commodities and the rupee (no US / foreign
+  stocks or indices); ATLAS reads Nifty, Bank Nifty, India VIX and USD/INR; the dollar index is context only.

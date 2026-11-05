@@ -64,6 +64,7 @@ class Market:
         self.oi_avg: dict = {}
         self.feed: list = []
         self.ev_seen: set = set()
+        self.trades: list = []
 
     def load(self):
         stocks, indices = B.load_history(self.cfg, days=LIVE_DAYS if not B.CACHE.exists() else B.HISTORY_DAYS,
@@ -619,7 +620,11 @@ def funnel_snapshot(mkt: "Market", now: datetime) -> dict:
             _cloud().upsert_rows("funnel_log", rows, "day,time,stock")
     except Exception as e:
         log(f"funnel_log: {e}")
-    return {"time": snap["time"].iloc[0], "stocks": int(len(snap)),
+    p5 = t[t["step5"] & t["entry"].notna()]
+    plans = [{"symbol": r["Stock"], "side": int(r["side"]), "time": r["time"], "entry": float(r["entry"]),
+              "sl": float(r["sl"]), "tp1": float(r["tp1"]), "tp2": float(r["tp2"]), "risk_pct": float(r["risk_pct"]),
+              "score": _f(r["score"], 0)} for _, r in p5.iterrows()]
+    return {"plans": plans, "time": snap["time"].iloc[0], "stocks": int(len(snap)),
             "steps": [int(snap[f"step{i}"].sum()) for i in (1, 2, 3, 4, 5)], "suggest": int(snap["suggest"].sum()),
             "top": t[t["suggest"]].sort_values("score", ascending=False).head(10)[
                 ["Stock", "Sector", "side", "price", "move_pct", "time", "day_x", "now_x", "range_x", "score", "sec_net", "net",
@@ -683,6 +688,72 @@ def index_snapshot(mkt: "Market", now: datetime) -> list:
         log(f"index_log: {e}")
     return rows
 
+
+def collect_signals(mkt: "Market", fun: dict) -> list:
+    """Every live signal with its plan: funnel stocks (all 5 steps), index funnel, Bank Nifty failed-break fade."""
+    import index_funnel as IF
+    import index_levels as LV
+    out = [{**p, "source": "Momentum funnel"} for p in (fun or {}).get("plans", [])]
+    try:
+        ix = {k: mkt.bars(k) for k in IF.INDEXES}
+        for r in IF.live(ix, mkt.stock_bars(), mkt.weights, mkt.bars("INDIAVIX")):
+            g = r.get("signal") or {}
+            p = g.get("plan")
+            if p:
+                out.append({"source": "Index funnel", "symbol": r["key"], "side": 1 if g["side"] == "LONG" else -1,
+                            "time": g["time"], **{k: p[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}, "score": None})
+        fb = LV.failed_break(mkt.bars("BANKNIFTY")) or {}
+        g = fb.get("signal") or {}
+        if g.get("plan"):
+            p = g["plan"]
+            out.append({"source": "Bank Nifty failed-break fade", "symbol": "BANKNIFTY", "side": 1 if g["side"] == "LONG" else -1,
+                        "time": g["time"], **{k: p[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}, "score": None})
+    except Exception as e:
+        log(f"index signals: {e}")
+    return out
+
+
+def _trade_file(day: str):
+    d = OUT / "trades"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{day}.json"
+
+
+def track_trades(mkt: "Market", day: str, signals: list, final: bool = False):
+    """New signals join the day's record (each source + symbol once); every trade's result so far (or final at the
+    close) from the candles after its signal; saved locally and to Supabase trade_signals."""
+    import funnel as FN
+    seen = {(t["source"], t["symbol"]) for t in mkt.trades}
+    new = [dict(s_, day=day, status="open") for s_ in signals if (s_["source"], s_["symbol"]) not in seen]
+    mkt.trades.extend(new)
+    changed = list(new)
+    for t in mkt.trades:
+        if t.get("status") == "closed":
+            continue
+        b = mkt.bars(t["symbol"])
+        if b is None or b.empty:
+            continue
+        b = b[b.index.normalize() == b.index.normalize().max()]
+        after = b[b.index.strftime("%H:%M") >= t["time"]]
+        res = FN.simulate(t["side"], t["entry"], t["sl"], t["tp1"], t["tp2"], after)
+        if not res:
+            continue
+        done = final or res["outcome"] in ("stop", "TP2", "TP1 then stop at entry")
+        upd = {**res, "status": "closed" if done else "open", "last": float(b["Close"].iloc[-1])}
+        if any(t.get(k) != v for k, v in upd.items()):
+            t.update(upd)
+            changed.append(t)
+    _trade_file(day).write_text(json.dumps(mkt.trades, default=str))
+    if changed:
+        rows = [{"day": day, "time": t["time"], "source": t["source"], "symbol": t["symbol"], "side": int(t["side"]),
+                 "entry": t["entry"], "sl": t["sl"], "tp1": t["tp1"], "tp2": t["tp2"], "risk_pct": t["risk_pct"],
+                 "score": t.get("score"), "status": t.get("status"), "outcome": t.get("outcome"), "r": t.get("r"),
+                 "pct": t.get("pct")} for t in {id(x): x for x in changed}.values()]
+        try:
+            _cloud().upsert_rows("trade_signals", rows, "day,source,symbol")
+        except Exception as e:
+            log(f"trade_signals: {e}")
+
 # ---------------------------------------------------------------- loop
 
 
@@ -712,13 +783,18 @@ def cycle(mkt: Market) -> dict:
         ixs = index_snapshot(mkt, now)
     except Exception as e:
         ixs = [{"error": str(e)[:200]}]
+    try:
+        track_trades(mkt, now.strftime("%Y-%m-%d"), collect_signals(mkt, fun))
+    except Exception as e:
+        log(f"trades: {e}")
     last_bar = max((b.index.max() for b in mkt.today.values() if b is not None and not b.empty), default=None)
     health = {"stocks_live": int(len(L)), "last_candle": str(last_bar)[11:16] if last_bar is not None else None,
               "oi_from_recorder": int(len(oi)), "odds_days": mkt.odds.get("days"), "odds_built": mkt.odds.get("built"),
               "research_run": (research or {}).get("run_at"), "errors": STATUS["errors"][-3:]}
     return {"updated": now.isoformat(timespec="seconds"), "health": health, "feed": mkt.feed[:120],
             "bots": {"index": idx, "sector": sec, "movers": mov, "unusual": unu, "radar": radar, "master": master},
-            "odds_check": _odds_check(), "funnel": fun, "indices": ixs}
+            "odds_check": _odds_check(), "funnel": {k: v for k, v in fun.items() if k != "plans"}, "indices": ixs,
+            "trades": mkt.trades}
 
 
 def save(state: dict):
@@ -772,6 +848,10 @@ def main():
             if now.strftime("%Y-%m-%d") != day:
                 day, seen, scored, logged = now.strftime("%Y-%m-%d"), {}, False, set()
                 mkt.today, mkt.feed, mkt.ev_seen = {}, [], set()
+                try:  # a restart in the day keeps the day's trades
+                    mkt.trades = json.loads(_trade_file(day).read_text())
+                except Exception:
+                    mkt.trades = []
                 if mkt.hist:
                     mkt.load()   # yesterday joins the history
             if market_open(now) and time.time() - last >= EVERY:
@@ -788,6 +868,9 @@ def main():
                     log(f"scored {len(score_ideas(day, mkt, seen))} ideas")
                 if mkt.feed:
                     log(f"scored {len(score_radar(day, mkt, mkt.feed))} radar events")
+                if mkt.trades:
+                    track_trades(mkt, day, [], final=True)
+                    log(f"closed {len(mkt.trades)} signals")
             if research_due(now):
                 run_research()
                 mkt.odds = load_odds(mkt.syms, force=True)   # tonight's history joins the odds
