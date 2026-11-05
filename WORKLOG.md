@@ -465,3 +465,13 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - `index_funnel.day_trend` (vs yesterday's close: change, gap, ATR, breadth vs yesterday, trend day) and
   `index_funnel.gap_go` (first-hour break + breadth ≥ 70%, with the plan). Trend-day banners on Market View and
   Momentum Funnel → Indices; Gap & go in the Signals list and recorded by the server (trade_signals, source "Gap & go").
+
+## 5 Nov 2026: Index momentum bot (money + breadth + ATR confirmation, trap warning)
+
+- `index_funnel.momentum_table / momentum_now`: every 5 minutes per index, price + net money increasing + breadth vs
+  yesterday high and not falling + ATR rising = confirmed burst; price against money and breadth = trap warning.
+  Per-index rule (MOM_MODE): Nifty with it on trend days only, Bank Nifty fades bursts except on trend days, Midcap and
+  Sensex with it, Fin Nifty watch only. Each signal with the plan; recorded by the server (source "Index momentum bot",
+  several a day, 1 h apart) and scored at the close. Cards on the Bots page and Market View; signals in the list.
+- First test (45 days): 141 trades, +0.10% (+0.26R), 60% wins, both halves positive; replay of 5 Nov: Nifty LONG 09:50
+  @ 24,413 → target 1; Bank Nifty fades skipped (trend day).

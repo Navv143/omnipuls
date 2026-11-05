@@ -84,3 +84,20 @@ Plan: entry next candle's open; stop beyond the last 30 minutes' swing low / hig
 | Signals at 9:30 | 701 | +0.08 | 51 | 0.7 | +0.07 / +0.09 |
 | Top 3 by ATR × range | 138 | -0.01 | 51 | -0.1 | +0.06 / -0.08 |
 No cut is positive in both halves with t ≥ 2: not proven. The live record (Supabase trade_signals) decides.
+
+## Index momentum bot (5 Nov 2026, `research/index_momentum_test.py`, `index_funnel.momentum_now`)
+Rule (every 5 minutes, 15-minute window): price moved ≥ 0.15 daily ATR AND the index stocks' net money increased AND
+breadth vs yesterday ≥ 65% the same way and not falling AND ATR (last 15 min) ≥ 1.0x usual and rising. Trap = price
+moved while money and breadth went the other way (rare; fading it lost → warning only).
+Yahoo 5-minute, 45 days, entry next candle, funnel plan (stop beyond the 30-min swing, 1R / 2R, 15:15), 0.02% costs:
+| Index | Rule | Trades | %/trade | R | Win % | halves |
+|---|---|---|---|---|---|---|
+| Nifty | with it, trend days only | 8 | +0.25 | +0.69 | 88 | +0.04 / +0.29 |
+| Bank Nifty | fade it, not on trend days | 48 | +0.08 | +0.26 | 60 | +0.04 / +0.10 |
+| Midcap Select | with it | 54 | +0.11 | +0.22 | 61 | +0.05 / +0.05 |
+| Sensex | with it | 31 | +0.07 | +0.20 | 52 | +0.02 / +0.17 |
+| Fin Nifty | lost either way → watch only | | | | | |
+| **All together** | | **141** | **+0.10** | **+0.26** | **60** | **+0.06 / +0.14** (t 3.0 by day) |
+Rules per index were chosen on this same data: confirm on the live record. 3 years hourly (Nifty): confirmed moves
++0.03% vs +0.01% unconfirmed, both halves +; Bank Nifty momentum no edge (consistent with fading it).
+Trend day = 1+ ATR from yesterday's close with 75%+ breadth the same way.

@@ -65,6 +65,7 @@ class Market:
         self.feed: list = []
         self.ev_seen: set = set()
         self.trades: list = []
+        self.momentum: dict = {}
 
     def load(self):
         stocks, indices = B.load_history(self.cfg, days=LIVE_DAYS if not B.CACHE.exists() else B.HISTORY_DAYS,
@@ -702,6 +703,13 @@ def collect_signals(mkt: "Market", fun: dict) -> list:
             if p:
                 out.append({"source": "Index funnel", "symbol": r["key"], "side": 1 if g["side"] == "LONG" else -1,
                             "time": g["time"], **{k: p[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}, "score": None})
+        for k, nm in IF.INDEXES.items():  # index momentum bot: every confirmed burst (Bank Nifty: faded)
+            mo = IF.momentum_now(mkt.bars(k), mkt.stock_bars(), mkt.weights.get(k, {}), nm, mode=IF.MOM_MODE.get(k)) or {}
+            mkt.momentum[k] = {kk: v for kk, v in mo.items()}
+            for g in mo.get("signals", []):
+                p = g["plan"]
+                out.append({"source": "Index momentum bot", "symbol": f"{k} {g['time']}", "side": 1 if g["side"] == "LONG" else -1,
+                            "time": g["time"], **{kk: p[kk] for kk in ("entry", "sl", "tp1", "tp2", "risk_pct")}, "score": None})
         for k in ("NIFTY", "BANKNIFTY"):
             gg = IF.gap_go(mkt.bars(k), mkt.stock_bars(), mkt.weights.get(k, {})) or {}
             g = gg.get("signal") or {}
@@ -737,7 +745,7 @@ def track_trades(mkt: "Market", day: str, signals: list, final: bool = False):
     for t in mkt.trades:
         if t.get("status") == "closed":
             continue
-        b = mkt.bars(t["symbol"])
+        b = mkt.bars(t["symbol"].split(" ")[0])
         if b is None or b.empty:
             continue
         b = b[b.index.normalize() == b.index.normalize().max()]
@@ -824,7 +832,7 @@ def cycle(mkt: Market) -> dict:
     return {"updated": now.isoformat(timespec="seconds"), "health": health, "feed": mkt.feed[:120],
             "bots": {"index": idx, "sector": sec, "movers": mov, "unusual": unu, "radar": radar, "master": master},
             "odds_check": _odds_check(), "funnel": {k: v for k, v in fun.items() if k != "plans"}, "indices": ixs,
-            "trades": mkt.trades}
+            "trades": mkt.trades, "momentum": mkt.momentum}
 
 
 def save(state: dict):
