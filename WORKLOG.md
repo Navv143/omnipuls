@@ -393,3 +393,15 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   the move (India VIX shown, not a step). Live cards on Momentum Funnel → Indices with today's first signal; backtest
   nightly on the server (Dhan year) → <data>/bot/index_funnel.json.
 - First test (Yahoo, 52 days): index money is the step that adds the edge; Nifty +0.25% a signal (t 2.6), Bank Nifty ~0.
+
+## 5 Nov 2026: Nifty / Bank Nifty money, OI and levels
+
+- `index_levels.py`: classic pivots + CPR from yesterday; fixed-range volume profile from the index future's volume
+  (POC, value area high / low for yesterday and the last 5 sessions); futures OI change today and last 15 minutes with
+  the build-up; option-chain support (most puts) / resistance (most calls), today's biggest put / call writing, PCR,
+  max pain; OI step (no OI reading against the move, at least one with it); one ladder of all levels with the nearest
+  support / resistance and a stop / target (reward/risk shown, flagged under 1.5R).
+- Momentum Funnel → Indices → Nifty 50 / Bank Nifty tabs: setup with step 5 (OI), index money chart (price + money per
+  candle + running total), OI since the last check (CE / PE / futures, kept in server memory through the day), levels
+  ladder, option OI by strike, futures OI through the day coloured by build-up. The recorder already stores the chain
+  every minute and futures OI, so the OI step can be backtested once a few weeks are recorded.

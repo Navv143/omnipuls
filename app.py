@@ -54,6 +54,7 @@ import mv_ui as MX
 import desk_agents as DA
 import funnel as FN
 import index_funnel as IF
+import index_levels as LV
 import bot as BOT
 import paths as PATHS
 import cryptocom as CC
@@ -6558,6 +6559,142 @@ def page_agents():
 # ---------------------------------------------------------------- Momentum funnel: simple step-by-step watchlist
 
 
+_OI_CHECKS = _memo("oi_checks")
+
+
+def _oi_since_last(key: str, co: dict, fo: dict) -> dict | None:
+    """OI change since the previous check of this index (kept for the day in server memory; a check every minute+)."""
+    now = time.time()
+    hist = _OI_CHECKS.setdefault(key, [])
+    cur = {"t": now, "ce": co.get("ce_oi"), "pe": co.get("pe_oi"), "fut": fo.get("oi")}
+    if hist and datetime.fromtimestamp(hist[-1]["t"], IST).date() != datetime.now(IST).date():
+        hist.clear()
+    prev = next((h for h in reversed(hist) if now - h["t"] >= 55), None)
+    if not hist or now - hist[-1]["t"] >= 55:
+        hist.append(cur)
+        del hist[:-500]
+    if not prev:
+        return None
+    d = lambda a, b: (a - b) if a is not None and b is not None else None  # noqa: E731
+    return {"mins": (now - prev["t"]) / 60, "ce": d(cur["ce"], prev["ce"]), "pe": d(cur["pe"], prev["pe"]),
+            "fut": d(cur["fut"], prev["fut"]), "checks": len(hist)}
+
+
+def _money_fig(t: pd.DataFrame, name: str):
+    from plotly.subplots import make_subplots
+    x = t.index.strftime("%H:%M")
+    per = t["net"].diff().fillna(t["net"])
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.55, 0.45], vertical_spacing=0.04,
+                        specs=[[{}], [{"secondary_y": True}]])
+    fig.add_trace(go.Candlestick(x=x, open=t["Open"], high=t["High"], low=t["Low"], close=t["Close"],
+                                 increasing_line_color=UP, decreasing_line_color=DOWN, name=name), 1, 1)
+    mx = max(float(per.abs().max()), 1e-9)
+    fig.add_trace(go.Bar(x=x, y=per, name="Money per candle ₹ Cr", marker_color=[
+        f"rgba(38,166,154,{0.35 + 0.65 * abs(v) / mx:.2f})" if v >= 0 else f"rgba(239,83,80,{0.35 + 0.65 * abs(v) / mx:.2f})"
+        for v in per], hovertemplate="%{x}: ₹%{y:+,.1f} Cr<extra></extra>"), 2, 1)
+    fig.add_trace(go.Scatter(x=x, y=t["net"], name="Running total ₹ Cr", line=dict(color="#E8B33A", width=2),
+                             hovertemplate="%{x}: ₹%{y:+,.0f} Cr<extra></extra>"), 2, 1, secondary_y=True)
+    fig.update_layout(template=plot_template(), height=430, margin=dict(l=8, r=8, t=10, b=8), showlegend=False,
+                      xaxis_rangeslider_visible=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    return fig
+
+
+def _oi_strike_fig(near: pd.DataFrame, spot: float):
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=near["Strike"], y=near["CE OI"], name="Call OI", marker_color="rgba(239,83,80,.75)"))
+    fig.add_trace(go.Bar(x=near["Strike"], y=near["PE OI"], name="Put OI", marker_color="rgba(38,166,154,.75)"))
+    fig.add_trace(go.Scatter(x=near["Strike"], y=near["CE Chg OI"], name="Call OI added today", mode="lines+markers",
+                             line=dict(color="#F87171", dash="dot")))
+    fig.add_trace(go.Scatter(x=near["Strike"], y=near["PE Chg OI"], name="Put OI added today", mode="lines+markers",
+                             line=dict(color="#34D399", dash="dot")))
+    fig.add_vline(x=spot, line_color="#3B82F6", line_dash="dash", annotation_text="spot")
+    fig.update_layout(template=plot_template(), height=320, barmode="group", margin=dict(l=8, r=8, t=24, b=8),
+                      legend=dict(orientation="h", y=1.12), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    return fig
+
+
+def _fut_oi_fig(per: pd.DataFrame):
+    col = {"Long build-up": UP, "Short covering": "#5CC8FF", "Short build-up": DOWN, "Long unwinding": "#FF9F43", "": "#94A3B8"}
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=per["t"], y=per["d_oi"], marker_color=[col[b] for b in per["buildup"]], name="OI change",
+                         customdata=per["buildup"], hovertemplate="%{x}: %{y:+,.0f} · %{customdata}<extra></extra>"))
+    fig.add_trace(go.Scatter(x=per["t"], y=per["oi"], name="OI", yaxis="y2", line=dict(color="#E8B33A", width=2)))
+    fig.update_layout(template=plot_template(), height=260, margin=dict(l=8, r=8, t=10, b=8), showlegend=False,
+                      yaxis2=dict(overlaying="y", side="right", showgrid=False),
+                      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    return fig
+
+
+def _index_detail(key: str, sid: int, ib: dict, fb: dict, bars: dict, weights: dict):
+    t = IF.index_table(ib.get(key), bars, weights.get(key, {}), ib.get("INDIAVIX"), today_only=True)
+    if t.empty:
+        st.caption("No candles yet today.")
+        return
+    r = t.iloc[-1]
+    spot, side = float(r["Close"]), int(r["side"])
+    fut = fb.get(key)
+    fo = LV.futures_oi(fut) if fut is not None else {}
+    try:
+        cspot, ch, mp = _mv_chain(sid, "IDX_I")
+    except Exception:
+        cspot, ch, mp = 0.0, pd.DataFrame(), None
+    co = LV.chain_oi(ch, cspot or spot, mp)
+    since = _oi_since_last(key, co, fo)
+    oi = LV.oi_step(side, fo, co)
+    ftoday, fprev, fdays = LV.sessions(fut) if fut is not None else (pd.DataFrame(), pd.DataFrame(), [])
+    vps = {}
+    if not fprev.empty:
+        vps["yesterday"] = LV.volume_profile(fprev)
+    if fdays and len(fdays) >= 5:
+        f5 = LV._clean(fut)
+        vps["5 days"] = LV.volume_profile(f5[f5.index.normalize() >= fdays[-5]])
+    _, iprev, _ = LV.sessions(ib.get(key))
+    piv = LV.pivots(iprev)
+    lad = LV.ladder(spot, piv, vps, co, side)
+    steps = [bool(r[f"step{i}"]) for i in (1, 2, 3, 4)] + [oi["pass"]]
+    allp = all(steps)
+    verdict = (("LONG" if side > 0 else "SHORT") + " · all 5 steps pass") if allp else f"{sum(steps)}/5 steps"
+    pl = lad.get("plan") or {}
+    st.markdown(MX.kpis([
+        MX.kpi("Setup", verdict, "ATR · range · index money · breadth · OI", (MX.UP if side > 0 else MX.DOWN) if allp else MX.NEUTRAL),
+        MX.kpi("Index money", f"₹{r['net']:+,.0f} Cr" if r["net"] == r["net"] else "—",
+               f"{r['buy_share']:.0f}% buying · 15 min ago ₹{r['net_before']:+,.0f} Cr" if r["buy_share"] == r["buy_share"] else "",
+               MX.tone_color(r["net"] if r["net"] == r["net"] else 0)),
+        MX.kpi("Futures OI", f"{fo['oi_chg_pct']:+.2f}%" if fo else "—",
+               f"{fo.get('buildup_day', '')} · 15 min: {fo.get('buildup_15m', '') or 'flat'}" if fo else "no futures data",
+               MX.ACCENT),
+        MX.kpi("Option writers", f"PCR {co['pcr']:.2f}" if co else "—",
+               (f"puts added {co['pe_chg_near'] / 1e5:,.1f}L · calls {co['ce_chg_near'] / 1e5:,.1f}L (near spot)" if co else "no chain"),
+               MX.UP if co.get("writers", 0) > 0 else MX.DOWN if co.get("writers", 0) < 0 else MX.NEUTRAL),
+        MX.kpi("OI since last check", (f"CE {since['ce'] / 1e5:+,.1f}L · PE {since['pe'] / 1e5:+,.1f}L" if since and since["ce"] is not None else "—"),
+               (f"{since['mins']:.0f} min ago · futures {since['fut']:+,.0f}" if since and since.get("fut") is not None
+                else f"{since['mins']:.0f} min ago" if since else "next check in a minute"), MX.WARN),
+        MX.kpi("Plan (next levels)", (f"{pl['rr']:.1f}R" + ("" if pl["rr"] >= 1.5 else " · skip")) if pl.get("rr") else "—",
+               (f"stop {pl['stop']:,.0f} ({pl['stop_at']}) · target {pl['target']:,.0f} ({pl['target_at']})"
+                + ("" if pl["rr"] >= 1.5 else " · target too close for the risk")) if pl.get("rr") else "needs a move and levels",
+               (MX.UP if pl["rr"] >= 1.5 else MX.WARN) if pl.get("rr") else MX.NEUTRAL),
+    ]), unsafe_allow_html=True)
+    st.caption("Step 5 · OI: " + oi["text"])
+    c1, c2 = st.columns([1.7, 1]) if not MOBILE else (st.container(), st.container())
+    with c1:
+        st.plotly_chart(_money_fig(t, IF.INDEXES[key]), width="stretch", key=f"ixm_{key}", config={"displayModeBar": False})
+        st.caption("Bottom: money into (green) / out of (red) the index's stocks per 5-minute candle, weighted by index "
+                   "weight; gold line = running total.")
+    with c2:
+        st.markdown(MX.LADDER_CSS + MX.level_ladder(lad["levels"], spot, lad["support"], lad["resistance"]), unsafe_allow_html=True)
+    c3, c4 = st.columns(2) if not MOBILE else (st.container(), st.container())
+    with c3:
+        if co.get("near") is not None and not co["near"].empty:
+            st.markdown(MX.section("Option OI by strike", f"support {co['support'][:1]} · resistance {co['resistance'][:1]}"),
+                        unsafe_allow_html=True)
+            st.plotly_chart(_oi_strike_fig(co["near"], cspot or spot), width="stretch", key=f"ixo_{key}",
+                            config={"displayModeBar": False})
+    with c4:
+        if fo.get("per") is not None:
+            st.markdown(MX.section("Futures OI through the day", "bar colour = build-up"), unsafe_allow_html=True)
+            st.plotly_chart(_fut_oi_fig(fo["per"]), width="stretch", key=f"ixf_{key}", config={"displayModeBar": False})
+
+
 def index_funnel_body():
     svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
     idx = index_defs()
@@ -6576,6 +6713,15 @@ def index_funnel_body():
                 unsafe_allow_html=True)
     st.caption("Signal = the first 5-minute candle of the day (9:30-14:00) where all four steps pass; trade it in the "
                "move's direction (futures), exit at 15:15. India VIX is shown but not a step (it did not help in the test).")
+    st.markdown(MX.section("Nifty & Bank Nifty: money, OI and levels", "OI checked every refresh · pivots, volume profile "
+                           "and option OI in one ladder"), unsafe_allow_html=True)
+    fb = svc.ifut_bars()
+    w = {k: d.get("w", {}) for k, d in idx.items()}
+    tn, tb = st.tabs(["Nifty 50", "Bank Nifty"])
+    with tn:
+        _index_detail("NIFTY", 13, ib, fb, bars, w)
+    with tb:
+        _index_detail("BANKNIFTY", 25, ib, fb, bars, w)
     try:
         bt = json.loads((PATHS.DATA / "bot" / "index_funnel.json").read_text())
     except Exception:
