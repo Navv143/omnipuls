@@ -191,3 +191,28 @@ side of the range. Results: `research/amd_results.csv`, runner `research/amd_run
 - Nifty / Bank Nifty (60 days only): Bank Nifty 1h range with SMT +0.31R but 25 trades (halves +0.40 / +0.11); too
   few to judge; all 15m / 30m versions negative.
 Conclusion: no edge; the Bank Nifty 1h + SMT result needs longer 5-min data before it means anything.
+
+## Noise Area intraday momentum (Zarattini, Aziz & Barbon 2024; quant_labde reel) (5 Nov 2026, `research/noise_study.py`)
+
+Bands = max/min(open, previous close) x (1 ± average |move from the open| at that time of day over 14 sessions);
+close above the upper band → long, below the lower → short; trailing stop = band or VWAP; fills at the next open;
+flat at the session close; costs per side (SPY/QQQ 0.005%, indices / futures 0.01%, crypto 0.025%). Hourly candles
+2023-26 (Yahoo), 5-min with 30-minute checks for the last 60 days, crypto 5-min 4 years on the UTC day.
+Results: `research/noise_results.csv`, runner `research/noise_run.py`.
+
+| Market | Trades | Avg % a trade | Total % (unlevered) | Sharpe | Max DD | Years |
+|---|---|---|---|---|---|---|
+| SPY 1h (the paper's market) | 459 | -0.025 | -11.6 | -0.71 | -14% | 2024 -5.6, 2025 +2.1, 2026 -7.8 |
+| QQQ 1h | 427 | +0.027 | +11.7 | 0.48 | -8% | 2024 +3.4, 2025 +8.3, 2026 +0.5 |
+| Nifty 1h | 450 | +0.021 | +9.4 | 0.67 | -3.6% | 2024 +7.2, 2025 +0.5, 2026 +1.3 |
+| Bank Nifty 1h | 457 | +0.004 | +1.8 | 0.11 | -9% | ~0 |
+| Gold futures 1h | 388 | -0.019 | -7.5 | -0.47 | -14% | |
+| Oil futures 1h | 413 | -0.057 | -23.6 | -0.74 | -29% | |
+| BTC / ETH 5m (UTC day) | ~4,800 | -0.04 / -0.02 | -186 / -76 | -1.5 / -0.4 | | |
+
+- It does not reproduce on SPY in 2023-26 with hourly checks (the paper reports 2007-2024 on 1-minute data with
+  30-minute checks and up to 4x leverage; the reel's $10k → $150k is that leveraged, illustrative backtest).
+- Nifty is the best: +9.4% in 3 years unlevered (~3% a year, ~5 points a trade), positive every year, small
+  drawdown; real but thin. QQQ similar. Bank Nifty ~0. Gold, oil and crypto lose.
+- 60 days of 5-min data with 30-minute checks: too short to judge (QQQ +3.3%, SPY +1.3%, Nifty +0.4%, Bank Nifty -3.3%).
+- To test properly on Nifty: years of 5-min Nifty candles with 30-minute checks (the server's Dhan history).
