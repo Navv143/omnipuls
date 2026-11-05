@@ -6394,6 +6394,22 @@ def market_view_body(svc, t: pd.DataFrame):
         bn_fb = LV.failed_break(idx_b.get("BANKNIFTY"))
     except Exception as e:
         print(f"market view index setups: {e}", flush=True)
+    gaps = {}
+    try:
+        _w = {k: d.get("w", {}) for k, d in index_defs().items()}
+        _sb = svc.bars()[0]
+        for _k in ("NIFTY", "BANKNIFTY"):
+            gaps[_k] = (IF.day_trend(idx_b.get(_k), _sb, _w.get(_k, {})), IF.gap_go(idx_b.get(_k), _sb, _w.get(_k, {})))
+    except Exception as e:
+        print(f"market view gap & go: {e}", flush=True)
+    for _k, (_dt, _gg) in gaps.items():
+        g = (_gg or {}).get("signal")
+        if g:
+            pl = g.get("plan") or {}
+            bot_rows.append({"Signal": f"Gap & go: {IF.INDEXES[_k]} {g['side']}", "Status": "● SIGNAL", "Evidence": "Small edge",
+                             "Details": f"broke the first hour's {'high' if g['side'] == 'LONG' else 'low'} at {g['time']} @ "
+                                        f"{g['price']:,.0f} with breadth {_gg['breadth']:.0f}% vs yesterday"
+                                        + (f" · stop {pl['sl']:,.0f} · targets {pl['tp1']:,.0f} / {pl['tp2']:,.0f}" if pl else "")})
     ix_edge = {"NIFTY": "Small edge", "MIDCPNIFTY": "Small edge"}  # best in the first test (Nifty +0.25%, 61% wins)
     for r in ix_rows:
         if r.get("signal"):
@@ -6437,6 +6453,10 @@ def market_view_body(svc, t: pd.DataFrame):
     st.markdown(MX.section("Signals", f"{n_live} live · hover a card for details") + MX.signal_cards(sig),
                 unsafe_allow_html=True)
 
+    # ---- trend-day banners (measured from yesterday's close: catches gap days)
+    for _k, (_dt, _gg) in gaps.items():
+        if _dt and (_dt["trend_day"] or (_gg or {}).get("signal") or abs(_dt.get("gap_atr") or 0) >= 0.3):
+            st.markdown(MX.trend_banner(IF.INDEXES[_k], _dt, _gg), unsafe_allow_html=True)
     # ---- index setups: the funnel for each index + the Bank Nifty fade
     if ix_rows:
         fb_txt = ""
@@ -6884,7 +6904,8 @@ def index_funnel_body():
     svc.touch()
     bars, _ = svc.bars()
     ib = svc.idx_bars()
-    rows = IF.live(ib, bars, {k: d.get("w", {}) for k, d in idx.items()}, ib.get("INDIAVIX"))
+    w_all = {k: d.get("w", {}) for k, d in idx.items()}
+    rows = IF.live(ib, bars, w_all, ib.get("INDIAVIX"))
     if not rows:
         st.info("Loading index and constituent candles…", icon=":material/hourglass_top:")
         return
@@ -6892,6 +6913,12 @@ def index_funnel_body():
                            "with the move and growing · 4 breadth ≥ 60% of the weight with the move"), unsafe_allow_html=True)
     st.markdown("<div class='wl'>" + "".join(MX.index_card(r, weak=r["key"] == "BANKNIFTY") for r in rows) + "</div>",
                 unsafe_allow_html=True)
+    for k in ("NIFTY", "BANKNIFTY"):
+        try:
+            dt_, gg_ = IF.day_trend(ib.get(k), bars, w_all.get(k, {})), IF.gap_go(ib.get(k), bars, w_all.get(k, {}))
+            st.markdown(MX.trend_banner(IF.INDEXES[k], dt_, gg_), unsafe_allow_html=True)
+        except Exception:
+            pass
     st.caption("Signal = the first 5-minute candle of the day (9:30-14:00) where all four steps pass; trade it in the "
                "move's direction (futures), exit at 15:15. India VIX is shown but not a step (it did not help in the test).")
     st.markdown(MX.section("Nifty & Bank Nifty: money, OI and levels", "OI checked every refresh · pivots, volume profile "
@@ -6941,6 +6968,7 @@ def index_funnel_body():
         st.caption("First test on 52 days of Yahoo data (steps 1-4, 0.02% costs, exit 15:15): all indices together "
                    "+0.11% a signal by day (t 1.5); ATR alone +0.03%, adding index money +0.12%. Promising, not proven: the "
                    "server re-runs it every night on a year of Dhan data and this table switches to that result.")
+    _signal_record("Gap & go")
     _signal_record("Index funnel")
     _signal_record("Bank Nifty")
 

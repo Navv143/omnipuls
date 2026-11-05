@@ -791,3 +791,19 @@ def idea_cards(ideas: list) -> str:
     if not ideas:
         return "<div class='mx-quiet'>No idea right now.</div>"
     return "<div class='wl'>" + "".join(idea_card(i) for i in ideas) + "</div>"
+
+
+def trend_banner(name: str, dt: dict, gg: dict | None) -> str:
+    """Day measured from yesterday's close: a strong banner on trend days (gap or not)."""
+    if not dt:
+        return ""
+    c = UP if dt["side"] > 0 else DOWN
+    sig = (gg or {}).get("signal")
+    act = (f"<b>Gap &amp; go {sig['side']}</b> at {sig['time']} @ {_num(sig['price'])}" if sig else
+           _e((gg or {}).get("wait") or ("no big gap today" if not (gg or {}).get("active") else "")))
+    kind = "TREND DAY" if dt["trend_day"] else "DAY SO FAR"
+    return (f"<div class='mx-idea' style='--c:{c};margin:8px 0'><div class='k'>{kind} · {_e(name)} vs yesterday's close</div>"
+            f"<h3 style='margin:.1rem 0 .3rem'>{_sgn(dt['chg_pct'])} · {dt['chg_atr']:+.1f} ATR · breadth {dt['breadth_with']:.0f}% "
+            f"{'up' if dt['side'] > 0 else 'down'}</h3><div class='px' style='color:var(--om-text-3)'>gap {_sgn(dt['gap_pct'])} · "
+            f"from the open {_sgn(dt['from_open_pct'])} · {act}</div>"
+            + (plan_html(sig.get("plan")) if sig else "") + "</div>")

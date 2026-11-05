@@ -702,6 +702,13 @@ def collect_signals(mkt: "Market", fun: dict) -> list:
             if p:
                 out.append({"source": "Index funnel", "symbol": r["key"], "side": 1 if g["side"] == "LONG" else -1,
                             "time": g["time"], **{k: p[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}, "score": None})
+        for k in ("NIFTY", "BANKNIFTY"):
+            gg = IF.gap_go(mkt.bars(k), mkt.stock_bars(), mkt.weights.get(k, {})) or {}
+            g = gg.get("signal") or {}
+            if g.get("plan"):
+                p = g["plan"]
+                out.append({"source": "Gap & go", "symbol": k, "side": 1 if g["side"] == "LONG" else -1, "time": g["time"],
+                            **{kk: p[kk] for kk in ("entry", "sl", "tp1", "tp2", "risk_pct")}, "score": None})
         fb = LV.failed_break(mkt.bars("BANKNIFTY")) or {}
         g = fb.get("signal") or {}
         if g.get("plan"):

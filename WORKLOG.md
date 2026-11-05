@@ -456,3 +456,12 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - Bots: every master-bot idea and radar event has the plan (entry / "buy near" or "sell near", stop, target 1, target 2,
   exit 15:15); ideas show as cards with their checks; every master idea is recorded and scored with the other signals
   (source "Master bot (tested / odds / watch)"); Signal record on the Bots page too.
+
+## 5 Nov 2026: Gap & go and trend-day banner (the 2.5% day with no index signal)
+
+- Cause: the move was mostly the opening gap and the index setups measure from the open. Tested gap / trend rules on
+  10 years daily and 3 years hourly (research/MOMENTUM_STUDY.md): no rule has a real edge; the break of the first
+  hour's high / low in the gap direction is the only consistent one (small).
+- `index_funnel.day_trend` (vs yesterday's close: change, gap, ATR, breadth vs yesterday, trend day) and
+  `index_funnel.gap_go` (first-hour break + breadth ≥ 70%, with the plan). Trend-day banners on Market View and
+  Momentum Funnel → Indices; Gap & go in the Signals list and recorded by the server (trade_signals, source "Gap & go").
