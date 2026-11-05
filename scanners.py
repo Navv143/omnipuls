@@ -370,7 +370,10 @@ def v3_diagnose(S: dict, nifty: Stock | None, top_n=10, top=2, vol_mult=1.5, unt
             else:
                 why = f"TRADED by V3 at {ts:%H:%M}"
             gap_with = side * gap
-            if ts.strftime("%H:%M") <= early_by and not block and not (0 <= gap_with <= 1):
+            hm = ts.strftime("%H:%M")
+            # the 9:30 candle needs no volume check (almost always heavy); 9:35-9:45 breakouts need volume >= 1.5x
+            # (research: 9:35-9:45 with volume +0.17% vs without -0.07%)
+            if hm <= early_by and not block and not (0 <= gap_with <= 1) and (hm == "09:30" or vol_ok):
                 cands.append((ts, i, s, side))
         rows.append({"Rank": i, "Stock": rr.Stock, "Score": rr.Score, "Breakout": (brk[0].strftime("%H:%M") if brk else "—"),
                      "Side": ("BUY" if brk and brk[1] > 0 else "SELL" if brk else ""),
