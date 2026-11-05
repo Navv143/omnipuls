@@ -569,3 +569,11 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - `crash_buy.py` gains burst momentum setups (BTC / ETH / SOL: up-burst ≥ 8x, enter one candle later, stop at the burst
   low, 12-candle hold), run every minute by agents.crash_tick with the crash buys; all trades stored in record.json
   and Supabase crypto_paper. Auto Trader panel renamed "Wild-move setups · paper".
+
+## 5 Nov 2026: Bank Nifty EBP 1h (overnight) paper trade
+- `bn_ebp.py`: Engulfing Bar Play on 1h Bank Nifty candles (built from the 5-min bars, 9:15 grid), 50% limit for 3
+  hours, stop at the wick (gap fills at the open), target the 20-hour swing, hold up to 14 trading hours; reproduces
+  the research trades.
+- `bots.bn_ebp_step` every 5 minutes in market hours: <data>/bots/bn_ebp.json (since, trades with state) and Supabase
+  crypto_paper. Auto Trader page: "Bank Nifty EBP 1h · paper" (limit waiting / open trade with R and points) and the
+  trades in the per-setup record.

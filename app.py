@@ -30,7 +30,7 @@ def _reload_changed_modules():
         seen = bootstrap._mtimes = {}
     base = os.path.dirname(os.path.abspath(__file__))
     for name in ("mv_ui", "funnel", "index_funnel", "index_levels", "desk_agents", "agents", "market_view", "bot",
-                 "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex", "autotrader", "closing", "btc_sniper", "crash_buy"):
+                 "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex", "autotrader", "closing", "btc_sniper", "crash_buy", "bn_ebp"):
         try:
             m = os.stat(os.path.join(base, name + ".py")).st_mtime
         except OSError:
@@ -7545,6 +7545,31 @@ def _btc_paper_section():
                 + (f" · BTC {stt['price']:,.2f} · VWAP {stt['vwap']:,.2f} · {tr} · as of {stt.get('as_of_ist', '')} IST"
                    if today and stt.get("price") else ""))
     st.markdown(f"<div class='mx-idea' style='--c:var(--om-accent);margin:6px 0'>{body}</div>", unsafe_allow_html=True)
+    # Bank Nifty EBP 1h, held overnight (bots.py, every 5 minutes in market hours)
+    try:
+        bn = json.loads((PATHS.DATA / "bots" / "bn_ebp.json").read_text())
+    except Exception:
+        bn = {}
+    st.markdown(MX.section("Bank Nifty EBP 1h · paper (held overnight)", "engulfing bar on 1-hour candles · limit at its "
+                           "50% · stop at its wick · target the 20-hour swing · up to 2 days · tested +0.40R a trade, "
+                           "worst -12.7R on a gap"), unsafe_allow_html=True)
+    bt_ = bn.get("trades", [])
+    live_ = [t_ for t_ in bt_ if t_.get("status") in ("waiting for the limit", "open")]
+    if live_:
+        for t_ in live_:
+            c_ = MX.UP if t_["side"] > 0 else MX.DOWN
+            if t_["status"] == "waiting for the limit":
+                msg = (f"<b style='color:{c_}'>{'BUY' if t_['side'] > 0 else 'SELL'} LIMIT</b> {t_['limit']:,.2f} (EBP at "
+                       f"{str(t_['signal_at'])[5:16]}) · stop {t_['sl']:,.2f} · target {t_['tp']:,.2f} · valid 3 hours")
+            else:
+                msg = (f"<b style='color:{c_}'>IN TRADE {'LONG' if t_['side'] > 0 else 'SHORT'}</b> from {t_['entry']:,.2f} at "
+                       f"{str(t_['entry_at'])[5:16]} · stop {t_['sl']:,.2f} · target {t_['tp']:,.2f} · now {t_['last']:,.2f} · "
+                       f"<b style='color:{MX.tone_color(t_['r'])}'>{t_['r']:+.2f}R ({t_['pts']:+,.0f} pts)</b>")
+            st.markdown(f"<div class='mx-idea' style='--c:{c_};margin:6px 0'>{msg}</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='mx-quiet'>No EBP setup open · checked {bn.get('updated', 'from the next market hour')}"
+                    f"{' · last finished hour ' + str(bn['last_hour'])[5:16] if bn.get('last_hour') else ''}</div>",
+                    unsafe_allow_html=True)
     # crash-candle buys (crash_buy.py, every minute, 24/7; gold weekdays)
     try:
         cs = json.loads((d_ / "crash_state.json").read_text())
@@ -7554,7 +7579,13 @@ def _btc_paper_section():
                            "target / stop, 4 h max · burst momentum (BTC, ETH, SOL): buy one candle after a giant up-candle, "
                            "stop at its low, 1 h hold · all tested 2023-26, positive in both halves · checked every minute"),
                 unsafe_allow_html=True)
-    tested = {"BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%"),
+    for t_ in bn.get("trades", []):          # Bank Nifty EBP trades join the per-setup record
+        if t_.get("status") in ("stop", "target", "time", "open"):
+            rec.append({"day": str(t_["signal_at"])[:10], "setup": "Bank Nifty EBP 1h (overnight)", "side": t_["side"],
+                        "entry_at_ist": str(t_.get("entry_at", ""))[5:16], "entry": t_.get("entry"), "sl": t_["sl"], "tp": t_["tp"],
+                        "result": t_["status"], "exit_at": str(t_.get("exit_at") or "")[5:16], "r": t_["r"],
+                        "pct": round(t_["pts"] / t_["entry"] * 100, 3) if t_.get("entry") else None})
+    tested = {"Bank Nifty EBP 1h (overnight)": ("+0.40R", "27%"), "BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%"),
               "BTC burst momentum": ("+0.15R (+0.21%)", ""), "ETH burst momentum": ("+0.13R (+0.36%)", ""),
               "SOL burst momentum": ("+0.24R (+0.61%)", "")}
     cards = []

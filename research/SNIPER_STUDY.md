@@ -168,3 +168,11 @@ candle's 50% (3 candles). 5m, 15m, 1h, 4h, daily on BTC, ETH, SOL, gold (4 years
   -0.11 to 0R; Nifty ~0. The edge was the overnight gap, not the pattern. 15m intraday on 60 days: -0.39 to -0.47R.
 
 Conclusion: no intraday edge on any timeframe or market; not added to paper trading.
+
+### Bank Nifty EBP 1h held overnight: re-test with realistic gap fills (5 Nov 2026)
+A gap through the stop now fills at the open (worse), a gap through the target at the open (better). Prior candle
+opposite colour, DOL target, 24 settings (entry market / 50% limit, DOL 10 / 20 hours, hold 7 / 14 / 21 hours, cost
+0.02 / 0.04): all 24 positive, 15 with both halves positive. Control (same stop / target / hold after ANY 1h candle):
+-0.04R overall, shorts -0.19R, so the EBP condition is the edge. Chosen: 50% limit, DOL 20, hold 14 hours: +0.40R a
+trade (165 trades, 27% wins), positive in each third of the period (+0.54 / +0.32 / +0.35), +0.27R at double costs,
++37 points a trade; worst trade -12.7R (overnight gap). Paper-traded from 5 Nov 2026 (`bn_ebp.py`, bots.py).
