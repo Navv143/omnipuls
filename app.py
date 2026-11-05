@@ -388,52 +388,51 @@ def _landing_hero() -> tuple[str, str]:
     top = f"""<div class='lp-nav'><div class='brand'>{logo}</div>
   <div class='r'>{pill}<span class='hide'>{now:%a %d %b · %H:%M} IST</span></div></div>
 <div class='lp-hero'>
-  <span class='lp-eyebrow'>● Live Dhan data · every F&amp;O stock · tested setups</span>
+  <span class='lp-eyebrow'>● Live market intelligence · private access</span>
   <h1>See where the smart money moves, before the crowd.</h1>
-  <div class='sub'>Omnipuls reads money flow, open interest, volatility and order flow for every F&amp;O stock and index,
-  runs bots that test every idea on unseen days, and shows only what has an edge, with entry, stop and target.</div>
-  <div class='lp-stats'><div><b>235</b><span>F&amp;O stocks scanned</span></div><div><b>5</b><span>indices with OI levels</span></div>
-  <div><b>44</b><span>global markets</span></div><div><b>6</b><span>AI agents, 24/7</span></div></div>
+  <div class='sub'>Omnipuls turns live market data into clear, ready-to-act ideas for Indian F&amp;O traders, all on one
+  screen, refreshed through the day.</div>
+  <div class='lp-stats'><div><b>235</b><span>F&amp;O stocks covered</span></div><div><b>5</b><span>indices tracked</span></div>
+  <div><b>44</b><span>global markets</span></div><div><b>24/7</b><span>bots at work</span></div></div>
 </div>"""
     tape = "".join(f"<span><b>{a}</b>{b}</span>" for a, b in (
-        ("MARKET VIEW", "every signal on one page"), ("MOMENTUM FUNNEL", "ATR · range · sector & stock money"),
-        ("INDEX SETUPS", "Nifty · Bank Nifty · Fin Nifty · Sensex · Midcap"), ("OI LEVELS", "pivots · volume profile · option writers"),
-        ("RADAR", "sudden volume & OI changes with odds"), ("AI DESK", "crypto · gold · forex · global indices"),
-        ("SECTORS", "R-factor · smart score · money in / out")))
+        ("MARKET VIEW", "the whole market on one page"), ("SMART WATCHLIST", "the stocks worth watching now"),
+        ("INDEX INTELLIGENCE", "Nifty · Bank Nifty · Fin Nifty · Sensex · Midcap"), ("BOTS", "watching all day"),
+        ("AI DESK", "crypto · gold · forex · global indices"), ("SECTORS", "where the money is going")))
     gauge = MX.gauge(46, "Bullish", 9, 4, 3)
     tiles = MX.pulse([
         MX.pulse_tile("Nifty 50", {"last": 24368.5, "chg": 0.62, "closes": pd.Series(np.cumsum(np.r_[0, np.sin(np.arange(40) / 5) * 6 + 2]) + 24200)}, None),
         MX.pulse_tile("Bank Nifty", {"last": 55912.3, "chg": -0.21, "closes": pd.Series(55950 - np.cumsum(np.r_[0, np.cos(np.arange(40) / 4) * 9 + 1]))}, None),
         MX.pulse_tile("India VIX", {"last": 12.84, "chg": -3.1, "closes": pd.Series(13.3 - np.arange(41) * 0.012)}, None, invert=True)])
-    funnel = MX.funnel([("F&O stocks", 235, "every 5 minutes"), ("ATR active", 26, "vs usual"), ("Range expanding", 22, ""),
-                        ("Sector money", 18, ""), ("Stock money", 12, ""), ("With the market", 5, "watchlist")])
+    funnel = MX.funnel([("Stocks covered", 235, "updated through the day"), ("Shortlisted", 24, ""),
+                        ("Watchlist", 5, "ranked")])
     sig = MX.signal_cards(pd.DataFrame([
-        {"Signal": "Index funnel: Nifty 50 LONG", "Status": "● SIGNAL", "Evidence": "Small edge", "Details": "ATR, range, index money, breadth passed at 09:35"},
-        {"Signal": "Bank Nifty failed-break fade: SHORT", "Status": "● SIGNAL", "Evidence": "Small edge", "Details": "broke yesterday's high, closed back inside"},
-        {"Signal": "Momentum Funnel: MARUTI LONG", "Status": "Watch", "Evidence": "Context", "Details": "score 71 · ATR 2.0x · range 2.7x · 65% buying"}]), 3)
+        {"Signal": "Index signal: LONG", "Status": "● SIGNAL", "Evidence": "Tested", "Details": "entry, stop and target on screen"},
+        {"Signal": "Index signal: SHORT", "Status": "● SIGNAL", "Evidence": "Tested", "Details": "entry, stop and target on screen"},
+        {"Signal": "Stock idea: LONG", "Status": "Watch", "Evidence": "Context", "Details": "ranked on the watchlist"}]), 3)
     feats = "".join(f"<div class='lp-f' style='--c:{c}'><div class='ic'>{i}</div><h4>{h}</h4><p>{p}</p></div>" for i, c, h, p in (
-        ("◎", "#3B82F6", "Market View", "Indices, mood, every live signal, sector money and option writers on one page."),
-        ("⧩", "#2EE6F6", "Momentum Funnel", "ATR and range vs usual, sector and stock money, with the market: a ranked watchlist."),
-        ("▲", "#26A69A", "Index setups & OI", "Index money from constituents, futures build-up, put/call writing, pivots and volume profile."),
-        ("⚡", "#F59E0B", "Bots & Radar", "Five bots watch all day; sudden volume, range and OI changes come with past-days odds."),
-        ("✦", "#A855F7", "AI Desk", "Six agents read crypto, gold, commodities, forex and world indices: TRADE, WAIT or REJECT."),
-        ("◫", "#EF5350", "Sectors", "Every sector as a card: R-factor, smart score, activity, money in / out and live stocks.")))
+        ("◎", "#3B82F6", "Market View", "The whole market at a glance, with every live signal on one page."),
+        ("⧩", "#2EE6F6", "Smart watchlist", "A short, ranked list of the stocks worth watching right now."),
+        ("▲", "#26A69A", "Index intelligence", "Nifty, Bank Nifty, Fin Nifty, Sensex and Midcap with key levels and signals."),
+        ("⚡", "#F59E0B", "Bots", "Bots watch the market all day and flag what changes."),
+        ("✦", "#A855F7", "AI Desk", "Crypto, gold, commodities, forex and world indices in one view."),
+        ("◫", "#EF5350", "Sectors", "See which sectors and stocks the money is moving into.")))
     rest = f"""<div class='lp-tape'><div>{tape}{tape}</div></div>
 <div class='lp-sec'><div class='k'>Inside the app</div><h2>Everything that moves the market, in one place</h2>
-<p>A live preview of the main screens (sample data).</p></div>
+<p>A preview of the app (sample data).</p></div>
 <div class='lp-preview'><div class='bar'><i></i><i></i><i></i></div><span class='tag'>Preview · sample data</span>
   {tiles}<div class='lp-grid'><div>{gauge}</div><div>{funnel}</div></div><div style='margin-top:12px'>{sig}</div></div>
 <div class='lp-sec'><div class='k'>Features</div><h2>Built for intraday F&amp;O traders</h2></div>
 <div class='lp-feat'>{feats}</div>
-<div class='lp-sec'><div class='k'>How it works</div><h2>Data in, tested ideas out</h2></div>
+<div class='lp-sec'><div class='k'>How it works</div><h2>Open, read, act</h2></div>
 <div class='lp-steps'>
-  <div class='lp-s'><b>01</b><h4>Record everything</h4><p>Candles, OI, option chains and order book for every F&amp;O stock, every minute.</p></div>
-  <div class='lp-s'><b>02</b><h4>Test on unseen days</h4><p>Bots tune on the first 60% of days and judge on the last 40%, after costs.</p></div>
-  <div class='lp-s'><b>03</b><h4>Signal only with an edge</h4><p>Live signals with entry, stop and target; every call is logged and scored.</p></div>
+  <div class='lp-s'><b>01</b><h4>Live data</h4><p>Market data flows in through the trading day.</p></div>
+  <div class='lp-s'><b>02</b><h4>Bots do the work</h4><p>Our bots watch everything so you don't have to.</p></div>
+  <div class='lp-s'><b>03</b><h4>Clear ideas</h4><p>Signals with entry, stop and target, logged and scored.</p></div>
 </div>
-<div class='lp-honest'><div class='ic'>⚖</div><div><h4>Honest by design</h4><p>No setup is called tested until it makes money on days it never saw.
-Untested ideas are labelled as context or small edge, and every call is paper-tracked.</p></div></div>
-<div class='lp-foot'><span>© Omnipuls · private app · data from Dhan</span><span>For information only, not investment advice.</span></div>"""
+<div class='lp-honest'><div class='ic'>⚖</div><div><h4>Honest by design</h4><p>Every signal is logged and scored, so results speak
+for themselves.</p></div></div>
+<div class='lp-foot'><span>© Omnipuls · private app</span><span>For information only, not investment advice.</span></div>"""
     return top, rest
 
 
@@ -474,8 +473,8 @@ def login_screen():
                             st.session_state.user = auth.verify(uid, pw)
                             st.rerun()
             else:
-                st.markdown("<div class='lp-card-h'><h3>Welcome back 👋</h3><p>Sign in to open today's Market View, "
-                            "Momentum Funnel and bots.</p></div>", unsafe_allow_html=True)
+                st.markdown("<div class='lp-card-h'><h3>Welcome back 👋</h3><p>Sign in to open today's market."
+                            "</p></div>", unsafe_allow_html=True)
                 if not st.session_state.get("_show_login"):
                     if st.button("Sign in", type="primary", width="stretch", icon=":material/login:", key="show_login"):
                         st.session_state["_show_login"] = True
@@ -495,7 +494,7 @@ def login_screen():
                         st.error(f"Too many wrong passwords. Try again in {wait // 60 + 1} min." if wait
                                  else "Wrong user ID or password.")
                     st.caption("Forgot your password? Ask the admin to reset it under Account.")
-                st.markdown("<div class='lp-trust'><span>Private: invite-only accounts</span><span>Live Dhan market data"
+                st.markdown("<div class='lp-trust'><span>Private: invite-only accounts</span><span>Live market data"
                             "</span><span>Every signal logged and scored</span></div>", unsafe_allow_html=True)
     st.markdown(rest, unsafe_allow_html=True)
 
