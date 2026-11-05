@@ -1401,7 +1401,7 @@ HOWTO = {  # one line under each page's status bar: what the page is for and how
     "view": "Start here. Trade only what the top box calls a tested signal; the rest helps you pick the side.",
     "dashboard": "The full desk: mood, index plans and focus lists. Today's plan card lists the tested setups.",
     "scanners": "Each tab is one setup with today's signals. Follow entry, stop and exit exactly as shown.",
-    "bot": "What the research bot found last night. Trade only a rule marked Pass, and paper-trade it first.",
+    "bot": "Live radar of every F&O stock: sudden changes vs its own usual, with past-days odds. Tested = trade; good odds = paper-trade first.",
     "options": "Pick an index and expiry. Most puts written = support, most calls written = resistance.",
     "apex": "Trade with the side that dominates the first hour; 'Since yesterday' adds yesterday's positions.",
     "smart": "Sectors where fresh futures money is going, and their strongest stocks.",
@@ -5860,44 +5860,104 @@ def _bot_flags(b: dict, cols: list[str]):
                  hide_index=True, width="stretch", column_config={"Why": st.column_config.TextColumn(width="large")})
 
 
+def _radar_table(rows: list) -> pd.DataFrame:
+    return pd.DataFrame([{
+        "Stock": r["stock"], "Sector": r["sector"], "Price": r["price"], "Chg %": r["chg"],
+        "Move ATR": r["move_atr"], "Range ×ATR": r["range_x"], "Vol ×usual": r["vol_x"], "5m vol ×": r["spike_x"],
+        "Candle ×": r["candle_x"], "15m ATR": r["jump_atr"], "Buying %": r["buying"], "Net ₹ Cr": r["net_cr"],
+        "OI chg %": r["oi_chg"], "OI ×usual": r["oi_x"], "Book buy %": r["book_buy"], "O=H/L": r["ohl"],
+        "Odds kept %": (r.get("odds") or {}).get("win"), "Odds n": (r.get("odds") or {}).get("n"),
+        "Score": r["score"], "Flags": " · ".join(r["events"])} for r in rows])
+
+
 def page_bot():
     status_strip()
     st.header("Bots")
+    st.markdown(MX.CSS, unsafe_allow_html=True)
     l, r = st.columns([3, 1], vertical_alignment="center")
-    l.caption("Five bots watch every F&O stock, the indices, sectors and India VIX all day. The master bot passes an "
-              "idea only when a tested rule fires and the market, Nifty, sector and VIX agree.")
+    l.caption("The bots watch every F&O stock, the indices, sectors and VIX every 5 minutes: sudden changes against "
+              "each stock's own usual, with the odds of what happened next on past days, and ideas only when the "
+              "market, Nifty, sector and VIX agree.")
     if IS_ADMIN and r.button("Run research tonight", icon=":material/smart_toy:", width="stretch",
                              help="Re-runs the Setup Finder research after market hours."):
         PATHS.state("bot_request").touch()
         st.success("Requested: the server runs the research after market hours (results in about 10-20 minutes).")
     s = _bots_state()
     if not s:
-        st.info("The bots run on the server (recorder). Their readings show here from the next market session, "
-                "updated every 5 minutes.", icon=":material/hourglass_top:")
+        st.info("The bots run on the server (recorder). Their readings show here in market hours, updated every 5 "
+                "minutes.", icon=":material/hourglass_top:")
     else:
-        bt = s.get("bots", {})
-        st.caption(f"Updated {s.get('updated', '')[11:16]} IST" + (" · from an earlier day (market closed)"
-                                                                   if s.get("stale") else ""))
-        ideas = (bt.get("master") or {}).get("ideas") or []
-        passed = [i for i in ideas if i["status"] == "passed"]
-        st.subheader("Master bot: ideas")
-        if (bt.get("master") or {}).get("note"):
-            st.caption(bt["master"]["note"])
-        if passed:
-            for i in passed[:5]:
-                c = "var(--om-up)" if i["side"] == "BUY" else "var(--om-down)"
-                st.markdown(f"<div class='mv-idea' style='--mvc:{c};--mvg:transparent'><div class='k'>Passed · "
-                            f"{i['time']} · {i['sector']} · checks {i['agree']}</div><h3>{i['side']} {i['stock']} "
-                            f"@ {float(i['price']):,.2f}" + (f" · stop {float(i['stop']):,.2f}" if i.get("stop") else "")
-                            + f"</h3><p>{i['why']}. Exit 15:20.</p></div>", unsafe_allow_html=True)
-        else:
-            st.caption("No idea passed yet today: no tested rule fired with the balance agreeing.")
+        bt, h = s.get("bots", {}), s.get("health", {})
+        radar, master = bt.get("radar") or {}, bt.get("master") or {}
+        ideas = master.get("ideas") or []
+        n_st = {k: sum(i["status"] == k for i in ideas) for k in ("passed", "odds", "watch")}
+        fresh = not s.get("stale")
+        upd = s.get("updated", "")[11:16]
+        chk = (s.get("odds_check") or [{}])[-1]
+        good = next((b for b in chk.get("bands", []) if b.get("band") in ("60%+", "55-60%")), None)
+        st.markdown(MX.kpis([
+            MX.kpi("Bots", "Running" if fresh else "Market closed", f"updated {upd} IST", MX.UP if fresh else MX.NEUTRAL, dot=True),
+            MX.kpi("Stocks watched", f"{h.get('stocks_live', 0)}", f"last candle {h.get('last_candle') or '—'}"),
+            MX.kpi("Sudden changes", f"{len(s.get('feed') or [])}", "today, each stock + kind once", MX.ACCENT),
+            MX.kpi("Ideas", f"{n_st['passed']} · {n_st['odds']} · {n_st['watch']}", "tested · good odds · watch",
+                   MX.UP if n_st["passed"] + n_st["odds"] else MX.NEUTRAL),
+            MX.kpi("Odds from", f"{h.get('odds_days') or 0} days", "rebuilt every night with the new day"),
+            MX.kpi("Odds check", f"{good['kept']:.0f}% kept" if good else "—",
+                   f"{chk.get('day', '')}: 55%+ odds events" if good else "after the first close", MX.WARN),
+        ]), unsafe_allow_html=True)
+
+        st.markdown(MX.section("Master bot: ideas", master.get("note", "")), unsafe_allow_html=True)
         if ideas:
-            st.dataframe(pd.DataFrame([{"Status": "✅ Passed" if i["status"] == "passed" else "👀 Watch",
-                                        "Stock": i["stock"], "Side": i["side"], "Since": i["time"],
-                                        "Price": i["price"], "Checks": i["agree"], "Sector": i["sector"],
+            lab = {"passed": "✅ Tested", "odds": "🎯 Good odds", "watch": "👀 Watch"}
+            st.dataframe(pd.DataFrame([{"Status": lab[i["status"]], "Stock": i["stock"], "Side": i["side"],
+                                        "Since": i["time"], "Price": i["price"], "Checks": i["agree"],
+                                        "Odds kept %": (i.get("odds") or {}).get("win"), "Sector": i["sector"],
                                         "Why": i["why"]} for i in ideas]),
                          hide_index=True, width="stretch", column_config={"Why": st.column_config.TextColumn(width="large")})
+        else:
+            st.caption("No idea yet: no stock has the balance (market, Nifty, sector, VIX) agreeing with a tested rule "
+                       "or good past odds.")
+
+        st.markdown(MX.section("Radar: sudden changes now", "odds = past days, same kind of moment, to 15:15 after costs")
+                    + MX.event_cards(radar.get("events") or []), unsafe_allow_html=True)
+        c1, c2 = st.columns([1.25, 1]) if not MOBILE else (st.container(), st.container())
+        with c1:
+            st.markdown(MX.section("Live feed", "newest first") + MX.feed(s.get("feed") or []), unsafe_allow_html=True)
+        with c2:
+            st.markdown(MX.section("Odds check", "did the odds hold? (scored at 15:35)"), unsafe_allow_html=True)
+            hist = s.get("odds_check") or []
+            if hist:
+                rows = [{"Day": x["day"], "Odds band": b["band"], "Events": b["n"], "Kept going %": b["kept"],
+                         "Avg %": b["avg"]} for x in hist[-5:] for b in x.get("bands", [])]
+                st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+            else:
+                st.caption("After the first close the bots compare each event's odds with what actually happened.")
+            st.markdown(MX.section("System health"), unsafe_allow_html=True)
+            st.markdown(MX.kpis([
+                MX.kpi("Data feed", h.get("last_candle") or "—", "latest 5-min candle", MX.UP if fresh else MX.NEUTRAL, dot=True),
+                MX.kpi("OI (recorder)", f"{h.get('oi_from_recorder', 0)}", "futures with live OI",
+                       MX.UP if h.get("oi_from_recorder") else MX.WARN, dot=True),
+                MX.kpi("Research", (h.get("research_run") or "—")[:10], "last nightly run"),
+            ]), unsafe_allow_html=True)
+            for e in h.get("errors") or []:
+                st.caption(f"⚠ {e}")
+
+        rows = radar.get("rows") or []
+        if rows:
+            st.markdown(MX.section("Every F&O stock, against its own usual", "sorted by score · click a column to sort"),
+                        unsafe_allow_html=True)
+            df = _radar_table(rows)
+            st.dataframe(df, hide_index=True, width="stretch", height=480, column_config={
+                "Buying %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d%%"),
+                "Odds kept %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f%%"),
+                "Chg %": st.column_config.NumberColumn(format="%+.2f"), "Move ATR": st.column_config.NumberColumn(format="%+.2f"),
+                "OI chg %": st.column_config.NumberColumn(format="%+.2f"),
+                "Flags": st.column_config.TextColumn(width="large")})
+            st.caption("×usual = against the same stock's last 20 days at the same time of day. Range ×ATR = today's "
+                       "range vs its 14-day ATR. 5m vol × / Candle × = the latest 5-minute candle vs the same slot. "
+                       "OI from the recorder's futures quotes (near + next month). Book buy % = buy share of the "
+                       "order book.")
+
         t1, t2, t3, t4 = st.tabs(["Index bot", "Sector bot", "Sector movers", "F&O unusual"])
         with t1:
             _bot_flags(bt.get("index"), [("Index", "name"), ("Level", "value"), ("Signal", "signal"), ("Why", "text")])
@@ -6182,8 +6242,9 @@ def market_view_body(svc, t: pd.DataFrame):
         if bs and not bs.get("stale"):
             for i in ((bs.get("bots") or {}).get("master") or {}).get("ideas") or []:
                 ok = i["status"] == "passed"
-                bot_rows.append({"Signal": f"Master bot: {i['side']} {i['stock']}", "Status": "● SIGNAL" if ok else "Watch",
-                                 "Evidence": "Tested" if ok else "Context",
+                bot_rows.append({"Signal": f"Master bot: {i['side']} {i['stock']}",
+                                 "Status": "● SIGNAL" if ok else "Good odds" if i["status"] == "odds" else "Watch",
+                                 "Evidence": "Tested" if ok else "Past odds" if i["status"] == "odds" else "Context",
                                  "Details": f"since {i['time']} @ {float(i['price']):,.2f}"
                                  + (f", stop {float(i['stop']):,.2f}" if i.get("stop") else "")
                                  + f", checks {i['agree']} · {i['why']}"})
@@ -6217,6 +6278,16 @@ def market_view_body(svc, t: pd.DataFrame):
     n_live = int((sig["Status"] == "● SIGNAL").sum()) if not sig.empty else 0
     st.markdown(MX.section("Signals", f"{n_live} live · hover a card for details") + MX.signal_cards(sig),
                 unsafe_allow_html=True)
+
+    # ---- sudden changes from the radar bot (server)
+    try:
+        bs2 = _bots_state()
+        ev = (((bs2 or {}).get("bots") or {}).get("radar") or {}).get("events") or [] if bs2 and not bs2.get("stale") else []
+        if ev:
+            st.markdown(MX.section("Sudden changes", f"radar bot · updated {bs2.get('updated', '')[11:16]} · full list on Bots")
+                        + MX.event_cards(ev, 6), unsafe_allow_html=True)
+    except Exception:
+        pass
 
     # ---- 4. market internals as meters
     rd = {r["title"]: r for r in every}

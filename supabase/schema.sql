@@ -64,3 +64,21 @@ create table if not exists public.bot_ideas (
   unique (day, stock, side)
 );
 alter table public.bot_ideas enable row level security;
+
+-- Radar events (bots.py): every sudden change with its past-days odds and, after the close, what happened.
+create table if not exists public.radar_events (
+  id bigint generated always as identity primary key,
+  day date not null,
+  stock text not null,
+  kind text not null,
+  side smallint,
+  first_at text,
+  price double precision,
+  text text,
+  odds_win double precision,
+  odds_n integer,
+  result_pct double precision,
+  updated_at timestamptz not null default now(),
+  unique (day, stock, kind)
+);
+alter table public.radar_events enable row level security;

@@ -307,3 +307,18 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   and option-writer bars (spot between support and resistance, max pain marked).
 - The long explanations moved into tooltips and a folded "What each reading means"; the full signal table is folded.
 - Mobbin (design references) needs a paid plan, so the layout follows Sensibull / StockEdge / TradingView patterns.
+
+## 5 Nov 2026: Radar bot with odds, Bots dashboard
+
+- The bots no longer wait only for tested setups. A **Radar** reads every F&O stock every 5 minutes against its own
+  usual: move from the open in ATR, range vs ATR, volume vs usual by this time, the latest 5-minute candle's volume
+  and size vs the same slot on 20 days, the 15-minute jump in ATR, money-flow buying share, futures OI change vs its
+  usual daily change (from the recorder's quotes), order-book buy share, open = high / low.
+- **Odds engine** (`bot.odds_table` / `odds_lookup`): for each kind of moment (side, time of day, volume vs usual, move
+  in ATR, money flow agreeing) what happened next on the last 150 days: share that kept going to 15:15 after costs,
+  average result, share that ran another 1 ATR, number of cases. Rebuilt every night with the new day.
+- Master bot adds **good odds** ideas (55%+ kept going, 40+ cases, 3+ points over the usual, 3+ balance checks).
+- Every radar event is logged to Supabase `radar_events` and scored at 15:35; the **odds check** compares the odds
+  with what happened (the self-improvement loop).
+- Bots page is now a dashboard: KPIs, master ideas, radar event cards with odds bars, live feed, odds check, system
+  health, and every F&O stock's full readings. Market View shows the top sudden changes.

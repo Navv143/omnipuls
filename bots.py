@@ -60,6 +60,10 @@ class Market:
         self.today: dict = {}
         self.fut: dict = {}
         self.weights: dict = {}
+        self.odds: dict = {}
+        self.oi_avg: dict = {}
+        self.feed: list = []
+        self.ev_seen: set = set()
 
     def load(self):
         stocks, indices = B.load_history(self.cfg, days=LIVE_DAYS if not B.CACHE.exists() else B.HISTORY_DAYS,
@@ -72,6 +76,8 @@ class Market:
         except Exception:
             self.weights = {}
         log(f"history: {len(self.hist)} symbols")
+        self.odds = load_odds(self.syms)
+        self.oi_avg = oi_history()
 
     def refresh(self):
         import dhan as D
@@ -102,6 +108,194 @@ class Market:
 
     def stock_bars(self) -> dict:
         return {s: self.bars(s) for s, seg, _, _ in self.syms if seg != "IDX_I"}
+
+
+# ---------------------------------------------------------------- odds table, OI from the recorder, sudden changes
+
+ODDS_DAYS = int(os.environ.get("BOTS_ODDS_DAYS", 150))
+
+
+def load_odds(syms: list, force: bool = False) -> dict:
+    """The odds table (bot.odds_table) from the cached 5-minute history; rebuilt once a day."""
+    f = OUT / "odds.json"
+    try:
+        t = json.loads(f.read_text())
+        if not force and t.get("built", "")[:10] == datetime.now(IST).strftime("%Y-%m-%d"):
+            return t
+    except Exception:
+        t = {}
+    try:
+        t0 = time.time()
+        cols = ["day", "m", "move", "move_atr", "vol_x", "flow_share", "entry", "exit", "maxhigh", "minlow", "atr"]
+        parts = []
+        for i, (sym, seg, _, _) in enumerate(syms):
+            if seg == "IDX_I":
+                continue
+            fp = B.CACHE / f"{sym.replace('&', '_and_')}.parquet"
+            if not fp.exists():
+                continue
+            df = pd.read_parquet(fp)
+            df = df[df.index >= df.index.max() - pd.Timedelta(days=ODDS_DAYS)]
+            c = B.candle_table(sym, df)
+            if c.get("n"):
+                parts.append({**{k: c[k] for k in cols}, "sym": np.full(c["n"], i, dtype=np.int32)})
+        if not parts:
+            return t
+        T = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
+        t = B.odds_table(T)
+        t["built"] = datetime.now(IST).isoformat(timespec="seconds")
+        t["stocks"] = len(parts)
+        OUT.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(t))
+        log(f"odds table: {t['days']} days, {len(parts)} stocks in {time.time() - t0:.0f}s")
+    except Exception as e:
+        log(f"odds table: {e}")
+    return t
+
+
+def _quote_files(day: str) -> list:
+    d = paths.DATA / "quotes" / "parts" / day
+    return sorted(d.glob("*.parquet")) if d.exists() else []
+
+
+def _fut_oi(df: pd.DataFrame) -> pd.DataFrame:
+    """Per future symbol and minute: total OI over the expiries, and the near expiry's book."""
+    f = df[df["kind"] == "future"]
+    if f.empty:
+        return pd.DataFrame()
+    return f.groupby(["symbol", "time"]).agg(oi=("oi", "sum"), buy=("buy_qty", "first"), sell=("sell_qty", "first"))
+
+
+def oi_history(days: int = 20) -> dict:
+    """{symbol: usual absolute OI change % in a day} from the recorder's finished quote files."""
+    files = sorted((paths.DATA / "quotes").glob("*/*.parquet"))[-days:]
+    chg = []
+    for fp in files:
+        try:
+            g = _fut_oi(pd.read_parquet(fp, columns=["time", "kind", "symbol", "oi", "buy_qty", "sell_qty"]))
+            if g.empty:
+                continue
+            g = g.reset_index().sort_values("time").groupby("symbol")["oi"].agg(["first", "last"])
+            chg.append(((g["last"] / g["first"].replace(0, np.nan) - 1).abs() * 100).rename(fp.stem))
+        except Exception:
+            continue
+    if not chg:
+        return {}
+    return pd.concat(chg, axis=1).mean(axis=1).dropna().round(2).to_dict()
+
+
+def oi_today(day: str) -> pd.DataFrame:
+    """Today's futures OI change and order-book pressure per stock, from the recorder's live quote files."""
+    files = _quote_files(day)
+    if not files:
+        return pd.DataFrame()
+    try:
+        df = pd.concat(pd.read_parquet(f, columns=["time", "kind", "symbol", "oi", "buy_qty", "sell_qty"]) for f in files)
+    except Exception:
+        return pd.DataFrame()
+    g = _fut_oi(df)
+    if g.empty:
+        return pd.DataFrame()
+    g = g.reset_index().sort_values("time")
+    a = g.groupby("symbol").agg(oi0=("oi", "first"), oi=("oi", "last"), buy=("buy", "last"), sell=("sell", "last"))
+    a["oi_chg"] = (a["oi"] / a["oi0"].replace(0, np.nan) - 1) * 100
+    tot = a["buy"] + a["sell"]
+    a["book_buy"] = np.where(tot > 0, a["buy"] / tot.replace(0, np.nan) * 100, np.nan)
+    return a[["oi_chg", "book_buy"]]
+
+
+def sudden(bars: pd.DataFrame) -> dict | None:
+    """The latest 5-minute candle against the same slot on the last 20 days (volume, size), and the last 15 minutes'
+    move."""
+    d = B.clean(bars)
+    if d.empty:
+        return None
+    day = d.index.normalize()
+    today = d[day == day.max()]
+    if today.empty:
+        return None
+    last = today.iloc[-1]
+    slot = d.index[-1].time()
+    past = d[(day < day.max()) & (d.index.time == slot)].tail(20)
+    if len(past) < 5:
+        return None
+    v_med = float(past["Volume"].median())
+    r_avg = float((past["High"] - past["Low"]).mean())
+    c3 = float(today["Close"].iloc[-4]) if len(today) >= 4 else float(today["Open"].iloc[0])
+    return {"spike_x": float(last["Volume"]) / v_med if v_med > 0 else np.nan,
+            "candle_x": float(last["High"] - last["Low"]) / r_avg if r_avg > 0 else np.nan,
+            "jump": float(last["Close"]) - c3, "last_t": d.index[-1].strftime("%H:%M")}
+
+
+def _f(x, nd=1):
+    return None if x is None or (isinstance(x, float) and not np.isfinite(x)) else round(float(x), nd)
+
+
+def radar_bot(L: pd.DataFrame, mkt: "Market", oi: pd.DataFrame) -> dict:
+    """Every F&O stock with its full readings (each against its own usual), the sudden changes flagged, and the
+    odds from past days for its current kind of moment."""
+    rows, events = [], []
+    for _, r in L.iterrows():
+        st_ = r["stock"]
+        sd = sudden(mkt.bars(st_)) or {}
+        side = 1 if r["move"] > 0 else -1 if r["move"] < 0 else 0
+        oc = oi.loc[st_] if (not oi.empty and st_ in oi.index) else None
+        oi_chg = float(oc["oi_chg"]) if oc is not None and pd.notna(oc["oi_chg"]) else np.nan
+        oi_usual = mkt.oi_avg.get(st_)
+        oi_x = abs(oi_chg) / oi_usual if oi_usual and np.isfinite(oi_chg) else np.nan
+        jump_atr = sd.get("jump", np.nan) / r["atr"] if r["atr"] else np.nan
+        odds = B.odds_lookup(mkt.odds, r["m"], r["vol_x"], r["move_atr"], r["flow_share"], side)
+        ev = []
+        if sd.get("spike_x", 0) >= 3:
+            ev.append(("spike", f"volume spike {sd['spike_x']:.1f}x in the last 5 min"))
+        if sd.get("candle_x", 0) >= 2.5:
+            ev.append(("candle", f"big candle {sd['candle_x']:.1f}x the usual"))
+        if np.isfinite(jump_atr) and abs(jump_atr) >= 0.5:
+            ev.append(("jump", f"{jump_atr:+.1f} ATR in 15 min"))
+        if r["vol_x"] >= 2:
+            ev.append(("vol", f"volume {r['vol_x']:.1f}x usual by this time"))
+        if r["range_x"] >= 1.2:
+            ev.append(("range", f"range {r['range_x']:.1f}x ATR"))
+        if abs(r["move_atr"]) >= 1:
+            ev.append(("move", f"{r['move_atr']:+.1f} ATR from the open"))
+        if np.isfinite(oi_x) and oi_x >= 2 and abs(oi_chg) >= 3:
+            up = r["chg"] > 0
+            lab = ("long build-up" if oi_chg > 0 else "short covering") if up else ("short build-up" if oi_chg > 0 else "long unwinding")
+            ev.append(("oi", f"OI {oi_chg:+.1f}% ({oi_x:.1f}x usual) {lab}"))
+        if (r["o_eq_l"] and side > 0) or (r["o_eq_h"] and side < 0):
+            ev.append(("ohl", "opened at the " + ("low" if r["o_eq_l"] else "high")))
+        score = (min(sd.get("spike_x", 0) or 0, 10) / 3 + min(r["vol_x"], 6) / 2 + min(r["range_x"], 3)
+                 + min(abs(r["move_atr"]), 3) + (min(oi_x, 5) / 2 if np.isfinite(oi_x) else 0))
+        row = {"stock": st_, "sector": r["sector"], "price": _f(r["price"], 2), "chg": _f(r["chg"] * 100, 2),
+               "move_atr": _f(r["move_atr"], 2), "range_x": _f(r["range_x"], 2), "vol_x": _f(r["vol_x"], 2),
+               "spike_x": _f(sd.get("spike_x")), "candle_x": _f(sd.get("candle_x")), "jump_atr": _f(jump_atr, 2),
+               "buying": _f(r["flow_share"] * 100, 0), "net_cr": _f(r["net_cr"], 1), "oi_chg": _f(oi_chg, 2),
+               "oi_x": _f(oi_x), "book_buy": _f(oc["book_buy"], 0) if oc is not None else None,
+               "ohl": "O=L ▲" if r["o_eq_l"] else "O=H ▼" if r["o_eq_h"] else "", "side": side,
+               "score": round(score, 1), "events": [t for _, t in ev], "kinds": [k for k, _ in ev],
+               "odds": odds, "time": sd.get("last_t", f"{int(r['m']) // 60:02d}:{int(r['m']) % 60:02d}")}
+        rows.append(row)
+        if ev:
+            events.append(row)
+    rows.sort(key=lambda x: -x["score"])
+    events.sort(key=lambda x: (-len(x["events"]), -x["score"]))
+    return {"name": "Radar", "rows": rows, "events": events[:60],
+            "odds_info": {"days": mkt.odds.get("days"), "built": mkt.odds.get("built"), "stocks": mkt.odds.get("stocks")}}
+
+
+def update_feed(mkt: "Market", radar: dict, now: datetime):
+    """New sudden changes go to the top of the day's feed (each stock + kind once a day)."""
+    for r in radar["events"]:
+        for k, t in zip(r["kinds"], r["events"]):
+            key = (r["stock"], k)
+            if key in mkt.ev_seen:
+                continue
+            mkt.ev_seen.add(key)
+            o = r.get("odds") or {}
+            mkt.feed.insert(0, {"time": r["time"], "stock": r["stock"], "kind": k, "text": t, "side": r["side"],
+                                "price": r["price"], "chg": r["chg"], "win": o.get("win"), "n": o.get("n"),
+                                "avg": o.get("avg")})
+    del mkt.feed[300:]
 
 # ---------------------------------------------------------------- the five bots
 
@@ -237,9 +431,10 @@ def unusual_bot(L: pd.DataFrame, T: dict, research: dict | None) -> dict:
     return {"name": "F&O unusual", "flags": flags[:40], "signals": signals}
 
 
-def master_bot(L: pd.DataFrame, idx: dict, sec: dict, mov: dict, unu: dict, vix_chg: float | None) -> dict:
-    """An idea passes only when the tested rule fired AND at least 3 of 4 balance checks agree; 3+ checks without
-    the tested rule = watch."""
+def master_bot(L: pd.DataFrame, idx: dict, sec: dict, mov: dict, unu: dict, vix_chg: float | None,
+               radar: dict | None = None) -> dict:
+    """passed = a tested rule fired AND 3+ of 4 balance checks agree; odds = the radar's past-days odds are good (55%+
+    kept going, 40+ cases, 3+ points over the usual) AND 3+ checks agree; watch = 3+ checks only."""
     nifty = next((f for f in idx["flags"] if f.get("key") == "NIFTY"), None)
     sec_tone = {f["name"]: f["tone"] for f in sec["flags"]}
     mkt = float(L["flow_share"].mean()) if not L.empty else 0.5
@@ -253,6 +448,13 @@ def master_bot(L: pd.DataFrame, idx: dict, sec: dict, mov: dict, unu: dict, vix_
     for f in unu["flags"]:
         if f["tone"] != 0:
             cands.setdefault((f["name"], f["side"]), {"source": "Unusual activity", "rule": False})
+    for r in (radar or {}).get("events", []):
+        o = r.get("odds") or {}
+        if r["side"] and o.get("n", 0) >= 40 and o.get("win", 0) >= 55 and o.get("edge", 0) >= 3:
+            c = cands.setdefault((r["stock"], r["side"]), {"source": "Radar", "rule": False})
+            c["odds"] = o
+            if c["source"] != "Tested rule (Setup Finder)":
+                c["source"] = f"Radar: {', '.join(r['events'][:2])}"
     rows = L.set_index("stock") if not L.empty else pd.DataFrame()
     ideas = []
     for (stock, side), c in cands.items():
@@ -264,15 +466,19 @@ def master_bot(L: pd.DataFrame, idx: dict, sec: dict, mov: dict, unu: dict, vix_
                   "sector money": bool(sec_tone.get(r["sector"], 0) == side),
                   "VIX calm": bool(vix_chg is None or vix_chg < 5)}
         ok = sum(checks.values())
-        status = "passed" if c["rule"] and ok >= 3 else "watch" if ok >= 3 else None
+        status = ("passed" if c["rule"] and ok >= 3 else "odds" if c.get("odds") and ok >= 3 else
+                  "watch" if ok >= 3 else None)
         if not status:
             continue
         ideas.append({"stock": stock, "side": "BUY" if side > 0 else "SELL", "status": status, "source": c["source"],
                       "price": c.get("price", round(float(r["price"]), 2)), "stop": c.get("stop"),
                       "time": c.get("time", f"{int(r['m']) // 60:02d}:{int(r['m']) % 60:02d}"),
                       "sector": r["sector"], "checks": checks, "agree": f"{ok}/4",
-                      "why": f"{c['source']}; " + ", ".join(k for k, v in checks.items() if v)})
-    ideas.sort(key=lambda x: (x["status"] != "passed", -int(x["agree"][0])))
+                      "odds": c.get("odds"),
+                      "why": f"{c['source']}; " + ", ".join(k for k, v in checks.items() if v)
+                             + (f"; past odds {c['odds']['win']:.0f}% kept going (n {c['odds']['n']})" if c.get("odds") else "")})
+    rank = {"passed": 0, "odds": 1, "watch": 2}
+    ideas.sort(key=lambda x: (rank[x["status"]], -int(x["agree"][0]), -((x.get("odds") or {}).get("win") or 0)))
     return {"name": "Master bot", "ideas": ideas[:25],
             "note": f"Market money {mkt * 100:.0f}% buying" + (f" · India VIX {vix_chg:+.1f}%" if vix_chg is not None else "")}
 
@@ -329,6 +535,52 @@ def score_ideas(day: str, mkt: Market, seen: dict) -> list:
         _cloud().upsert_rows("bot_ideas", out, "day,stock,side")
     return out
 
+
+def log_radar(day: str, feed: list, logged: set):
+    """Every new radar event with its odds (Supabase radar_events), so the odds can be checked against what happened."""
+    new = [e for e in feed if (e["stock"], e["kind"]) not in logged]
+    for e in new:
+        logged.add((e["stock"], e["kind"]))
+    if not new:
+        return
+    rows = [{"day": day, "stock": e["stock"], "kind": e["kind"], "side": int(e["side"]), "first_at": e["time"],
+             "price": e["price"], "text": e["text"], "odds_win": e.get("win"), "odds_n": e.get("n")} for e in new]
+    _cloud().upsert_rows("radar_events", rows, "day,stock,kind")
+
+
+def score_radar(day: str, mkt: Market, feed: list) -> list:
+    """At the close: each radar event's result (first price to 15:15, after costs) and how the odds did."""
+    out = []
+    for e in feed:
+        b = mkt.today.get(e["stock"])
+        if b is None or b.empty or not e["side"] or not e.get("price"):
+            continue
+        ex = b[b.index.strftime("%H:%M") <= "15:15"]["Close"]
+        if ex.empty:
+            continue
+        res = e["side"] * (float(ex.iloc[-1]) / float(e["price"]) - 1) * 100 - 0.12
+        out.append({"day": day, "stock": e["stock"], "kind": e["kind"], "side": int(e["side"]), "first_at": e["time"],
+                    "price": e["price"], "text": e["text"], "odds_win": e.get("win"), "odds_n": e.get("n"),
+                    "result_pct": round(res, 3)})
+    if out:
+        _cloud().upsert_rows("radar_events", out, "day,stock,kind")
+        df = pd.DataFrame(out)
+        df["band"] = pd.cut(df["odds_win"].fillna(-1), [-2, 0, 50, 55, 60, 101],
+                            labels=["no odds", "<50%", "50-55%", "55-60%", "60%+"])
+        g = df.groupby("band", observed=True)["result_pct"].agg(n="size", kept=lambda r: float((r > 0).mean() * 100),
+                                                                avg="mean").round(2)
+        hist = _odds_check()
+        hist = [h for h in hist if h.get("day") != day] + [{"day": day, "bands": g.reset_index().to_dict("records")}]
+        (OUT / "odds_check.json").write_text(json.dumps(hist[-30:], default=str))
+    return out
+
+
+def _odds_check() -> list:
+    try:
+        return json.loads((OUT / "odds_check.json").read_text())
+    except Exception:
+        return []
+
 # ---------------------------------------------------------------- loop
 
 
@@ -343,11 +595,20 @@ def cycle(mkt: Market) -> dict:
         dd = vix.index.normalize()
         if (dd < dd.max()).any():
             vix_chg = float(vix["Close"].iloc[-1] / vix[dd < dd.max()]["Close"].iloc[-1] - 1) * 100
+    now = datetime.now(IST)
     idx, sec = index_bot(mkt, research), sector_bot(L)
     mov, unu = movers_bot(L), unusual_bot(L, T, research)
-    master = master_bot(L, idx, sec, mov, unu, vix_chg)
-    return {"updated": datetime.now(IST).isoformat(timespec="seconds"), "bots": {"index": idx, "sector": sec,
-            "movers": mov, "unusual": unu, "master": master}}
+    oi = oi_today(now.strftime("%Y-%m-%d"))
+    radar = radar_bot(L, mkt, oi) if not L.empty else {"name": "Radar", "rows": [], "events": []}
+    update_feed(mkt, radar, now)
+    master = master_bot(L, idx, sec, mov, unu, vix_chg, radar)
+    last_bar = max((b.index.max() for b in mkt.today.values() if b is not None and not b.empty), default=None)
+    health = {"stocks_live": int(len(L)), "last_candle": str(last_bar)[11:16] if last_bar is not None else None,
+              "oi_from_recorder": int(len(oi)), "odds_days": mkt.odds.get("days"), "odds_built": mkt.odds.get("built"),
+              "research_run": (research or {}).get("run_at"), "errors": STATUS["errors"][-3:]}
+    return {"updated": now.isoformat(timespec="seconds"), "health": health, "feed": mkt.feed[:120],
+            "bots": {"index": idx, "sector": sec, "movers": mov, "unusual": unu, "radar": radar, "master": master},
+            "odds_check": _odds_check()}
 
 
 def save(state: dict):
@@ -387,13 +648,13 @@ def main():
         cfg = D.load_config()
     mkt = Market(cfg)
     mkt.load()
-    day, seen, scored, last = None, {}, False, 0.0
+    day, seen, scored, last, logged = None, {}, False, 0.0, set()
     while True:
         now = datetime.now(IST)
         try:
             if now.strftime("%Y-%m-%d") != day:
-                day, seen, scored = now.strftime("%Y-%m-%d"), {}, False
-                mkt.today = {}
+                day, seen, scored, logged = now.strftime("%Y-%m-%d"), {}, False, set()
+                mkt.today, mkt.feed, mkt.ev_seen = {}, [], set()
                 if mkt.hist:
                     mkt.load()   # yesterday joins the history
             if market_open(now) and time.time() - last >= EVERY:
@@ -403,12 +664,16 @@ def main():
                 state = cycle(mkt)
                 save(state)
                 log_ideas(day, state["bots"]["master"]["ideas"], seen)
+                log_radar(day, mkt.feed, logged)
             if not market_open(now) and now.weekday() < 5 and now.strftime("%H:%M") >= "15:35" and not scored:
                 scored = True
                 if seen:
                     log(f"scored {len(score_ideas(day, mkt, seen))} ideas")
+                if mkt.feed:
+                    log(f"scored {len(score_radar(day, mkt, mkt.feed))} radar events")
             if research_due(now):
                 run_research()
+                mkt.odds = load_odds(mkt.syms, force=True)   # tonight's history joins the odds
         except Exception as e:
             STATUS["errors"] = (STATUS["errors"] + [f"{now:%d %b %H:%M} {e}"[:200]])[-10:]
             log(f"error: {e}")
