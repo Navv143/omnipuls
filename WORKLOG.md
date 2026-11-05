@@ -376,3 +376,12 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - The server stores the funnel every 5 minutes: all F&O stocks in <data>/funnel/<day>/<HHMM>.parquet and the step-1
   stocks in Supabase `funnel_log`, so the steps and the score can be tested on what was known at each moment.
 - Real data check (5 Nov): 235 → 26 (ATR) → 22 (range) → 18 (sector) → 12 (stock money) → 7 suggested.
+
+## 5 Nov 2026: Funnel step 5 (market) and picks across the app
+
+- Step 5 from the momentum study: moving with the market (average F&O move from the open) and not the day after a
+  wide day (yesterday's range ≥ 1.25 ATR). Watchlist = all 5 steps, ranked by score; steps 1-4 only = "on watch"
+  (folded, with the reason).
+- The server's funnel picks feed the master bot (source "Momentum funnel", same 4 balance checks) and show on
+  Market View ("Momentum Funnel picks"). Snapshots now store step 5 too.
+- Real data check (5 Nov): 235 → 26 → 22 → 18 → 12 → 5.

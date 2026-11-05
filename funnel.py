@@ -8,18 +8,19 @@ Step 3  Sector money - the stock's sector has net money in the direction of the 
                        shorts).
 Step 4  Stock money  - the stock's own net money is in that direction AND still growing (net now beyond the net
                        15 minutes ago).
-Stocks that pass all four go on the watchlist (long = moving up from the open, short = moving down).
-
-Suggested: the watchlist ranked by a score that adds what the momentum study found (research/MOMENTUM_STUDY.md):
-moving with the market (against it lost at every decision time), room left to the 20-day high / low, and a quiet
-yesterday (after a wide day continuation failed). Stocks against the market are never suggested.
+Step 5  Market       - from the momentum study (research/MOMENTUM_STUDY.md): moving the same way as the market (the
+                       average F&O move from the open; against it lost at every decision time) and not the day after
+                       a wide day (yesterday's range ≥ 1.25 ATR: continuation failed in both test periods).
+Stocks that pass all five = suggested watchlist (long = up from the open, short = down), ranked by a 0-100 score.
+Steps 1-4 without step 5 = "on watch".
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-DEFAULTS = {"day_x": 1.2, "now_x": 1.0, "range_x": 1.2, "lookback": 20, "recent": 3, "sector_rising": False}
+DEFAULTS = {"day_x": 1.2, "now_x": 1.0, "range_x": 1.2, "wide_yday": 1.25, "lookback": 20, "recent": 3,
+            "sector_rising": False}
 
 
 def _clean(df: pd.DataFrame | None) -> pd.DataFrame:
@@ -151,7 +152,11 @@ def build(bars: dict, per: dict, sectors: dict, cfg: dict | None = None) -> tupl
              + 15 * t["mkt_with"].astype(float) + 5 * (t["room_atr"].fillna(0) >= 0.36)
              + 5 * (t["prev_rng_atr"].fillna(1) <= 0.81) - 10 * (t["prev_rng_atr"].fillna(1) >= 1.25))
     t["flow_with"], t["sec_with"], t["score"] = flow_with * 100, np.asarray(sec_with, dtype=float) * 100, np.round(score, 0)
-    t["suggest"] = t["step4"] & t["mkt_with"]
+    # step 5 (from the momentum study): with the market, and not the day after a wide day
+    t["calm_yday"] = ~(t["prev_rng_atr"].fillna(1) >= cfg["wide_yday"])
+    t["step5"] = t["step4"] & t["mkt_with"] & t["calm_yday"]
+    t["suggest"] = t["step5"]
+    t["Watch"] = np.where(t["step5"], np.where(side > 0, "LONG", "SHORT"), np.where(t["step4"], "on watch", ""))
 
     def why(r):
         out = [f"ATR {r['day_x']:.1f}x and range {r['range_x']:.1f}x usual"]
@@ -167,5 +172,5 @@ def build(bars: dict, per: dict, sectors: dict, cfg: dict | None = None) -> tupl
     t["why"] = t.apply(why, axis=1)
     sec = sec.reset_index()
     sec["buy_share"] = sec["sec_in"] / (sec["sec_in"] + sec["sec_out"]).replace(0, np.nan) * 100
-    t = t.sort_values(["step4", "score"], ascending=False)
+    t = t.sort_values(["step5", "step4", "score"], ascending=False)
     return t, sec.sort_values("sec_net", ascending=False)

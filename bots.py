@@ -432,7 +432,7 @@ def unusual_bot(L: pd.DataFrame, T: dict, research: dict | None) -> dict:
 
 
 def master_bot(L: pd.DataFrame, idx: dict, sec: dict, mov: dict, unu: dict, vix_chg: float | None,
-               radar: dict | None = None) -> dict:
+               radar: dict | None = None, funnel_top: list | None = None) -> dict:
     """passed = a tested rule fired AND 3+ of 4 balance checks agree; odds = the radar's past-days odds are good (55%+
     kept going, 40+ cases, 3+ points over the usual) AND 3+ checks agree; watch = 3+ checks only."""
     nifty = next((f for f in idx["flags"] if f.get("key") == "NIFTY"), None)
@@ -448,12 +448,19 @@ def master_bot(L: pd.DataFrame, idx: dict, sec: dict, mov: dict, unu: dict, vix_
     for f in unu["flags"]:
         if f["tone"] != 0:
             cands.setdefault((f["name"], f["side"]), {"source": "Unusual activity", "rule": False})
+    for f in funnel_top or []:  # Momentum Funnel picks (all 5 steps)
+        c = cands.setdefault((f["Stock"], int(f["side"])), {"source": "Momentum funnel", "rule": False})
+        c["funnel"] = f["score"]
+        if c["source"] != "Tested rule (Setup Finder)":
+            c["source"] = f"Momentum funnel (score {f['score']:.0f})"
     for r in (radar or {}).get("events", []):
         o = r.get("odds") or {}
         if r["side"] and o.get("n", 0) >= 40 and o.get("win", 0) >= 55 and o.get("edge", 0) >= 3:
             c = cands.setdefault((r["stock"], r["side"]), {"source": "Radar", "rule": False})
             c["odds"] = o
-            if c["source"] != "Tested rule (Setup Finder)":
+            if c["source"].startswith("Momentum funnel"):
+                c["source"] += f" + radar: {', '.join(r['events'][:2])}"
+            elif c["source"] != "Tested rule (Setup Finder)":
                 c["source"] = f"Radar: {', '.join(r['events'][:2])}"
     rows = L.set_index("stock") if not L.empty else pd.DataFrame()
     ideas = []
@@ -584,7 +591,7 @@ def _odds_check() -> list:
 
 FUNNEL_COLS = ["Stock", "Sector", "side", "price", "move_pct", "chg_pct", "gap_pct", "day_x", "now_x", "range_x",
                "room_atr", "prev_rng_atr", "net", "net_before", "inflow", "outflow", "sec_net", "sec_net_before",
-               "mkt_move", "flow_with", "sec_with", "score", "step1", "step2", "step3", "step4", "suggest"]
+               "mkt_move", "flow_with", "sec_with", "score", "step1", "step2", "step3", "step4", "step5", "suggest"]
 
 
 def funnel_snapshot(mkt: "Market", now: datetime) -> dict:
@@ -605,7 +612,7 @@ def funnel_snapshot(mkt: "Market", now: datetime) -> dict:
              "price": float(r["price"]), "day_x": _f(r["day_x"], 3), "now_x": _f(r["now_x"], 3), "range_x": _f(r["range_x"], 3),
              "sec_net": _f(r["sec_net"], 2), "net": _f(r["net"], 2), "net_before": _f(r["net_before"], 2),
              "mkt_move": _f(r["mkt_move"], 3), "room_atr": _f(r["room_atr"], 2), "prev_rng_atr": _f(r["prev_rng_atr"], 2),
-             "score": _f(r["score"], 0), "step": int(r["step1"]) + int(r["step2"]) + int(r["step3"]) + int(r["step4"]),
+             "score": _f(r["score"], 0), "step": sum(int(r[f"step{i}"]) for i in (1, 2, 3, 4, 5)),
              "suggest": bool(r["suggest"])} for _, r in snap[snap["step1"]].iterrows()]
     try:
         if rows:
@@ -613,8 +620,10 @@ def funnel_snapshot(mkt: "Market", now: datetime) -> dict:
     except Exception as e:
         log(f"funnel_log: {e}")
     return {"time": snap["time"].iloc[0], "stocks": int(len(snap)),
-            "steps": [int(snap[f"step{i}"].sum()) for i in (1, 2, 3, 4)], "suggest": int(snap["suggest"].sum()),
-            "top": t[t["suggest"]].head(8)[["Stock", "side", "score", "why"]].to_dict("records")}
+            "steps": [int(snap[f"step{i}"].sum()) for i in (1, 2, 3, 4, 5)], "suggest": int(snap["suggest"].sum()),
+            "top": t[t["suggest"]].sort_values("score", ascending=False).head(10)[
+                ["Stock", "Sector", "side", "price", "move_pct", "time", "day_x", "now_x", "range_x", "score", "sec_net", "net",
+                 "net_before", "why"]].to_dict("records")}
 
 # ---------------------------------------------------------------- loop
 
@@ -636,11 +645,11 @@ def cycle(mkt: Market) -> dict:
     oi = oi_today(now.strftime("%Y-%m-%d"))
     radar = radar_bot(L, mkt, oi) if not L.empty else {"name": "Radar", "rows": [], "events": []}
     update_feed(mkt, radar, now)
-    master = master_bot(L, idx, sec, mov, unu, vix_chg, radar)
     try:
         fun = funnel_snapshot(mkt, now)
     except Exception as e:
         fun = {"error": str(e)[:200]}
+    master = master_bot(L, idx, sec, mov, unu, vix_chg, radar, fun.get("top"))
     last_bar = max((b.index.max() for b in mkt.today.values() if b is not None and not b.empty), default=None)
     health = {"stocks_live": int(len(L)), "last_candle": str(last_bar)[11:16] if last_bar is not None else None,
               "oi_from_recorder": int(len(oi)), "odds_days": mkt.odds.get("days"), "odds_built": mkt.odds.get("built"),
