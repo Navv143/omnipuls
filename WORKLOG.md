@@ -484,3 +484,13 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 ## 5 Nov 2026: Momentum bot EARLY stage (10-minute window)
 - Signals now come in two stages: EARLY (10-minute window, move ≥ 0.12 ATR; ~5 minutes earlier) and CONFIRMED
   (15-minute window), each with the plan and OI, recorded separately ("Index momentum bot (early)").
+
+## 5 Nov 2026: Times everywhere, TradingView links, chart levels
+
+- Chart legend shows the hovered candle's date and time; "Live data as of HH:MM IST" on Market View and "as of" on its
+  sections; every signal chip shows its time (⏱).
+- TradingView: `mv_ui.tv_url / tv_link` map our symbols (NSE stocks, indices, crypto, forex, commodities) to
+  TradingView; "TradingView ↗" opens a new tab from the chart page, every card (watchlist, index, momentum, ideas, radar,
+  AI Desk, trend banners, sector stock rows) and a link column in the funnel, sector, radar, AI Desk and signal tables.
+- Chart: yesterday's high / low and today's recorded signal levels (entry and stop solid, targets dashed) as lines;
+  day and 52-week ranges no longer cut off.

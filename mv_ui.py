@@ -282,10 +282,13 @@ def signal_cards(sig: pd.DataFrame, limit: int = 18) -> str:
         if r["Status"] == "● SIGNAL" and side == DOWN:
             col = DOWN
         det = str(r.get("Details", ""))
+        import re as _re
+        _tm = r.get("Time") or (_re.search(r"\b(\d{1,2}:\d{2})\b", f"{r['Signal']} {det}") or [None, None])[1]
         cards.append(f"<div class='mx-s' style='--c:{side}' title='{_e(det)}'><div class='ic' style='--c:{col}'>{icon}</div><div>"
                      f"<div class='t'>{_e(r['Signal'])}</div><div class='d'>{_e(det[:110] + ('…' if len(det) > 110 else ''))}</div>"
                      f"<div class='row'><span class='mx-chip' style='--c:{col}'>{_e(r['Status'].replace('● ', ''))}</span>"
-                     f"<span class='mx-mini'>{_e(r.get('Evidence', ''))}</span></div></div></div>")
+                     + (f"<span class='mx-mini'>⏱ {_e(_tm)}</span>" if _tm else "")
+                     + f"<span class='mx-mini'>{_e(r.get('Evidence', ''))}</span></div></div></div>")
     more = len(live) - limit
     out = "<div class='mx-sig'>" + "".join(cards) + "</div>"
     if more > 0:
@@ -411,7 +414,7 @@ def event_cards(events: list, limit: int = 12) -> str:
     out = []
     for r in events[:limit]:
         c = UP if r["side"] > 0 else DOWN if r["side"] < 0 else NEUTRAL
-        out.append(f"<div class='mx-e' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['stock'])}</span>"
+        out.append(f"<div class='mx-e' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['stock'])}{tv_link(r['stock'])}</span>"
                    f"<span class='px'>{_num(r['price'])} <span class='mx-chip' style='--c:{c}'>{_sgn(r['chg'])}</span></span></div>"
                    f"<div class='mx-quiet' style='margin:1px 0 0'>{_e(r['sector'])} · {_e(r['time'])} · score {r['score']}</div>"
                    "<ul>" + "".join(f"<li>{_e(t)}</li>" for t in r["events"]) + "</ul>" + odds_bar(r.get("odds"))
@@ -504,7 +507,9 @@ def sector_card(name: str, g: pd.DataFrame, flow: dict, selected: bool = False) 
     rows = []
     for _, r in g.sort_values("Chg %", ascending=False).iterrows():
         cc = _cv(r["Chg %"])
-        rows.append(f"<div class='sx-r' title='{_e(r.get('Buildup') or '')}'><span>{_e(r['Stock'])}</span>"
+        _u = tv_url(r['Stock'])
+        _nm = f"<a href='{_u}' target='_blank' rel='noopener' style='color:inherit;text-decoration:none'>{_e(r['Stock'])} ↗</a>" if _u else _e(r['Stock'])
+        rows.append(f"<div class='sx-r' title='{_e(r.get('Buildup') or '')}'><span>{_nm}</span>"
                     f"<span>{_n(r['Price'])}</span><span style='color:{cc}'>{_n(r['Change'], 2, True)}</span>"
                     f"<span style='color:{cc}'>{_n(r['Chg %'], 2, True, '%')}</span>"
                     f"<span style='color:{_rf_color(r['R-factor'])};font-weight:600'>{_n(r['R-factor'], 0)}</span>"
@@ -629,7 +634,7 @@ def decision_card(r: dict, risk: bool = True) -> str:
             f"<div class='r'><span>{_e(ch['name'])}</span><div class='bar' title='{_e(ch['text'])}'>"
             f"<span style='width:{min(ch['load'], 1) * 100:.0f}%;background:{'#F59E0B' if ch['pass'] else 'var(--om-down)'}'></span></div>"
             f"<span class='{'ok' if ch['pass'] else 'no'}'>{'PASS' if ch['pass'] else 'FAIL'}</span></div>" for ch in t["checks"]) + "</div>"
-    head = (f"<div class='top'><div><div class='nm'>{_e(r['name'])} · {side}</div><div class='cl'>{_e(r['class'])} · "
+    head = (f"<div class='top'><div><div class='nm'>{_e(r['name'])} · {side}{tv_link(r.get('symbol', ''))}</div><div class='cl'>{_e(r['class'])} · "
             f"{_fmt_px(r['price'])} · {_sgn(r['chg_1d'])} today</div></div><span class='call' style='--c:{c}'>{nv['call']}</span></div>")
     return (f"<div class='dcard' style='--c:{c}'>{head}<div class='why'>{_e(r['setup'])}. {_e(nv['why'])}</div>{lv}"
             f"<div class='votes'>{''.join(vt)}</div>{rr}</div>")
@@ -684,7 +689,7 @@ def funnel(steps: list[tuple[str, int, str]]) -> str:
 def watch_card(r: dict, show_why: bool = False) -> str:
     c = UP if r["side"] > 0 else DOWN
     rising = "▲" if r["net"] > r["net_before"] else "▼"  # direction of the change in the last 15 minutes
-    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['Stock'])}</span>"
+    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['Stock'])}{tv_link(r['Stock'])}</span>"
             f"<span class='sd'>{'LONG' if r['side'] > 0 else 'SHORT'}</span></div>"
             f"<div class='px'>{_num(r['price'])} · {_sgn(r['move_pct'])} from open · {_e(r['Sector'])} · {_e(r['time'])}</div>"
             f"{sparkline(r.get('net_series') or [], c, 0.0)}"
@@ -717,7 +722,7 @@ def index_card(r: dict, weak: bool = False) -> str:
     badge = (f"<span class='sd' style='--c:{UP if sig['side'] == 'LONG' else DOWN}'>{sig['side']} {sig['time']}</span>" if sig
              else "<span class='sd' style='--c:var(--om-neutral)'>NO SIGNAL</span>")
     vix = f" · VIX {r['vix_chg']:+.1f}%" if r.get("vix_chg") is not None else ""
-    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['name'])}"
+    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['name'])}{tv_link(r.get('key', ''))}"
             + (" <span class='mx-mini'>weak in tests</span>" if weak else "") + f"</span>{badge}</div>"
             f"<div class='px'>{_num(r['price'])} · {_sgn(r['move_pct'])} from open · {_e(r['time'])}{vix}</div>"
             f"<div class='votes' style='display:flex;flex-direction:column;gap:4px;margin-top:8px'>{chips}</div>"
@@ -779,7 +784,7 @@ def idea_card(i: dict) -> str:
     where = (f"Buy near {_num(p['entry'])}" if long else f"Sell near {_num(p['entry'])}") if p else ("Buy" if long else "Sell")
     checks = "".join(f"<span style='--v:{UP if ok else DOWN}'>{_e(k)} {'✓' if ok else '✗'}</span>"
                      for k, ok in (i.get("checks") or {}).items())
-    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(i['stock'])} · {'LONG' if long else 'SHORT'}</span>"
+    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(i['stock'])} · {'LONG' if long else 'SHORT'}{tv_link(i['stock'])}</span>"
             f"<span class='sd' style='--c:{lab[1]}'>{lab[0]}</span></div>"
             f"<div class='px'>{_e(i.get('sector', ''))} · since {_e(i.get('time', ''))} · checks {_e(i.get('agree', ''))}</div>"
             f"<div style='font-weight:700;margin-top:8px;color:{c}'>{where}</div>"
@@ -793,7 +798,7 @@ def idea_cards(ideas: list) -> str:
     return "<div class='wl'>" + "".join(idea_card(i) for i in ideas) + "</div>"
 
 
-def trend_banner(name: str, dt: dict, gg: dict | None) -> str:
+def trend_banner(name: str, dt: dict, gg: dict | None, key: str = "") -> str:
     """Day measured from yesterday's close: a strong banner on trend days (gap or not)."""
     if not dt:
         return ""
@@ -802,7 +807,8 @@ def trend_banner(name: str, dt: dict, gg: dict | None) -> str:
     act = (f"<b>Gap &amp; go {sig['side']}</b> at {sig['time']} @ {_num(sig['price'])}" if sig else
            _e((gg or {}).get("wait") or ("no big gap today" if not (gg or {}).get("active") else "")))
     kind = "TREND DAY" if dt["trend_day"] else "DAY SO FAR"
-    return (f"<div class='mx-idea' style='--c:{c};margin:8px 0'><div class='k'>{kind} · {_e(name)} vs yesterday's close</div>"
+    return (f"<div class='mx-idea' style='--c:{c};margin:8px 0'><div class='k'>{kind} · {_e(name)} vs yesterday's close"
+            f"{tv_link(key) if key else ''} · as of {_e(dt.get('time', ''))}</div>"
             f"<h3 style='margin:.1rem 0 .3rem'>{_sgn(dt['chg_pct'])} · {dt['chg_atr']:+.1f} ATR · breadth {dt['breadth_with']:.0f}% "
             f"{'up' if dt['side'] > 0 else 'down'}</h3><div class='px' style='color:var(--om-text-3)'>gap {_sgn(dt['gap_pct'])} · "
             f"from the open {_sgn(dt['from_open_pct'])} · {act}</div>"
@@ -837,9 +843,57 @@ def momentum_card(key: str, mo: dict) -> str:
                    f"{g['time']} @ {_num(g['price'])}</div><div class='px' style='font-family:Inter,sans-serif;"
                    f"font-size:var(--fs-2xs)'>{_e(g['why'])}</div>{_oi(g)}{plan_html(g['plan'])}" for g in sigs[-3:])
     tag = f" <span class='mx-mini'>{_e(mo.get('rule', ''))}</span>" + (" <span class='mx-mini'>trend day</span>" if mo.get("trend_day") else "")
-    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(mo.get('name', key))}{tag}</span>"
-            f"<span class='sd' style='--c:{c}'>{_e(st_.split(' but')[0][:22])}</span></div>"
+    badge = ("MOMENTUM ▲" if st_.startswith("MOMENTUM UP") else "MOMENTUM ▼" if st_.startswith("MOMENTUM DOWN")
+             else "TRAP?" if mo.get("trap") else "WAITING")
+    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(mo.get('name', key))}{tv_link(key)}</span>"
+            f"<span class='sd' style='--c:{c}'>{badge}</span></div><div style='margin-top:3px'>{tag}</div>"
             f"<div class='px'>{_num(mo.get('price'))} · last 15 min ({_e(mo.get('time', ''))}): {_e(' · '.join(rd))}</div>"
             + (f"<div class='px' style='color:var(--om-warn);margin-top:4px'>⚠ {_e(st_)}: likely stop hunt, no trade</div>" if mo.get("trap") else "")
             + (body or "<div class='mx-quiet'>No confirmed burst today yet.</div>")
             + (f"<div class='mx-quiet'>{len(sigs)} signals today</div>" if len(sigs) > 2 else "") + "</div>")
+
+
+# ---------------------------------------------------------------- TradingView links
+
+_TV_MAP = {
+    "NIFTY": "NSE:NIFTY", "^NSEI": "NSE:NIFTY", "BANKNIFTY": "NSE:BANKNIFTY", "^NSEBANK": "NSE:BANKNIFTY",
+    "FINNIFTY": "NSE:CNXFINANCE", "NIFTY_FIN_SERVICE.NS": "NSE:CNXFINANCE", "MIDCPNIFTY": "NSE:NIFTY_MID_SELECT",
+    "NIFTY_MID_SELECT.NS": "NSE:NIFTY_MID_SELECT", "SENSEX": "BSE:SENSEX", "^BSESN": "BSE:SENSEX", "^CNXIT": "NSE:CNXIT",
+    "INDIAVIX": "NSE:INDIAVIX", "^INDIAVIX": "NSE:INDIAVIX", "GC=F": "COMEX:GC1!", "SI=F": "COMEX:SI1!",
+    "HG=F": "COMEX:HG1!", "PL=F": "NYMEX:PL1!", "CL=F": "NYMEX:CL1!", "BZ=F": "NYMEX:BB1!", "NG=F": "NYMEX:NG1!",
+    "ZW=F": "CBOT:ZW1!", "DX-Y.NYB": "TVC:DXY", "^GSPC": "SP:SPX", "^IXIC": "NASDAQ:IXIC",
+}
+
+
+def tv_symbol(sym: str) -> str | None:
+    """TradingView's name for one of our symbols (NSE stock name or .NS, index key, Yahoo crypto / forex / futures)."""
+    if not sym:
+        return None
+    s = str(sym).strip().split(" ")[0]
+    if s in _TV_MAP:
+        return _TV_MAP[s]
+    if s.endswith("-USD"):
+        return f"BINANCE:{s[:-4]}USDT"
+    if s.endswith("=X"):
+        pair = s[:-2]
+        return f"FX_IDC:{pair}" if "INR" in pair else f"FX:{pair}"
+    if s.endswith(".BO"):
+        return "BSE:" + s[:-3].replace("&", "_").replace("-", "_")
+    base = s[:-3] if s.endswith(".NS") else s
+    if base.startswith("^"):
+        return None
+    return "NSE:" + base.replace("&", "_").replace("-", "_")
+
+
+def tv_url(sym: str, interval: str = "5") -> str | None:
+    """TradingView chart (opens in a new tab) with the full indicator library."""
+    import urllib.parse
+    t = tv_symbol(sym)
+    return f"https://www.tradingview.com/chart/?symbol={urllib.parse.quote(t)}&interval={interval}" if t else None
+
+
+def tv_link(sym: str, label: str = "TradingView ↗") -> str:
+    u = tv_url(sym)
+    return (f"<a href='{u}' target='_blank' rel='noopener' style='font-size:var(--fs-2xs);color:var(--om-accent);"
+            f"text-decoration:none;border:1px solid color-mix(in srgb,var(--om-accent) 45%,transparent);border-radius:6px;"
+            f"padding:1px 7px;margin-left:6px;white-space:nowrap'>{label}</a>") if u else ""

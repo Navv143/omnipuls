@@ -351,7 +351,8 @@ def day_trend(ix: pd.DataFrame, stocks: dict, weights: dict) -> dict | None:
     side = 1 if last > pc else -1 if last < pc else 0
     breadth = br_up if side > 0 else br_dn
     trend = bool(np.isfinite(chg_atr) and abs(chg_atr) >= 1.0 and breadth == breadth and breadth >= 75)
-    return {"price": last, "chg_pct": (last / pc - 1) * 100, "gap_pct": (o / pc - 1) * 100, "from_open_pct": (last / o - 1) * 100,
+    return {"time": (today.index[-1] + pd.Timedelta(minutes=5)).strftime("%H:%M"),
+            "price": last, "chg_pct": (last / pc - 1) * 100, "gap_pct": (o / pc - 1) * 100, "from_open_pct": (last / o - 1) * 100,
             "chg_atr": chg_atr, "gap_atr": (o - pc) / atr14 if atr14 else np.nan, "breadth_up": br_up, "breadth_dn": br_dn,
             "side": side, "breadth_with": breadth, "trend_day": trend, "atr14": atr14, "pc": pc, "open": o}
 
