@@ -15,3 +15,8 @@
 		reverse_proxy app:8501
 	}
 }
+
+# www.<domain> -> <domain> (needs a www record pointing here; Hostinger adds it as a CNAME to the main domain)
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
