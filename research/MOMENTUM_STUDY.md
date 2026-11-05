@@ -240,3 +240,17 @@ close. Readings at 9:30 / 10:00 / 10:30 / 11:00 / 12:00, in the direction of the
 - So: in F&O stocks the fast momentum is at the open (big 9:30 movers, V3 early pick); after that the moves that last
   are slow grinds that pay only if held to the close. Both added as paper setups with the result after 1 h / 2 h
   recorded (momentum_paper.py, crypto_paper pct_60 / pct_120).
+
+## Move finder: every stock, every 5 minutes, machine learning (5 Nov 2026, `research/move_finder*.py`)
+634,008 stock-candles (09:30-14:20, 46 days, both directions). Label: from the next open, +0.75 ATR within 60 minutes
+before -0.3 ATR (0.7% of moments). Gradient-boosted model trained on 25 days, judged on the 21 later days it never saw.
+- WHEN a big move comes is predictable: test AUC 0.74; the top 1% of moments see a fast 0.75 ATR move 12.5% of the
+  time vs 1.4% normally (9x). What they share: the last 30 minutes already wide (0.69 vs 0.20 ATR), volume about 3x the
+  usual for the time, the day's range already about 1.5 ATR, early in the day (around 10:35), weak market breadth.
+- WHICH WAY is not: the model's side is right 7.0% vs wrong 5.5% in its top 1%; a model trained only on the moves to
+  tell up from down reaches AUC 0.565 (the best single reading, the last 15-minute move, 0.56). After the stop and
+  0.12% costs every version is about 0 or negative (top 1%: -0.06%; top 3 a day: +0.24% but halves -0.01 / +0.48).
+- A two-sided breakout bracket around the last 30 minutes' range on those moments loses (-0.03% to -0.5%): whipsaws.
+- Conclusion: from price and volume alone, intraday direction after the open is close to a coin flip in F&O stocks;
+  volatility is predictable. Next: test the volatility edge with options (buy ATM straddle on a predicted big move)
+  once the recorder has 2-3 weeks of option chains, and add OI / futures-OI readings to the panel (24 Nov study).
