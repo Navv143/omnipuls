@@ -754,6 +754,17 @@ def track_trades(mkt: "Market", day: str, signals: list, final: bool = False):
         except Exception as e:
             log(f"trade_signals: {e}")
 
+
+def plan_for(mkt: "Market", stock: str, side: int) -> dict | None:
+    """Entry / stop / targets for a stock idea, the same plan as the Momentum Funnel (funnel.trade_plan)."""
+    import funnel as FN
+    if not side:
+        return None
+    a = FN.atr_step(mkt.bars(stock))
+    if not a:
+        return None
+    return FN.trade_plan(int(side), float(a["price"]), a.get("atr14"), a.get("swing_low"), a.get("swing_high"))
+
 # ---------------------------------------------------------------- loop
 
 
@@ -783,8 +794,20 @@ def cycle(mkt: Market) -> dict:
         ixs = index_snapshot(mkt, now)
     except Exception as e:
         ixs = [{"error": str(e)[:200]}]
+    # every master idea and radar event gets a plan; master ideas are recorded and scored like the other signals
+    idea_sigs = []
+    for i in master.get("ideas", []):
+        sd = 1 if i["side"] == "BUY" else -1
+        p = plan_for(mkt, i["stock"], sd)
+        i["plan"] = p
+        if p:
+            idea_sigs.append({"source": f"Master bot ({i['status']})", "symbol": i["stock"], "side": sd,
+                              "time": now.strftime("%H:%M"), **{k: p[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")},
+                              "score": None})
+    for r in radar.get("events", [])[:20]:
+        r["plan"] = plan_for(mkt, r["stock"], r["side"])
     try:
-        track_trades(mkt, now.strftime("%Y-%m-%d"), collect_signals(mkt, fun))
+        track_trades(mkt, now.strftime("%Y-%m-%d"), collect_signals(mkt, fun) + idea_sigs)
     except Exception as e:
         log(f"trades: {e}")
     last_bar = max((b.index.max() for b in mkt.today.values() if b is not None and not b.empty), default=None)
