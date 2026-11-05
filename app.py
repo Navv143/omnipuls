@@ -194,6 +194,28 @@ st.set_page_config(page_title="Omnipuls", page_icon=str(ASSETS / "omnipuls_icon.
                    initial_sidebar_state="collapsed")
 st.logo(str(ASSETS / "omnipuls_logo.png"), icon_image=str(ASSETS / "omnipuls_mark.png"), size="large")
 
+
+def _home_screen_icon():
+    """Phone home-screen icon and name: Streamlit's page has no apple-touch-icon, so iPhones drew a plain "O". The
+    tags are added to the page head (the icons are served from ./static by Streamlit's static serving)."""
+    components.html("""<script>
+    (function () {
+      const d = window.parent.document, h = d.head;
+      if (h.querySelector('link[data-omni]')) return;
+      const add = (tag, attrs) => { const e = d.createElement(tag); e.setAttribute('data-omni', '1');
+        for (const k in attrs) e.setAttribute(k, attrs[k]); h.appendChild(e); };
+      add('link', {rel: 'apple-touch-icon', sizes: '180x180', href: '/app/static/apple-touch-icon.png'});
+      add('link', {rel: 'manifest', href: '/app/static/manifest.json'});
+      add('meta', {name: 'apple-mobile-web-app-title', content: 'Omnipuls'});
+      add('meta', {name: 'application-name', content: 'Omnipuls'});
+      add('meta', {name: 'apple-mobile-web-app-capable', content: 'yes'});
+      add('meta', {name: 'theme-color', content: '#0B1220'});
+    })();
+    </script>""", height=0)
+
+
+_home_screen_icon()
+
 st.markdown(
     """
 <style>

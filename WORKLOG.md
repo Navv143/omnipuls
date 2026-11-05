@@ -494,3 +494,9 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   AI Desk, trend banners, sector stock rows) and a link column in the funnel, sector, radar, AI Desk and signal tables.
 - Chart: yesterday's high / low and today's recorded signal levels (entry and stop solid, targets dashed) as lines;
   day and 52-week ranges no longer cut off.
+
+## 5 Nov 2026: Phone home-screen icon
+- iPhones showed a plain "O" (Streamlit has no apple-touch-icon). New static/ folder served by Streamlit
+  (enableStaticServing): apple-touch-icon 180 px, icon-192 / icon-512 and manifest.json, rendered from the brand SVG as
+  a full square; the page head gets the icon / manifest / app-name tags; Caddy also serves /apple-touch-icon*.png at
+  the site root (after a Caddy restart).

@@ -34,6 +34,8 @@ toolbarMode = "minimal"
 
 [server]
 headless = true
+# serves ./static at /app/static (home-screen icons and the web-app manifest)
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false
