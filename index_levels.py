@@ -205,5 +205,16 @@ def failed_break(bars: pd.DataFrame) -> dict | None:
         return {**out, "signal": None}
     t0 = hits.index[0]
     short = bool(s.loc[t0])
+    # plan: stop just beyond the day's extreme so far (0.3-0.6 of the daily ATR), targets 1R / 2R, exit 15:15
+    d = _clean(bars)
+    dd = d.groupby(d.index.normalize()).agg(h=("High", "max"), l=("Low", "min"), c=("Close", "last"))
+    pc = dd["c"].shift(1)
+    trd = pd.concat([dd["h"] - dd["l"], (dd["h"] - pc).abs(), (dd["l"] - pc).abs()], axis=1).max(axis=1)
+    atr14 = float(trd.iloc[-15:-1].mean()) if len(trd) > 5 else np.nan
+    px = float(hits["Close"].iloc[0])
+    upto = today[today.index <= t0]
+    import funnel as FN
+    plan = FN.trade_plan(-1 if short else 1, px, atr14, float(upto["Low"].min()), float(upto["High"].max()),
+                         {"buffer_atr": 0.05})
     return {**out, "signal": {"side": "SHORT" if short else "LONG", "time": (t0 + pd.Timedelta(minutes=5)).strftime("%H:%M"),
-                              "price": float(hits["Close"].iloc[0]), "level": pdh if short else pdl}}
+                              "price": px, "level": pdh if short else pdl, "plan": plan}}

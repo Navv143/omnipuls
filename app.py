@@ -393,12 +393,12 @@ def _landing_hero() -> tuple[str, str]:
   <div class='sub'>Omnipuls turns live market data into clear, ready-to-act ideas for Indian F&amp;O traders, all on one
   screen, refreshed through the day.</div>
   <div class='lp-stats'><div><b>235</b><span>F&amp;O stocks covered</span></div><div><b>5</b><span>indices tracked</span></div>
-  <div><b>44</b><span>global markets</span></div><div><b>24/7</b><span>bots at work</span></div></div>
+  <div><b>41</b><span>markets on the AI Desk</span></div><div><b>24/7</b><span>bots at work</span></div></div>
 </div>"""
     tape = "".join(f"<span><b>{a}</b>{b}</span>" for a, b in (
         ("MARKET VIEW", "the whole market on one page"), ("SMART WATCHLIST", "the stocks worth watching now"),
         ("INDEX INTELLIGENCE", "Nifty · Bank Nifty · Fin Nifty · Sensex · Midcap"), ("BOTS", "watching all day"),
-        ("AI DESK", "crypto · gold · forex · global indices"), ("SECTORS", "where the money is going")))
+        ("AI DESK", "Indian market · crypto · forex · commodities · rupee"), ("SECTORS", "where the money is going")))
     gauge = MX.gauge(46, "Bullish", 9, 4, 3)
     tiles = MX.pulse([
         MX.pulse_tile("Nifty 50", {"last": 24368.5, "chg": 0.62, "closes": pd.Series(np.cumsum(np.r_[0, np.sin(np.arange(40) / 5) * 6 + 2]) + 24200)}, None),
@@ -415,7 +415,7 @@ def _landing_hero() -> tuple[str, str]:
         ("⧩", "#2EE6F6", "Smart watchlist", "A short, ranked list of the stocks worth watching right now."),
         ("▲", "#26A69A", "Index intelligence", "Nifty, Bank Nifty, Fin Nifty, Sensex and Midcap with key levels and signals."),
         ("⚡", "#F59E0B", "Bots", "Bots watch the market all day and flag what changes."),
-        ("✦", "#A855F7", "AI Desk", "Crypto, gold, commodities, forex and world indices in one view."),
+        ("✦", "#A855F7", "AI Desk", "Indian market first, then crypto, forex, commodities and the rupee."),
         ("◫", "#EF5350", "Sectors", "See which sectors and stocks the money is moving into.")))
     rest = f"""<div class='lp-tape'><div>{tape}{tape}</div></div>
 <div class='lp-sec'><div class='k'>Inside the app</div><h2>Everything that moves the market, in one place</h2>
@@ -1451,7 +1451,7 @@ HOWTO = {  # one line under each page's status bar: what the page is for and how
     "dashboard": "The full desk: mood, index plans and focus lists. Today's plan card lists the tested setups.",
     "scanners": "Each tab is one setup with today's signals. Follow entry, stop and exit exactly as shown.",
     "funnel": "ATR active → range expanding → sector money → stock money growing → with the market = watchlist, ranked by score.",
-    "agents": "Six agents read every market (indices, stocks, crypto, gold, commodities, forex). TRADE only when all agree and risk passes; paper-track first.",
+    "agents": "Six agents read the Indian market first, then crypto, forex, commodities and the rupee. TRADE only when all agree and risk passes; paper-track first.",
     "bot": "Live radar of every F&O stock: sudden changes vs its own usual, with past-days odds. Tested = trade; good odds = paper-trade first.",
     "options": "Pick an index and expiry. Most puts written = support, most calls written = resistance.",
     "apex": "Trade with the side that dominates the first hour; 'Since yesterday' adds yesterday's positions.",
@@ -6408,7 +6408,9 @@ def market_view_body(svc, t: pd.DataFrame):
         fb_txt = ""
         if bn_fb:
             g = bn_fb.get("signal")
-            fb_txt = (f"Bank Nifty failed-break fade: <b>{g['side']}</b> at {g['time']} @ {g['price']:,.0f}" if g else
+            pl = (g or {}).get("plan") or {}
+            fb_txt = (f"Bank Nifty failed-break fade: <b>{g['side']}</b> at {g['time']} @ {g['price']:,.0f}"
+                      + (f" · stop {pl['sl']:,.0f} · targets {pl['tp1']:,.0f} / {pl['tp2']:,.0f}" if pl else "") if g else
                       f"Bank Nifty failed-break fade: waiting (yesterday {bn_fb['pdl']:,.0f} – {bn_fb['pdh']:,.0f})")
         st.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
         st.markdown(MX.DESK_CSS, unsafe_allow_html=True)
@@ -6531,7 +6533,7 @@ def _desk_live() -> dict:
 def _desk_state() -> dict | None:
     try:
         s = json.loads((PATHS.DATA / "agents" / "state.json").read_text())
-        if (datetime.now(IST) - datetime.fromisoformat(s["updated"])).total_seconds() < 3600:
+        if (datetime.now(IST) - datetime.fromisoformat(s["updated"])).total_seconds() < 3600 and "Indian indices" in json.dumps(s.get("breadth", {})):
             return s
     except Exception:
         pass
@@ -6559,7 +6561,7 @@ def page_agents():
     tit = [r for r in rows if r.get("titan")]
     rej = [r for r in tit if not r["titan"]["pass"]]
     fng = s.get("fng") or {}
-    st.caption(f"Six agents read {len(rows)} markets: indices, stocks, crypto, gold & metals, commodities and forex. "
+    st.caption(f"Six agents read {len(rows)} markets: Indian indices and stocks first, then crypto, forex, commodities and the rupee. "
                f"Updated {s.get('updated', '')[11:16]} IST · paper calls only, not tested setups.")
     st.markdown(MX.agent_cards({
         "ATLAS": (a.get("regime", "—"), " · ".join(a.get("notes", [])[:3])),
@@ -6630,8 +6632,9 @@ def page_agents():
                                         "R": c.get("r")} for c in rc]), hide_index=True, width="stretch")
     else:
         st.caption("The record starts with the first TRADE call on the server.")
-    note("ATLAS: S&P 500 / Nasdaq vs their 50-day average, VIX level and 5-day change, dollar index trend, US 10-year "
-         "yield, India VIX → risk-on / mixed / risk-off and a bias per class. VEGA: daily EMA 20/50/200 trend + hourly "
+    note("ATLAS: Nifty and Bank Nifty vs their 50-day average, India VIX level and 5-day change, the rupee (USD/INR) "
+         "→ risk-on / mixed / risk-off for Indian indices and stocks; crypto follows Bitcoin's trend; the dollar index "
+         "is context for commodities, forex and the rupee. VEGA: daily EMA 20/50/200 trend + hourly "
          "trend, 20-day breakout / breakdown with volume, pullback to the 20-day average, support / resistance from swing "
          "points, ATR and volume vs their averages. ORION: headline words (bullish / bearish, high-impact catalysts). "
          "LUNA: RSI extremes, 5-day move z-score, class breadth, crypto Fear & Greed; a crowded move counts against. "
@@ -6762,7 +6765,10 @@ def _index_detail(key: str, sid: int, ib: dict, fb: dict, bars: dict, weights: d
     if key == "BANKNIFTY":
         fbk = LV.failed_break(ib.get(key)) or {}
         sg = fbk.get("signal")
-        msg = (f"**Failed-break fade: {sg['side']}** at {sg['time']} @ {sg['price']:,.0f} (broke yesterday's "
+        pl = (sg or {}).get("plan") or {}
+        msg = (f"**Failed-break fade: {sg['side']}** at {sg['time']} @ {sg['price']:,.0f}"
+               + (f" · **stop {pl['sl']:,.0f} · target 1 {pl['tp1']:,.0f} · target 2 {pl['tp2']:,.0f}**" if pl else "")
+               + " (broke yesterday's "
                f"{'high' if sg['side'] == 'SHORT' else 'low'} {sg['level']:,.0f} and closed back inside) · exit 15:15"
                if sg else f"Failed-break fade: no signal yet (yesterday high {fbk.get('pdh', 0):,.0f} / low "
                f"{fbk.get('pdl', 0):,.0f}; broke high: {'yes' if fbk.get('broke_high') else 'no'}, low: "
@@ -6789,6 +6795,51 @@ def _index_detail(key: str, sid: int, ib: dict, fb: dict, bars: dict, weights: d
         if fo.get("per") is not None:
             st.markdown(MX.section("Futures OI through the day", "bar colour = build-up"), unsafe_allow_html=True)
             st.plotly_chart(_fut_oi_fig(fo["per"]), width="stretch", key=f"ixf_{key}", config={"displayModeBar": False})
+
+
+def _signal_record(source_filter: str | None = None):
+    """Today's signals with entry / stop / targets and their result so far, and the record of all past days (the
+    server's bots log every signal and score it at the close)."""
+    d = PATHS.DATA / "bots" / "trades"
+    files = sorted(d.glob("*.json")) if d.exists() else []
+    allt = []
+    for f in files[-60:]:
+        try:
+            allt += json.loads(f.read_text())
+        except Exception:
+            pass
+    if source_filter:
+        allt = [t for t in allt if source_filter in t.get("source", "")]
+    st.markdown(MX.section("Signal record", "every signal with its plan, tracked live and scored at the close (server)"),
+                unsafe_allow_html=True)
+    if not allt:
+        st.caption("The record starts with the first signal the server's bots log (market hours).")
+        return
+    df = pd.DataFrame(allt)
+    today = datetime.now(IST).strftime("%Y-%m-%d")
+    closed = df[df["status"] == "closed"] if "status" in df else df.iloc[0:0]
+    st.markdown(MX.kpis([
+        MX.kpi("Signals today", f"{int((df['day'] == today).sum())}", f"{int(((df['day'] == today) & (df.get('status') == 'open')).sum())} open"),
+        MX.kpi("Closed (all days)", f"{len(closed)}", f"{df['day'].nunique()} days recorded"),
+        MX.kpi("Win rate", f"{(closed['pct'] > 0).mean() * 100:.0f}%" if len(closed) else "—", "after 0.12% costs", MX.UP),
+        MX.kpi("Average", f"{closed['r'].mean():+.2f}R" if len(closed) else "—",
+               f"{closed['pct'].mean():+.2f}% a trade" if len(closed) else "", MX.tone_color(closed["r"].mean() if len(closed) else 0)),
+    ]), unsafe_allow_html=True)
+    if len(closed):
+        g = closed.groupby("source").agg(Signals=("r", "size"), Win=("pct", lambda x: (x > 0).mean() * 100),
+                                         AvgR=("r", "mean"), AvgPct=("pct", "mean")).reset_index()
+        st.dataframe(g.rename(columns={"source": "Setup", "Win": "Win %", "AvgR": "Avg R", "AvgPct": "Avg %"}), hide_index=True,
+                     width="stretch", column_config={"Win %": st.column_config.NumberColumn(format="%.0f"),
+                                                     "Avg R": st.column_config.NumberColumn(format="%+.2f"),
+                                                     "Avg %": st.column_config.NumberColumn(format="%+.2f")})
+    tv = df.sort_values(["day", "time"], ascending=False).head(120)
+    st.dataframe(pd.DataFrame({"Day": tv["day"], "Time": tv["time"], "Setup": tv["source"], "Symbol": tv["symbol"],
+                               "Side": np.where(tv["side"] > 0, "LONG", "SHORT"), "Entry": tv["entry"], "Stop": tv["sl"],
+                               "Target 1": tv["tp1"], "Target 2": tv["tp2"], "Status": tv.get("status"),
+                               "Outcome": tv.get("outcome"), "R": tv.get("r"), "% after costs": tv.get("pct")}),
+                 hide_index=True, width="stretch", height=360,
+                 column_config={"R": st.column_config.NumberColumn(format="%+.2f"),
+                                "% after costs": st.column_config.NumberColumn(format="%+.2f")})
 
 
 def index_funnel_body():
@@ -6856,6 +6907,8 @@ def index_funnel_body():
         st.caption("First test on 52 days of Yahoo data (steps 1-4, 0.02% costs, exit 15:15): all indices together "
                    "+0.11% a signal by day (t 1.5); ATR alone +0.03%, adding index money +0.12%. Promising, not proven: the "
                    "server re-runs it every night on a year of Dhan data and this table switches to that result.")
+    _signal_record("Index funnel")
+    _signal_record("Bank Nifty")
 
 
 def page_funnel():
@@ -6956,6 +7009,12 @@ def page_funnel():
                        "Stock net ₹Cr": st.column_config.NumberColumn(format="%+.1f"),
                        "Net 15m ago": st.column_config.NumberColumn(format="%+.1f"),
                        "Buying %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f%%")})
+    st.caption("Trade plan: entry at the signal price · stop just beyond the last 30 minutes' swing low (long) / high "
+               "(short), 0.3-0.6 of the daily ATR · target 1 = 1R (half off, stop to entry), target 2 = 2R · exit 15:15. "
+               "First backtest of the 5 steps with this plan (46 days, Yahoo, 0.12% costs): about break-even overall "
+               "(+0.04% a trade, 51% wins); the day's first 3-5 signals +0.18% to +0.21%, but not in both halves of the "
+               "period. Not proven yet: the live record below decides.")
+    _signal_record("Momentum funnel")
     note("Step 1: average 5-minute true range from 9:15 to the latest candle vs the same window on the last 20 days, "
          "and the last 3 candles vs the same 15 minutes on those days. Side = up or down from today's open. Step 2: "
          "high-low from 9:15 to now vs the usual high-low of that window. Step 3: the sector's net money (turnover split "

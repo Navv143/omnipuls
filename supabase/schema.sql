@@ -121,3 +121,14 @@ create table if not exists public.index_log (
   unique (day, time, index)
 );
 alter table public.index_log enable row level security;
+
+-- Every live signal with its plan (bots.py): funnel stocks, index funnel, Bank Nifty fade; tracked and scored.
+create table if not exists public.trade_signals (
+  id bigint generated always as identity primary key,
+  day date not null, time text, source text not null, symbol text not null, side smallint,
+  entry double precision, sl double precision, tp1 double precision, tp2 double precision, risk_pct double precision,
+  score double precision, status text, outcome text, r double precision, pct double precision,
+  updated_at timestamptz not null default now(),
+  unique (day, source, symbol)
+);
+alter table public.trade_signals enable row level security;

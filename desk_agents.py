@@ -1,8 +1,8 @@
-"""AI Desk: six agents that read the whole market (indices, stocks, crypto, gold & metals, commodities, forex) and
+"""AI Desk: six agents that read the Indian market first (indices, stocks), then crypto, forex, commodities and the rupee, and
 make one call per instrument: TRADE, WAIT or REJECT. Pure functions, no Streamlit.
 
-ATLAS  market     - global regime: S&P 500 / Nasdaq trend, VIX, US dollar index, US 10-year yield, India VIX; a bias
-                    for each asset class (risk-on helps equities and crypto, risk-off and a weak dollar help gold...).
+ATLAS  market     - the Indian market's regime: Nifty and Bank Nifty trend, India VIX, the rupee; a bias for each class
+                    (crypto follows Bitcoin's trend; the dollar index is context for commodities and currencies).
 VEGA   charts     - trend (EMA 20/50/200 daily + hourly), volume vs its average, ATR vs its average, support and
                     resistance from swing points, RSI; finds the setup: breakout, pullback in trend, bounce at support /
                     rejection at resistance.
@@ -29,22 +29,21 @@ import pandas as pd
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
-UNIVERSE = {
-    "Indices": {"^NSEI": "Nifty 50", "^NSEBANK": "Bank Nifty", "^BSESN": "Sensex", "^GSPC": "S&P 500",
-                "^IXIC": "Nasdaq", "^DJI": "Dow Jones", "^GDAXI": "DAX", "^FTSE": "FTSE 100", "^N225": "Nikkei 225",
-                "^HSI": "Hang Seng"},
-    "Stocks": {"RELIANCE.NS": "Reliance", "HDFCBANK.NS": "HDFC Bank", "ICICIBANK.NS": "ICICI Bank",
-               "INFY.NS": "Infosys", "TCS.NS": "TCS", "SBIN.NS": "SBI", "BHARTIARTL.NS": "Bharti Airtel",
-               "LT.NS": "L&T", "AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "Nvidia", "TSLA": "Tesla",
-               "AMZN": "Amazon", "META": "Meta"},
+UNIVERSE = {  # Indian market first, then crypto, forex, commodities and the rupee (no US / foreign stocks or indices)
+    "Indian indices": {"^NSEI": "Nifty 50", "^NSEBANK": "Bank Nifty", "NIFTY_FIN_SERVICE.NS": "Fin Nifty",
+                       "NIFTY_MID_SELECT.NS": "Midcap Select", "^BSESN": "Sensex", "^CNXIT": "Nifty IT"},
+    "Indian stocks": {"RELIANCE.NS": "Reliance", "HDFCBANK.NS": "HDFC Bank", "ICICIBANK.NS": "ICICI Bank",
+                      "SBIN.NS": "SBI", "AXISBANK.NS": "Axis Bank", "KOTAKBANK.NS": "Kotak Bank", "INFY.NS": "Infosys",
+                      "TCS.NS": "TCS", "BHARTIARTL.NS": "Bharti Airtel", "LT.NS": "L&T", "ITC.NS": "ITC",
+                      "BAJFINANCE.NS": "Bajaj Finance", "MARUTI.NS": "Maruti", "SUNPHARMA.NS": "Sun Pharma",
+                      "TITAN.NS": "Titan", "ADANIENT.NS": "Adani Enterprises"},
     "Crypto": {"BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "SOL-USD": "Solana", "XRP-USD": "XRP",
                "BNB-USD": "BNB", "DOGE-USD": "Dogecoin"},
-    "Gold & metals": {"GC=F": "Gold", "SI=F": "Silver", "HG=F": "Copper", "PL=F": "Platinum"},
-    "Commodities": {"CL=F": "Crude oil WTI", "BZ=F": "Brent crude", "NG=F": "Natural gas", "ZW=F": "Wheat"},
-    "Forex": {"USDINR=X": "USD/INR", "EURUSD=X": "EUR/USD", "GBPUSD=X": "GBP/USD", "USDJPY=X": "USD/JPY",
-              "AUDUSD=X": "AUD/USD", "EURINR=X": "EUR/INR"},
+    "Forex": {"EURUSD=X": "EUR/USD", "GBPUSD=X": "GBP/USD", "USDJPY=X": "USD/JPY", "AUDUSD=X": "AUD/USD"},
+    "Commodities": {"GC=F": "Gold", "SI=F": "Silver", "CL=F": "Crude oil", "NG=F": "Natural gas", "HG=F": "Copper"},
+    "Currency (INR)": {"USDINR=X": "USD/INR", "EURINR=X": "EUR/INR", "GBPINR=X": "GBP/INR", "JPYINR=X": "JPY/INR"},
 }
-MACRO = {"^VIX": "VIX", "^INDIAVIX": "India VIX", "DX-Y.NYB": "US dollar index", "^TNX": "US 10-year yield"}
+MACRO = {"^INDIAVIX": "India VIX", "DX-Y.NYB": "US dollar index"}  # context only: not traded
 CLASS_OF = {s: c for c, d in UNIVERSE.items() for s in d}
 NAME_OF = {**{s: n for d in UNIVERSE.values() for s, n in d.items()}, **MACRO}
 AGENTS = {
@@ -107,7 +106,8 @@ def _pivots(d: pd.DataFrame, w: int = 3, look: int = 90) -> tuple[list, list]:
 
 
 def atlas(daily: dict) -> dict:
-    """Global regime and a bias (+1 / 0 / -1) per asset class."""
+    """The Indian market's regime (Nifty, Bank Nifty, India VIX, the rupee) and a bias (+1 / 0 / -1) per class; the
+    dollar index is used only as context for gold, commodities and currencies."""
     def trend(sym, n=50):
         d = _clean(daily.get(sym))
         if len(d) < n + 5:
@@ -115,39 +115,37 @@ def atlas(daily: dict) -> dict:
         c = d["Close"]
         return (1 if c.iloc[-1] > ema(c, n).iloc[-1] else -1), _ret(c, 5)
 
-    spx, spx5 = trend("^GSPC")
-    ndq, ndq5 = trend("^IXIC")
     nif, nif5 = trend("^NSEI")
+    bnk, bnk5 = trend("^NSEBANK")
+    inr, inr5 = trend("USDINR=X")
     dxy, dxy5 = trend("DX-Y.NYB")
-    vix = _clean(daily.get("^VIX"))
+    btc, btc5 = trend("BTC-USD")
     ivx = _clean(daily.get("^INDIAVIX"))
-    tnx = _clean(daily.get("^TNX"))
-    v_lvl = float(vix["Close"].iloc[-1]) if not vix.empty else np.nan
-    v5 = _ret(vix["Close"], 5) if len(vix) > 6 else np.nan
     iv_lvl = float(ivx["Close"].iloc[-1]) if not ivx.empty else np.nan
-    t5 = float(tnx["Close"].iloc[-1] - tnx["Close"].iloc[-6]) if len(tnx) > 6 else np.nan
-    risk, notes = 0.0, []
-    risk += spx + 0.5 * ndq
-    notes.append(f"S&P 500 {'above' if spx > 0 else 'below'} its 50-day average")
-    if np.isfinite(v_lvl):
-        risk += 1 if v_lvl < 17 else -1 if v_lvl > 24 else 0
-        notes.append(f"VIX {v_lvl:.1f}" + (f" ({v5:+.0f}% in 5 days)" if np.isfinite(v5) else ""))
-        if np.isfinite(v5) and v5 > 20:
+    iv5 = _ret(ivx["Close"], 5) if len(ivx) > 6 else np.nan
+    risk, notes = float(nif + 0.5 * bnk), []
+    notes.append(f"Nifty {'above' if nif > 0 else 'below'} its 50-day average" + (f" ({nif5:+.1f}% 5d)" if np.isfinite(nif5) else ""))
+    notes.append(f"Bank Nifty {'above' if bnk > 0 else 'below'}" + (f" ({bnk5:+.1f}% 5d)" if np.isfinite(bnk5) else ""))
+    if np.isfinite(iv_lvl):
+        risk += 1 if iv_lvl < 13 else -1 if iv_lvl > 18 else 0
+        if np.isfinite(iv5) and iv5 > 15:
             risk -= 1
-    if dxy:
-        notes.append(f"dollar {'strong' if dxy > 0 else 'weak'} (DXY {dxy5:+.1f}% 5d)" if np.isfinite(dxy5) else "")
+        notes.append(f"India VIX {iv_lvl:.1f}" + (f" ({iv5:+.0f}% 5d)" if np.isfinite(iv5) else ""))
+    if inr:
+        risk -= 0.5 * inr  # a weakening rupee usually means foreign money leaving
+        notes.append(f"rupee {'weakening' if inr > 0 else 'strengthening'}" + (f" (USD/INR {inr5:+.1f}% 5d)" if np.isfinite(inr5) else ""))
     regime = "Risk-on" if risk >= 1.5 else "Risk-off" if risk <= -1.5 else "Mixed"
     r = 1 if regime == "Risk-on" else -1 if regime == "Risk-off" else 0
     bias = {
-        "Indices": r, "Stocks": r, "Crypto": r,
-        "Gold & metals": int(np.sign(-r - dxy - (0.5 if np.isfinite(t5) and t5 > 0.15 else 0))),
-        "Commodities": int(np.sign(0.5 * r - 0.5 * dxy)),
-        "Forex": dxy,  # +1 = dollar up: long USD/xxx, short xxx/USD
+        "Indian indices": r, "Indian stocks": r,
+        "Crypto": btc,                                   # crypto follows its own trend (Bitcoin vs its 50-day average)
+        "Forex": dxy,                                    # +1 = dollar up: long USD/xxx, short xxx/USD
+        "Commodities": int(np.sign(-dxy)),               # a weaker dollar lifts gold, silver, crude
+        "Currency (INR)": int(np.sign(inr + 0.5 * dxy)),  # +1 = rupee weakening: long USD/INR
     }
-    india = {"nifty_trend": nif, "nifty_5d": nif5, "india_vix": iv_lvl}
+    india = {"nifty_trend": nif, "nifty_5d": nif5, "india_vix": iv_lvl, "bank_trend": bnk}
     return {"regime": regime, "score": round(risk, 1), "bias": bias, "dxy": dxy, "notes": [n for n in notes if n],
-            "vix": v_lvl, "vix_5d": v5, "us10y_5d_bp": round(t5 * 100) if np.isfinite(t5) else None, "india": india,
-            "spx_5d": spx5, "nasdaq_5d": ndq5}
+            "india": india, "inr_5d": inr5, "btc_trend": btc}
 
 
 def atlas_bias(sym: str, a: dict) -> int:
@@ -155,9 +153,10 @@ def atlas_bias(sym: str, a: dict) -> int:
     b = a["bias"].get(cls, 0)
     if cls == "Forex":
         return b if sym.startswith("USD") else -b
-    if sym.endswith(".NS") or sym in ("^NSEI", "^NSEBANK", "^BSESN"):  # India: blend in Nifty's own trend and India VIX
-        iv = a["india"].get("india_vix")
-        b = int(np.sign(b + a["india"].get("nifty_trend", 0) - (1 if iv and iv > 20 else 0)))
+    if cls == "Currency (INR)":
+        return b if sym.endswith("INR=X") else -b
+    if cls == "Commodities" and sym in ("CL=F", "NG=F"):  # energy: dollar plus the general mood
+        return int(np.sign(b + a["bias"].get("Indian indices", 0) * 0.5))
     return b
 
 # ---------------------------------------------------------------- VEGA: charts
