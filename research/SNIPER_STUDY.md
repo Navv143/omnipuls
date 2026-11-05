@@ -41,3 +41,25 @@ Best leads (not proven, both t < 1.6):
 1. Re-test gold on real spot data (Dukascopy) when downloaded; PAXG has its own noise.
 2. Forward-test the two BTC leads in paper for 4-6 weeks (one signal a day at most) before any money.
 3. Lower costs (maker / limit entries) matter more than the setup for small stops.
+
+## ICT Power of 3 (PO3) on the 10:00 New York 4-hour candle (5 Nov 2026, `sniper_study.po3`)
+
+Rules from the "Full PO3 checklist": bias = previous 4H candle (6-10 ET) and today's candle from midnight ET agree;
+HTF PDA tap = before 10:00 price traded in yesterday's discount (long) / premium (short) half; accumulation = 9:30-10:00
+range; manipulation = a sweep beyond it against the bias between 10:00 and 11:30; confirmation = 5-min close beyond the
+last 3 candles' high / low (CISD / break of structure) by 12:00; stop beyond the manipulation extreme; target 2R / 3R /
+range projection; exit 14:00 (end of the 4H candle). 18 variants (with / without PDA, bias 4H / day / both, 3 targets).
+
+| | Trades | Win % | Avg R after costs | Before costs | Years |
+|---|---|---|---|---|---|
+| BTC, full checklist, 2R | 333 | 42 | -0.06 | **+0.10** | 2023 -0.29, 2024 +0.01, 2025 +0.08, 2026 -0.08 |
+| BTC, full checklist, 3R | 333 | 41 | -0.02 | - | 2023 -0.25, 2024 +0.02, 2025 +0.14, 2026 -0.06 |
+| BTC, all 18 variants | 333-704 | 39-44 | -0.02 to -0.09 | | |
+| Gold, full checklist, 2R | 221 | 40 | -0.17 | -0.07 | negative every year |
+| Gold, all 18 variants | 221-398 | 38-41 | -0.11 to -0.24 | | |
+
+- BTC: the full checklist has a small edge before costs (+0.10R, t 1.5), which taker costs (0.05% round trip on a
+  0.43% stop = 0.12R) wipe out; with maker (limit) fills it would be about +0.05R: not worth trading on its own.
+- Gold: no edge even before costs; the 10:00 ET 4H candle is not where gold's stop hunts reverse.
+- PO3 is taught on Nasdaq futures (NQ); only 60 days of 5-min NQ data are free, too few to test. The 1-minute
+  inverse-FVG entry was not tested (5-min confirmation used); a 1-minute entry shrinks the risk but raises costs in R.
