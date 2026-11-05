@@ -147,3 +147,16 @@ in trade_signals. Rebuilt from funnel_log (first suggestion per stock and side) 
 - Morning (before 13:00): 25 trades, 64% wins, +0.17R; afternoon: 7 trades, 43%, -0.02R.
 - Buys (with the 2.5% up day): +0.30R; sells (against it): -0.37R, 5 of 8 stopped.
 - The recorded afternoon-only view (-0.20R) understated the funnel; one day, still about break-even after costs.
+
+## What separates Momentum Funnel winners from losers (5 Nov 2026, `research/funnel_winners.py`)
+1,890 funnel signals (Yahoo 5-min, 45 days to 4 Nov) with the bots' plan and managed exits; every entry reading split
+into thirds (`research/funnel_winners_trades.csv`). All signals: 59% wins, +0.05R, -0.04% a trade after costs.
+Readings that matter in BOTH halves:
+- Market moving with the trade (average F&O move from the open, in the trade's direction): top third (≥0.55%) +0.20R,
+  68% wins, +0.18% after costs (halves +0.17 / +0.22); weak market support (<0.24%) +0.04R.
+- The stock gapped in the trade's direction (>0.13 ATR): -0.05R, 53% wins (halves -0.14 / +0.01); no gap with it +0.10R.
+- Chasing: the last 15 minutes' ATR already > 1.82x usual: -0.03R; calmer +0.08R (halves both better).
+Weak / no difference: day ATR, range, the stock's net money and its growth, sector money, how far it had run from the
+open, distance from VWAP, time of day (before / after 12:00), yesterday's range. Wider stops slightly better.
+Combined (market with ≥0.55%, no gap with the trade, not chasing): 304 trades (6.8 a day), 72% wins, +0.30R, +0.33% a
+trade after costs, halves +0.19 / +0.38R. Chosen after looking at the whole sample: to be confirmed on the live record.
