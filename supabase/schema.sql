@@ -152,3 +152,15 @@ create table if not exists public.app_perf (
   page text not null, secs double precision, market boolean, sections jsonb
 );
 alter table public.app_perf enable row level security;
+
+-- Auto Trader (paper): every signal's decision (trade / rejected and why), size and paper result
+create table if not exists public.auto_trades (
+  id bigint generated always as identity primary key,
+  day date not null, time text, source text not null, symbol text not null, side smallint,
+  decision text, stage text, reason text, qty double precision, entry double precision, sl double precision,
+  tp1 double precision, tp2 double precision, value double precision, risk double precision,
+  r double precision, pnl double precision, status text, exit text,
+  updated_at timestamptz not null default now(),
+  unique (day, source, symbol)
+);
+alter table public.auto_trades enable row level security;
