@@ -47,3 +47,20 @@ create table if not exists public.bot_results (
   inserted_at timestamptz not null default now()
 );
 alter table public.bot_results enable row level security;
+
+-- Ideas the master bot passed or put on watch (bots.py), with their result at the close.
+create table if not exists public.bot_ideas (
+  id bigint generated always as identity primary key,
+  day date not null,
+  stock text not null,
+  side text not null,
+  status text,
+  first_at text,
+  price double precision,
+  checks jsonb,
+  reasons text,
+  result_pct double precision,
+  updated_at timestamptz not null default now(),
+  unique (day, stock, side)
+);
+alter table public.bot_ideas enable row level security;

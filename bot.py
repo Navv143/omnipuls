@@ -1,21 +1,19 @@
-"""Setup Finder: our research bot. Runs on the server outside market hours (recorder.py starts it) and looks for
-intraday setups that combine money flow with volume, ATR / range, sector and market agreement - and keeps only the
-ones that still work on days they were not tuned on.
+"""Setup Finder: the research engine behind our bots. Runs on the server outside market hours (bots.py starts it).
 
-1. Data: 5-minute candles for the Nifty 100 stocks and the Nifty index from Dhan (a year, cached on the server and
-   topped up each night).
-2. Events: for every stock, day and decision time (10:00, 10:30, 11:00, 12:00) the readings so far today:
-   money-flow buying share and net flow vs the usual day's turnover, volume vs the usual volume by that time, range
-   so far vs the average day's range, move from the open in ATR, gap, open = high / low, and the sector's and the
-   market's buying share at the same moment. Outcome: entry at the next candle's open, exit at 15:20, or a stop of
-   0.5 / 1 ATR.
-3. Search: ~5,000 rule combinations (long and short together), after 0.12% round-trip costs. Each is scored on the
-   first 60% of days; the best are judged ONLY on the last 40% (never seen while choosing) and on their neighbours
-   (one setting changed), so a lucky setting does not pass.
-4. Nifty: MACD crosses on 5-minute Nifty, with and without the Nifty 100 money flow agreeing, same split.
-5. Results: <data>/bot/latest.json (the app's Setup Finder page and Market View) and the Supabase table bot_results.
+It tests intraday rules on ALL F&O stocks and the indices, and keeps only rules that still make money on days they
+were never tuned on.
 
-Usage: python bot.py            (run once now; needs Dhan in dhan_config.json / Secrets)
+1. Data: 5-minute candles for every F&O stock and Nifty, Bank Nifty, Fin Nifty, Midcap Select and Sensex from Dhan
+   (a year, cached on the server, topped up each night).
+2. Readings at EVERY candle from 9:30 (no fixed time): from the open to that candle - money-flow buying share and net
+   flow vs the usual day's turnover, volume vs the usual volume by that time, range so far vs the usual day, move
+   from the open in ATR, gap, open = high / low, and the sector's and the market's buying share at that moment.
+3. Signal = the FIRST candle of the day where a rule's conditions are all true; entry at the next candle's open, exit
+   15:20 or a stop of 0.5 / 1 ATR. "Top N a day" = the first N signals of the day in time order (no look-ahead).
+4. Search: ~3,500 stock rules (long and short together) after 0.12% costs; per index, rules on the index move and its
+   constituents' money flow, and MACD crosses with / without that flow. Tuned on the first 60% of days, judged
+   ONLY on the last 40% and on neighbouring settings (one value changed), so a lucky setting does not pass.
+5. Results: <data>/bot/latest.json (app and bots) and the Supabase table bot_results.
 """
 from __future__ import annotations
 
@@ -33,13 +31,14 @@ import paths
 IST = timezone(timedelta(hours=5, minutes=30))
 BOT_DIR = paths.DATA / "bot"
 CACHE = BOT_DIR / "cache"
-TIMES = ("10:00", "10:30", "11:00", "12:00")
-EXIT = "15:15"            # the 15:15 candle's close (15:20) is the exit
+FIRST, LAST, EXIT = 9 * 60 + 30, 14 * 60 + 30, 15 * 60 + 15   # signals 9:30-14:30, exit = the 15:15 candle's close
 COST = 0.0012             # stocks: 0.12% round trip (same as the research)
-INDEX_COST = 0.0002       # Nifty futures: about 5 points on 24,000 incl. slippage
+INDEX_COST = 0.0002       # index futures: about 5 points on 24,000 including slippage
 TRAIN = 0.6
 HISTORY_DAYS = int(os.environ.get("BOT_HISTORY_DAYS", 365))
-STATUS: dict = {}
+INDEX_IDS = {"NIFTY": 13, "BANKNIFTY": 25, "FINNIFTY": 27, "MIDCPNIFTY": 442, "SENSEX": 51}
+INDEX_NAMES = {"NIFTY": "Nifty 50", "BANKNIFTY": "Bank Nifty", "FINNIFTY": "Fin Nifty", "MIDCPNIFTY": "Midcap Select",
+               "SENSEX": "Sensex"}
 
 
 def log(msg: str):
@@ -48,7 +47,7 @@ def log(msg: str):
 # ---------------------------------------------------------------- data
 
 
-def _clean(df: pd.DataFrame) -> pd.DataFrame:
+def clean(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
     d = df.copy()
@@ -57,269 +56,251 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
         idx = idx.tz_convert("Asia/Kolkata").tz_localize(None)
     d.index = idx
     d = d[~d.index.duplicated(keep="last")].sort_index().between_time("09:15", "15:25")
-    return d[["Open", "High", "Low", "Close", "Volume"]].astype(float)
+    cols = [c for c in ("Open", "High", "Low", "Close", "Volume", "OI") if c in d]
+    out = d[cols].astype(float)
+    if "Volume" not in out:
+        out["Volume"] = 0.0
+    return out
 
 
-def load_history(cfg: dict | None = None, days: int = HISTORY_DAYS) -> tuple[dict, pd.DataFrame]:
-    """{stock: 5-min bars}, nifty bars. Cached per symbol; each run fetches only the last 10 days again."""
+def universe(cfg: dict) -> list[tuple[str, str, int, str]]:
+    """(symbol, segment, security id, chart instrument) for every F&O stock and the indices."""
     import dhan as D
-    import scanners as SC
+    eq = D.equity_ids(cfg)
+    stocks = sorted(s for s in D.fno_underlyings(cfg) if s in eq)
+    return ([(k, "IDX_I", v, "INDEX") for k, v in INDEX_IDS.items()] +
+            [(s, "NSE_EQ", eq[s], "EQUITY") for s in stocks])
+
+
+def load_history(cfg: dict | None = None, days: int = HISTORY_DAYS, symbols=None) -> tuple[dict, dict]:
+    """({stock: 5-min bars}, {index: 5-min bars}). Cached per symbol; later runs fetch only the last 10 days."""
+    import dhan as D
     CACHE.mkdir(parents=True, exist_ok=True)
     cfg = cfg or D.load_config()
-    eq = D.equity_ids(cfg)
-    wanted = [("NIFTY", "IDX_I", 13, "INDEX")] + [(s, "NSE_EQ", eq[s], "EQUITY") for s in SC.NIFTY100 if s in eq]
-    out = {}
+    wanted = symbols or universe(cfg)
+    stocks, indices = {}, {}
     for i, (sym, seg, sid, ins) in enumerate(wanted, 1):
         f = CACHE / f"{sym.replace('&', '_and_')}.parquet"
         old = pd.read_parquet(f) if f.exists() else pd.DataFrame()
         span = 10 if not old.empty and (pd.Timestamp.now() - old.index.max()).days < 9 else days
         try:
-            new = _clean(D.intraday(seg, sid, ins, 5, span, cfg))
+            new = clean(D.intraday(seg, sid, ins, 5, span, cfg))
         except Exception as e:
             log(f"{sym}: {getattr(e, 'friendly', e)}")
             new = pd.DataFrame()
-        df = pd.concat([old, new]) if not old.empty else new
+        df = pd.concat([old, new]) if not old.empty and not new.empty else (new if old.empty else old)
         if df.empty:
             continue
         df = df[~df.index.duplicated(keep="last")].sort_index()
         df = df[df.index >= df.index.max() - pd.Timedelta(days=days + 5)]
         df.to_parquet(f)
-        out[sym] = df
-        if i % 20 == 0:
+        (indices if seg == "IDX_I" else stocks)[sym] = df
+        if i % 25 == 0:
             log(f"history {i}/{len(wanted)}")
-    return {k: v for k, v in out.items() if k != "NIFTY"}, out.get("NIFTY", pd.DataFrame())
+    return stocks, indices
 
-# ---------------------------------------------------------------- features and outcomes
-
-
-_HHMM = np.array([f"{m // 60:02d}:{m % 60:02d}" for m in range(1440)], dtype=object)
+# ---------------------------------------------------------------- readings at every candle
 
 
-def _hhmm(idx) -> np.ndarray:
-    idx = pd.DatetimeIndex(idx)
-    return _HHMM[np.asarray(idx.hour) * 60 + np.asarray(idx.minute)]
-
-
-def _prev(t: str) -> str:
-    h, m = map(int, t.split(":"))
-    m -= 5
-    return f"{h - (m < 0):02d}:{m % 60:02d}"
-
-
-def stock_events(sym: str, df: pd.DataFrame, times=TIMES) -> pd.DataFrame:
-    """One row per (day, decision time): the readings from the open to that time, and what happened after."""
-    d = _clean(df)
-    if len(d) < 75 * 25:
-        return pd.DataFrame()
+def candle_table(sym: str, df: pd.DataFrame, flow: pd.DataFrame | None = None, keep_all_days: bool = True) -> dict:
+    """Numpy columns, one row per candle in the signal window, with the readings so far today and the outcome of
+    entering at the next candle. `flow` (index only): per-candle inflow / outflow of its constituents."""
+    d = clean(df)
+    if len(d) < 75 * 22:
+        return {}
     O, H, L, C, V = (d[c].to_numpy() for c in ("Open", "High", "Low", "Close", "Volume"))
     day = d.index.normalize()
-    slot = _hhmm(d.index)
-    rng = H - L
-    prevc = np.r_[np.nan, C[:-1]]
-    press = np.where(rng > 0, (C - O) / np.where(rng > 0, rng, 1), np.sign(np.nan_to_num(C - prevc)))
-    turn = V * (H + L + C) / 3
-    frame = pd.DataFrame({"day": day, "slot": slot, "O": O, "H": H, "L": L, "C": C, "V": V, "turn": turn,
-                          "inf": turn * (1 + press) / 2, "outf": turn * (1 - press) / 2}, index=d.index)
-    g = frame.groupby("day", sort=True)
-    frame["cumv"] = g["V"].cumsum()
-    frame["cumin"] = g["inf"].cumsum()
-    frame["cumout"] = g["outf"].cumsum()
-    frame["hi"] = g["H"].cummax()
-    frame["lo"] = g["L"].cummin()
-    frame["dopen"] = g["O"].transform("first")
+    mins = np.asarray(d.index.hour) * 60 + np.asarray(d.index.minute)
+    if flow is not None and not flow.empty:
+        f = flow.reindex(d.index).fillna(0.0)
+        inf, outf = f["inflow"].to_numpy(), f["outflow"].to_numpy()
+        turn = inf + outf
+    else:
+        rng = H - L
+        prevc = np.r_[np.nan, C[:-1]]
+        press = np.where(rng > 0, (C - O) / np.where(rng > 0, rng, 1), np.sign(np.nan_to_num(C - prevc)))
+        turn = V * (H + L + C) / 3
+        inf, outf = turn * (1 + press) / 2, turn * (1 - press) / 2
+    fr = pd.DataFrame({"day": day, "m": mins, "O": O, "H": H, "L": L, "C": C, "V": V, "turn": turn, "inf": inf,
+                       "outf": outf}, index=d.index)
+    g = fr.groupby("day", sort=True)
+    cumv, cumin, cumout = g["V"].cumsum(), g["inf"].cumsum(), g["outf"].cumsum()
+    hi, lo, dopen = g["H"].cummax(), g["L"].cummin(), g["O"].transform("first")
     daily = g.agg(o=("O", "first"), h=("H", "max"), l=("L", "min"), c=("C", "last"), turn=("turn", "sum"))
     pc = daily["c"].shift(1)
     tr = pd.concat([daily["h"] - daily["l"], (daily["h"] - pc).abs(), (daily["l"] - pc).abs()], axis=1).max(axis=1)
-    daily["atr"] = tr.rolling(14).mean().shift(1)
-    daily["avg_rng"] = (daily["h"] - daily["l"]).rolling(14).mean().shift(1)
-    daily["avg_turn"] = daily["turn"].rolling(20).mean().shift(1)
-    daily["prev_c"] = pc
-    # usual cumulative volume by time of day: same slot, last 20 days
-    cv = frame.pivot_table(index="day", columns="slot", values="cumv", aggfunc="last")
-    usual_cv = cv.rolling(20, min_periods=10).mean().shift(1)
-    # path after entry: lowest low / highest high from each candle to the exit candle (same day)
-    upto = frame["slot"] <= EXIT
-    lo_x = frame["L"].where(upto)
-    hi_x = frame["H"].where(upto)
-    frame["minlow_after"] = lo_x[::-1].groupby(frame["day"][::-1]).cummin()[::-1]
-    frame["maxhigh_after"] = hi_x[::-1].groupby(frame["day"][::-1]).cummax()[::-1]
-    exit_px = frame[frame["slot"] == EXIT].set_index("day")["C"]
-    rows = []
-    for t in times:
-        dec = frame[frame["slot"] == _prev(t)]                      # last completed candle at time t
-        ent = frame[frame["slot"] == t].set_index("day")             # the next candle: entry at its open
-        if dec.empty or ent.empty:
-            continue
-        dd = dec.set_index("day")
-        common = dd.index.intersection(ent.index).intersection(exit_px.index).intersection(daily.dropna().index)
-        if not len(common):
-            continue
-        dd, en, dl = dd.loc[common], ent.loc[common], daily.loc[common]
-        ucv = usual_cv[_prev(t)].reindex(common) if _prev(t) in usual_cv else pd.Series(np.nan, index=common)
-        r = pd.DataFrame(index=common)
-        r["sym"], r["t"] = sym, t
-        r["move"] = dd["C"] / dd["dopen"] - 1
-        r["move_atr"] = (dd["C"] - dd["dopen"]) / dl["atr"]
-        r["range_x"] = (dd["hi"] - dd["lo"]) / dl["avg_rng"]
-        r["vol_x"] = dd["cumv"] / ucv
-        tot = dd["cumin"] + dd["cumout"]
-        r["flow_share"] = np.where(tot > 0, dd["cumin"] / tot, 0.5)
-        r["flow_x"] = (dd["cumin"] - dd["cumout"]) / dl["avg_turn"]
-        r["gap"] = dl["o"] / dl["prev_c"] - 1
-        tol = dl["o"] * 0.0005
-        r["o_eq_l"] = (dl["o"] - dd["lo"]).abs() <= tol   # opened at the low so far
-        r["o_eq_h"] = (dd["hi"] - dl["o"]).abs() <= tol
-        r["entry"] = en["O"]
-        r["exit"] = exit_px.loc[common]
-        r["atr"] = dl["atr"]
-        r["minlow"] = en["minlow_after"]
-        r["maxhigh"] = en["maxhigh_after"]
-        rows.append(r.reset_index(names="day"))
-    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+    dl = pd.DataFrame({"atr": tr.rolling(14).mean().shift(1), "avg_rng": (daily["h"] - daily["l"]).rolling(14)
+                       .mean().shift(1), "avg_turn": daily["turn"].rolling(20).mean().shift(1),
+                       "gap": daily["o"] / pc - 1, "o": daily["o"]}).reindex(day)
+    cv = fr.assign(cumv=cumv.values).pivot_table(index="day", columns="m", values="cumv", aggfunc="last")
+    ucv = cv.rolling(20, min_periods=10).mean().shift(1).stack().rename("ucv")
+    usual = pd.Series(ucv.reindex(pd.MultiIndex.from_arrays([day, mins])).to_numpy(), index=d.index)
+    # outcome of entering at the NEXT candle: its open, then the lowest low / highest high until the exit candle
+    upto = mins <= EXIT
+    lo_x = pd.Series(np.where(upto, L, np.nan), index=d.index)
+    hi_x = pd.Series(np.where(upto, H, np.nan), index=d.index)
+    rev_day = pd.Series(day, index=d.index)[::-1]
+    minlow = lo_x[::-1].groupby(rev_day).cummin()[::-1]
+    maxhigh = hi_x[::-1].groupby(rev_day).cummax()[::-1]
+    nxt = lambda s: s.groupby(day).shift(-1)  # noqa: E731
+    exit_px = pd.Series(np.where(mins == EXIT, C, np.nan), index=d.index).groupby(day).transform("max")
+    tot = (cumin + cumout).to_numpy()
+    out = {
+        "day": (day.to_numpy().astype("datetime64[D]").astype(np.int64)), "m": mins.astype(np.int16),
+        "move": (C / dopen.to_numpy() - 1), "move_atr": (C - dopen.to_numpy()) / dl["atr"].to_numpy(),
+        "range_x": (hi - lo).to_numpy() / dl["avg_rng"].to_numpy(), "vol_x": cumv.to_numpy() / usual.to_numpy(),
+        "flow_share": np.where(tot > 0, cumin.to_numpy() / np.where(tot > 0, tot, 1), 0.5),
+        "flow_x": (cumin - cumout).to_numpy() / dl["avg_turn"].to_numpy(), "gap": dl["gap"].to_numpy(),
+        "o_eq_l": np.abs(dl["o"].to_numpy() - lo.to_numpy()) <= dl["o"].to_numpy() * 0.0005,
+        "o_eq_h": np.abs(hi.to_numpy() - dl["o"].to_numpy()) <= dl["o"].to_numpy() * 0.0005,
+        "entry": nxt(fr["O"]).to_numpy(), "minlow": nxt(minlow).to_numpy(), "maxhigh": nxt(maxhigh).to_numpy(),
+        "exit": exit_px.to_numpy(), "atr": dl["atr"].to_numpy(), "price": C,
+        "net_cr": (cumin - cumout).to_numpy() / 1e7, "chg": C / pc.reindex(day).to_numpy() - 1,  # change vs yesterday's close
+    }
+    keep = (mins >= FIRST) & (mins <= LAST)
+    if not keep_all_days:  # live: today only
+        keep &= out["day"] == out["day"].max()
+    need = ["move_atr", "range_x", "atr", "entry", "exit"] if keep_all_days else ["move_atr", "range_x", "atr"]
+    for k in need:
+        keep &= np.isfinite(out[k].astype(float))
+    res = {k: (v[keep].astype(np.float32) if v.dtype.kind == "f" else v[keep]) for k, v in out.items()}
+    res["n"] = int(keep.sum())
+    return res
 
 
-def build_events(bars: dict, sectors: dict | None = None) -> pd.DataFrame:
-    ev = [stock_events(s, df) for s, df in bars.items()]
-    ev = pd.concat([e for e in ev if not e.empty], ignore_index=True) if any(not e.empty for e in ev) else pd.DataFrame()
-    if ev.empty:
-        return ev
-    ev = ev.replace([np.inf, -np.inf], np.nan).dropna(subset=["move_atr", "range_x", "vol_x", "atr", "entry", "exit"])
-    ev = ev.reset_index(drop=True)  # row labels must equal row positions (picks are used both ways)
-    ev["sector"] = ev["sym"].map(sectors or {}).fillna("Other")
-    ev["mkt_flow"] = ev.groupby(["day", "t"])["flow_share"].transform("mean")
-    ev["sec_flow"] = ev.groupby(["day", "t", "sector"])["flow_share"].transform("mean")
-    return ev
+def build_table(bars: dict, sectors: dict | None = None, keep_all_days: bool = True) -> dict:
+    """All stocks' candle tables in one, sorted by (day, minute, stock), with the market's and sector's buying share
+    at each candle."""
+    parts, names = [], []
+    for s, df in bars.items():
+        t = candle_table(s, df, keep_all_days=keep_all_days)
+        if t.get("n"):
+            t["sym"] = np.full(t["n"], len(names), dtype=np.int32)
+            names.append(s)
+            parts.append(t)
+    if not parts:
+        return {}
+    keys = [k for k in parts[0] if k != "n"]
+    T = {k: np.concatenate([p[k] for p in parts]) for k in keys}
+    order = np.lexsort((T["sym"], T["m"], T["day"]))
+    T = {k: v[order] for k, v in T.items()}
+    T["vol_x"] = np.nan_to_num(T["vol_x"], nan=1.0, posinf=1.0)
+    T["flow_x"] = np.nan_to_num(T["flow_x"], nan=0.0, posinf=0.0, neginf=0.0)
+    gid = np.unique(T["day"].astype(np.int64) * 2000 + T["m"], return_inverse=True)[1]
+    cnt = np.bincount(gid)
+    T["mkt_flow"] = (np.bincount(gid, T["flow_share"]) / cnt)[gid].astype(np.float32)
+    sec_names = sorted(set((sectors or {}).values()) | {"Other"})
+    sec_of = np.array([sec_names.index((sectors or {}).get(n, "Other")) for n in names], dtype=np.int32)
+    sid = gid * len(sec_names) + sec_of[T["sym"]]
+    u, inv = np.unique(sid, return_inverse=True)
+    T["sec_flow"] = (np.bincount(inv, T["flow_share"]) / np.bincount(inv))[inv].astype(np.float32)
+    T["names"] = np.array(names, dtype=object)
+    T["sector_of"] = np.array([(sectors or {}).get(n, "Other") for n in names], dtype=object)
+    return T
+
+# ---------------------------------------------------------------- rules
 
 
-def returns(ev: pd.DataFrame, side: np.ndarray, k: float) -> np.ndarray:
-    """Net return of each event for side (+1 long, -1 short) with a stop of k ATR, exit at 15:20."""
-    e, x, a = ev["entry"].to_numpy(), ev["exit"].to_numpy(), ev["atr"].to_numpy()
-    stop_hit = np.where(side > 0, e - ev["minlow"].to_numpy() >= k * a, ev["maxhigh"].to_numpy() - e >= k * a)
-    r = np.where(stop_hit, -k * a / e, side * (x - e) / e)
-    return r - COST
-
-# ---------------------------------------------------------------- search
-
-
-GRID = {"t": list(TIMES), "move_atr": [0.3, 0.5, 0.8], "flow": [0.0, 0.55, 0.6, 0.65], "vol_x": [1.0, 1.5, 2.0],
+GRID = {"move_atr": [0.3, 0.5, 0.8], "flow": [0.0, 0.55, 0.6, 0.65], "vol_x": [1.0, 1.5, 2.0],
         "range": ["any", "room", "wide"], "sector": [False, True], "market": [False, True], "stop": [0.5, 1.0],
-        "top": [1, 3]}
-FLOW_STEPS = GRID["flow"]
+        "top": [1, 3], "until": ["11:30", "14:30"]}
 
 
-def _mask(ev: pd.DataFrame, c: dict, side: np.ndarray) -> np.ndarray:
-    m = (ev["t"].to_numpy() == c["t"]) & (np.abs(ev["move_atr"].to_numpy()) >= c["move_atr"])
-    m &= ev["vol_x"].to_numpy() >= c["vol_x"]
-    if c["flow"] > 0:
-        fs = ev["flow_share"].to_numpy()
-        m &= np.where(side > 0, fs >= c["flow"], fs <= 1 - c["flow"])
-    if c["range"] == "room":      # still has room: range so far under 1.2x the usual day
-        m &= ev["range_x"].to_numpy() <= 1.2
-    elif c["range"] == "wide":    # already a wide day: range at least 0.8x the usual
-        m &= ev["range_x"].to_numpy() >= 0.8
-    if c["sector"]:
-        sf = ev["sec_flow"].to_numpy()
-        m &= np.where(side > 0, sf >= 0.52, sf <= 0.48)
-    if c["market"]:
-        mf = ev["mkt_flow"].to_numpy()
-        m &= np.where(side > 0, mf >= 0.51, mf <= 0.49)
+def _hm(s: str) -> int:
+    h, m = map(int, s.split(":"))
+    return h * 60 + m
+
+
+def rule_mask(T: dict, c: dict, side: np.ndarray) -> np.ndarray:
+    m = (T["m"] <= _hm(c.get("until", "14:30"))) & (np.abs(T["move_atr"]) >= c["move_atr"]) & (side != 0)
+    if c.get("vol_x", 1.0) > 1.0:
+        m &= T["vol_x"] >= c["vol_x"]
+    if c.get("flow", 0) > 0:
+        m &= np.where(side > 0, T["flow_share"] >= c["flow"], T["flow_share"] <= 1 - c["flow"])
+    if c.get("range") == "room":      # still has room: range so far under 1.2x the usual day
+        m &= T["range_x"] <= 1.2
+    elif c.get("range") == "wide":    # already a wide day
+        m &= T["range_x"] >= 0.8
+    if c.get("sector"):
+        m &= np.where(side > 0, T["sec_flow"] >= 0.52, T["sec_flow"] <= 0.48)
+    if c.get("market"):
+        m &= np.where(side > 0, T["mkt_flow"] >= 0.51, T["mkt_flow"] <= 0.49)
     return m
 
 
-def _pick_top(ev: pd.DataFrame, m: np.ndarray, top: int) -> np.ndarray:
-    """Within each day, keep the `top` events with the biggest |net flow vs usual turnover|."""
+def first_signals(T: dict, m: np.ndarray, top: int) -> np.ndarray:
+    """Rows where the rule fires for the first time that day for that stock; then the first `top` of each day in time
+    order (rows are sorted by day, minute, stock, so array order is time order)."""
     idx = np.flatnonzero(m)
     if not len(idx):
         return idx
-    sub = ev.iloc[idx]
-    order = sub.assign(_k=-sub["flow_x"].abs()).sort_values(["day", "_k"])
-    keep = order.groupby("day").head(top).index
-    return np.asarray(keep)
+    key = T["sym"][idx].astype(np.int64) * 100000 + (T["day"][idx] - T["day"].min())
+    _, first = np.unique(key, return_index=True)
+    sel = np.sort(idx[first])
+    if top < 99:
+        days = T["day"][sel]
+        start = np.r_[0, np.flatnonzero(np.diff(days)) + 1]
+        rank = np.arange(len(sel)) - np.repeat(start, np.diff(np.r_[start, len(sel)]))
+        sel = sel[rank < top]
+    return sel
 
 
-def _stats(r: np.ndarray, days: np.ndarray) -> dict:
+def trade_returns(T: dict, sel: np.ndarray, side: np.ndarray, k: float, cost: float) -> np.ndarray:
+    e, x, a = T["entry"][sel].astype(float), T["exit"][sel].astype(float), T["atr"][sel].astype(float)
+    s = side[sel]
+    hit = np.where(s > 0, e - T["minlow"][sel] >= k * a, T["maxhigh"][sel] - e >= k * a)
+    return np.where(hit, -k * a / e, s * (x - e) / e) - cost
+
+
+def stats(r: np.ndarray, days: np.ndarray) -> dict:
     n = len(r)
     if n == 0:
         return {"n": 0}
     mean, sd = float(r.mean()), float(r.std(ddof=1)) if n > 1 else 0.0
     wins, losses = r[r > 0].sum(), -r[r <= 0].sum()
-    yrs = max((pd.Timestamp(days.max()) - pd.Timestamp(days.min())).days / 365.25, 0.1)
+    yrs = max((int(days.max()) - int(days.min())) / 365.25, 0.1)
     return {"n": n, "per_trade_pct": round(mean * 100, 3), "win_pct": round(float((r > 0).mean()) * 100, 1),
             "t": round(mean / sd * np.sqrt(n), 2) if sd > 0 else 0.0,
             "profit_factor": round(float(wins / losses), 2) if losses > 0 else None,
             "per_year": round(n / yrs), "total_pct": round(float(r.sum()) * 100, 1)}
 
 
-def evaluate(ev: pd.DataFrame, c: dict, days_split) -> tuple[dict, dict]:
-    side = np.sign(ev["move"].to_numpy())
-    pick = _pick_top(ev, _mask(ev, c, side) & (side != 0), c["top"])
-    if not len(pick):
+def evaluate(T: dict, c: dict, split: int, cost: float = COST) -> tuple[dict, dict]:
+    side = np.sign(T["move"]).astype(np.int8)
+    sel = first_signals(T, rule_mask(T, c, side), c.get("top", 99))
+    if not len(sel):
         return {"n": 0}, {"n": 0}
-    r = returns(ev.iloc[pick], side[pick], c["stop"])
-    dsel = ev["day"].to_numpy()[pick]
-    tr = dsel < days_split
-    return _stats(r[tr], dsel[tr]), _stats(r[~tr], dsel[~tr])
+    r = trade_returns(T, sel, side, c["stop"], cost)
+    d = T["day"][sel]
+    tr = d < split
+    return stats(r[tr], d[tr]), stats(r[~tr], d[~tr])
 
 
-def describe(c: dict) -> str:
-    parts = [f"at {c['t']}, stocks {c['move_atr']}+ ATR from the open"]
-    if c["flow"] > 0:
-        parts.append(f"with {c['flow'] * 100:.0f}%+ of turnover buying (short: selling)")
-    if c["vol_x"] > 1.0:
-        parts.append(f"volume {c['vol_x']}x+ the usual by this time")
-    parts.append({"any": "", "room": "range still under 1.2x the usual day", "wide": "range already 0.8x+ the usual day"}
-                 [c["range"]])
-    if c["sector"]:
-        parts.append("sector money flowing the same way")
-    if c["market"]:
-        parts.append("market money flowing the same way")
-    parts.append(f"top {c['top']} a day by money flow; trade with the move, stop {c['stop']} ATR, exit 15:20")
+def describe(c: dict, what: str = "stocks") -> str:
+    parts = [f"{what} {c['move_atr']}+ ATR from the open, any time 9:30-{c.get('until', '14:30')}"]
+    if c.get("flow", 0) > 0:
+        parts.append(f"{c['flow'] * 100:.0f}%+ of turnover buying (short: selling)")
+    if c.get("vol_x", 1.0) > 1.0:
+        parts.append(f"volume {c['vol_x']}x+ the usual by that time")
+    parts.append({"any": "", "room": "range still under 1.2x the usual day", "wide": "range already 0.8x+ the usual day",
+                  None: ""}[c.get("range")])
+    if c.get("sector"):
+        parts.append("sector money the same way")
+    if c.get("market"):
+        parts.append("market money the same way")
+    if c.get("top", 99) < 99:
+        parts.append(f"first {c['top']} signal{'s' if c['top'] > 1 else ''} of the day")
+    parts.append(f"trade with the move from the next candle, stop {c['stop']} ATR, exit 15:20")
     return "; ".join(p for p in parts if p)
 
 
-def search(ev: pd.DataFrame, min_train_trades: int = 60, keep: int = 12) -> dict:
-    days = np.sort(ev["day"].unique())
-    split = days[int(len(days) * TRAIN)]
-    keys = list(GRID)
-    combos = [dict(zip(keys, v)) for v in itertools.product(*GRID.values())]
-    log(f"searching {len(combos)} rules on {len(ev):,} events, {len(days)} days (train to {pd.Timestamp(split):%d %b %Y})")
-    scored = []
-    t0 = time.time()
-    for c in combos:
-        tr, _ = evaluate(ev, c, split)
-        if tr.get("n", 0) >= min_train_trades:
-            scored.append((tr["t"], c, tr))
-    scored.sort(key=lambda x: -x[0])
-    seen, results = set(), []
-    for _, c, tr in scored:
-        sig = (c["t"], c["move_atr"], c["flow"] > 0, c["vol_x"])   # don't report near-copies of the same rule
-        if sig in seen:
-            continue
-        seen.add(sig)
-        _, te = evaluate(ev, c, split)
-        nb = neighbours(ev, c, split)
-        results.append({"rule": c, "text": describe(c), "train": tr, "test": te, "neighbours_positive_pct": nb})
-        if len(results) >= keep:
-            break
-    base = {"rule": "every stock 0.5+ ATR from the open at 10:30, with the move, stop 1 ATR, exit 15:20"}
-    b_tr, b_te = evaluate(ev, {"t": "10:30", "move_atr": 0.5, "flow": 0.0, "vol_x": 1.0, "range": "any",
-                               "sector": False, "market": False, "stop": 1.0, "top": 99}, split)
-    base.update(train=b_tr, test=b_te)
-    log(f"search done in {time.time() - t0:.0f}s, {len(scored)} rules had enough trades")
-    return {"split": str(pd.Timestamp(split).date()), "days": len(days), "events": int(len(ev)),
-            "rules_tried": len(combos), "top": results, "baseline": base}
-
-
-def neighbours(ev: pd.DataFrame, c: dict, split) -> float:
-    """Share of rules one setting away that are also profitable on the training days (robustness)."""
+def neighbours(T: dict, c: dict, split: int, grid: dict, cost: float) -> float:
     pos = tot = 0
-    for k, vals in GRID.items():
-        if k in ("t",):
-            continue
+    for k, vals in grid.items():
         for v in vals:
-            if v == c[k]:
+            if v == c.get(k):
                 continue
-            tr, _ = evaluate(ev, {**c, k: v}, split)
+            tr, _ = evaluate(T, {**c, k: v}, split, cost)
             if tr.get("n", 0) >= 30:
                 tot += 1
                 pos += tr["per_trade_pct"] > 0
@@ -327,127 +308,178 @@ def neighbours(ev: pd.DataFrame, c: dict, split) -> float:
 
 
 def verdict(r: dict) -> str:
-    te, tr = r["test"], r["train"]
+    te = r["test"]
     if te.get("n", 0) >= 40 and te["per_trade_pct"] >= 0.05 and te["t"] >= 2 and r["neighbours_positive_pct"] >= 60:
         return "pass"
     if te.get("n", 0) >= 20 and te.get("per_trade_pct", -1) > 0:
         return "watch"
     return "fail"
 
-# ---------------------------------------------------------------- Nifty: MACD crosses with and without money flow
+
+def search(T: dict, grid: dict = GRID, cost: float = COST, what: str = "stocks", min_train: int = 60,
+           keep: int = 12) -> dict:
+    days = np.unique(T["day"])
+    split = int(days[int(len(days) * TRAIN)])
+    combos = [dict(zip(grid, v)) for v in itertools.product(*grid.values())]
+    log(f"{what}: {len(combos)} rules on {len(T['day']):,} candles, {len(days)} days")
+    t0, scored = time.time(), []
+    for c in combos:
+        tr, _ = evaluate(T, c, split, cost)
+        if tr.get("n", 0) >= min_train:
+            scored.append((tr["t"], c, tr))
+    scored.sort(key=lambda x: -x[0])
+    seen, results = set(), []
+    for _, c, tr in scored:
+        sig = (c["move_atr"], c.get("flow", 0) > 0, c.get("vol_x", 1.0), c.get("until"))
+        if sig in seen:
+            continue
+        seen.add(sig)
+        _, te = evaluate(T, c, split, cost)
+        r = {"rule": c, "text": describe(c, what), "train": tr, "test": te,
+             "neighbours_positive_pct": neighbours(T, c, split, grid, cost)}
+        r["verdict"] = verdict(r)
+        results.append(r)
+        if len(results) >= keep:
+            break
+    log(f"{what}: done in {time.time() - t0:.0f}s")
+    return {"split": str(np.datetime64(split, "D")), "days": int(len(days)), "candles": int(len(T["day"])),
+            "rules_tried": len(combos), "top": results,
+            "best": next((r for r in results if r["verdict"] == "pass"), None)}
+
+# ---------------------------------------------------------------- indices
 
 
-def nifty_macd(nifty: pd.DataFrame, bars: dict) -> dict:
-    n = _clean(nifty)
-    if n.empty:
-        return {}
-    flows = []
-    for s, df in bars.items():
-        d = _clean(df)
+def constituent_flow(bars: dict, weights: dict) -> pd.DataFrame:
+    """Per 5-minute candle: weighted inflow / outflow of an index's stocks (weights in %)."""
+    parts = []
+    for s, w in (weights or {}).items():
+        d = clean(bars.get(s))
         if d.empty:
             continue
         rng = (d["High"] - d["Low"]).to_numpy()
         press = np.where(rng > 0, (d["Close"] - d["Open"]).to_numpy() / np.where(rng > 0, rng, 1), 0.0)
-        flows.append(pd.Series(d["Volume"].to_numpy() * d["Close"].to_numpy() * press, index=d.index))
-    if not flows:
+        turn = d["Volume"].to_numpy() * d["Close"].to_numpy() * w / 100
+        parts.append(pd.DataFrame({"inflow": turn * (1 + press) / 2, "outflow": turn * (1 - press) / 2}, index=d.index))
+    return pd.concat(parts).groupby(level=0).sum().sort_index() if parts else pd.DataFrame()
+
+
+INDEX_GRID = {"move_atr": [0.3, 0.5, 0.8], "flow": [0.0, 0.55, 0.6], "range": ["any", "room"], "stop": [0.5, 1.0],
+              "until": ["11:30", "14:30"]}
+
+
+def index_research(indices: dict, stocks: dict, weights: dict) -> dict:
+    out = {}
+    for k, df in indices.items():
+        w = (weights or {}).get(k) or {s: 1.0 for s in stocks}      # no weights: the whole F&O market
+        t = candle_table(k, df, constituent_flow(stocks, w))
+        if not t.get("n"):
+            continue
+        T = {kk: v for kk, v in t.items() if kk != "n"}
+        T["sym"] = np.zeros(t["n"], dtype=np.int32)
+        T["vol_x"] = np.full(t["n"], 1.0, dtype=np.float32)
+        T["sec_flow"] = T["mkt_flow"] = T["flow_share"]
+        res = search(T, INDEX_GRID, INDEX_COST, INDEX_NAMES.get(k, k), min_train=30, keep=5)
+        res["macd"] = macd_test(df, constituent_flow(stocks, w))
+        out[k] = res
+    return out
+
+
+def macd_test(index_bars: pd.DataFrame, flow: pd.DataFrame) -> dict:
+    n = clean(index_bars)
+    if n.empty or flow is None or flow.empty:
         return {}
-    flow = pd.concat(flows, axis=1).sum(axis=1).reindex(n.index).fillna(0)
-    e1, e2 = n["Close"].ewm(span=12, adjust=False).mean(), n["Close"].ewm(span=26, adjust=False).mean()
-    m = e1 - e2
-    sig = m.ewm(span=9, adjust=False).mean()
-    side = np.sign(m - sig)
-    f30 = flow.rolling(6).sum()
+    net = (flow["inflow"] - flow["outflow"]).reindex(n.index).fillna(0)
+    m = n["Close"].ewm(span=12, adjust=False).mean() - n["Close"].ewm(span=26, adjust=False).mean()
+    side = np.sign(m - m.ewm(span=9, adjust=False).mean())
+    f30 = net.rolling(6).sum()
     day = n.index.normalize()
-    slot = _hhmm(n.index)
+    mins = np.asarray(n.index.hour) * 60 + np.asarray(n.index.minute)
     rows = []
-    idx = np.flatnonzero((side != side.shift()) & (side != 0))
-    for i in idx:
-        if i + 1 >= len(n) or not ("09:30" <= slot[i] <= "14:30") or day[i + 1] != day[i]:
+    for i in np.flatnonzero((side != side.shift()) & (side != 0)):
+        if i + 1 >= len(n) or not (FIRST <= mins[i] <= LAST) or day[i + 1] != day[i]:
             continue
         s_ = int(side.iloc[i])
-        j = i + 1
-        e = float(n["Open"].iloc[j])
-        k = j
-        while k + 1 < len(n) and day[k + 1] == day[i] and slot[k] < EXIT and side.iloc[k] == s_:
+        e, k = float(n["Open"].iloc[i + 1]), i + 1
+        while k + 1 < len(n) and day[k + 1] == day[i] and mins[k] < EXIT and side.iloc[k] == s_:
             k += 1
-        x = float(n["Close"].iloc[k])
-        rows.append({"day": day[i], "side": s_, "ret": s_ * (x - e) / e - INDEX_COST,
-                     "backed": bool(np.sign(f30.iloc[i]) == s_)})
+        rows.append({"day": int(np.datetime64(day[i].date(), "D").astype(np.int64)),
+                     "ret": s_ * (float(n["Close"].iloc[k]) - e) / e - INDEX_COST, "backed": bool(np.sign(f30.iloc[i]) == s_)})
     if not rows:
         return {}
     t = pd.DataFrame(rows)
-    days = np.sort(t["day"].unique())
-    split = days[int(len(days) * TRAIN)]
-    out = {}
+    split = np.sort(t["day"].unique())[int(t["day"].nunique() * TRAIN)]
+    res = {}
     for name, sub in (("all_crosses", t), ("flow_backed", t[t["backed"]]), ("flow_against", t[~t["backed"]])):
-        tr, te = sub[sub["day"] < split], sub[sub["day"] >= split]
-        out[name] = {"train": _stats(tr["ret"].to_numpy(), tr["day"].to_numpy()),
-                     "test": _stats(te["ret"].to_numpy(), te["day"].to_numpy())}
+        a, b = sub[sub["day"] < split], sub[sub["day"] >= split]
+        res[name] = {"train": stats(a["ret"].to_numpy(), a["day"].to_numpy()),
+                     "test": stats(b["ret"].to_numpy(), b["day"].to_numpy())}
+    return res
+
+# ---------------------------------------------------------------- live: today's first signals of a passed rule
+
+
+def live_signals(rule: dict, T_today: dict) -> list[dict]:
+    """First signals today of a passed stock rule, from a today-only table (build_table(..., keep_all_days=False))."""
+    if not T_today:
+        return []
+    side = np.sign(T_today["move"]).astype(np.int8)
+    sel = first_signals(T_today, rule_mask(T_today, rule, side), rule.get("top", 99))
+    out = []
+    for i in sel:
+        s = int(side[i])
+        px, a = float(T_today["price"][i]), float(T_today["atr"][i])
+        m = int(T_today["m"][i])
+        out.append({"stock": str(T_today["names"][T_today["sym"][i]]), "side": "BUY" if s > 0 else "SELL",
+                    "time": f"{m // 60:02d}:{m % 60:02d}", "price": round(px, 2), "stop": round(px - s * rule["stop"] * a, 2),
+                    "flow_share": round(float(T_today["flow_share"][i]) * 100, 1),
+                    "vol_x": round(float(T_today["vol_x"][i]), 2), "move_atr": round(float(T_today["move_atr"][i]), 2)})
     return out
-
-# ---------------------------------------------------------------- live matches for the app
-
-
-def live_matches(rule: dict, bars: dict, sectors: dict | None = None, now_hhmm: str | None = None) -> pd.DataFrame:
-    """Stocks matching a found rule today (at its decision time, once it has passed)."""
-    now_hhmm = now_hhmm or datetime.now(IST).strftime("%H:%M")
-    if now_hhmm < rule["t"]:
-        return pd.DataFrame()
-    ev = []
-    for s, df in bars.items():
-        e = stock_events(s, df, times=(rule["t"],))
-        if not e.empty:
-            ev.append(e[e["day"] == e["day"].max()])
-    if not ev:
-        return pd.DataFrame()
-    ev = pd.concat(ev, ignore_index=True)
-    ev = ev[ev["day"] == ev["day"].max()].replace([np.inf, -np.inf], np.nan).reset_index(drop=True)
-    ev["sector"] = ev["sym"].map(sectors or {}).fillna("Other")
-    ev["mkt_flow"] = ev["flow_share"].mean()
-    ev["sec_flow"] = ev.groupby("sector")["flow_share"].transform("mean")
-    side = np.sign(ev["move"].to_numpy())
-    pick = _pick_top(ev, _mask(ev, rule, side) & (side != 0), rule["top"])
-    out = ev.iloc[pick].copy() if len(pick) else pd.DataFrame()
-    if out.empty:
-        return out
-    s = np.sign(out["move"])
-    out["Side"] = np.where(s > 0, "BUY", "SELL")
-    out["Stop"] = out["entry"] - s * rule["stop"] * out["atr"]
-    return out.rename(columns={"sym": "Stock", "entry": "Entry"})[["Stock", "Side", "Entry", "Stop", "flow_share",
-                                                                    "vol_x", "move_atr"]]
 
 # ---------------------------------------------------------------- run
 
 
-def run(cfg: dict | None = None, bars: dict | None = None, nifty: pd.DataFrame | None = None) -> dict:
+def run(cfg: dict | None = None, stocks: dict | None = None, indices: dict | None = None,
+        weights: dict | None = None) -> dict:
     import universe as U
     t0 = time.time()
     BOT_DIR.mkdir(parents=True, exist_ok=True)
-    if bars is None:
-        bars, nifty = load_history(cfg)
-    log(f"{len(bars)} stocks loaded")
-    ev = build_events(bars, U.FNO_SECTOR_OF)
-    if ev.empty:
-        raise RuntimeError("no events: not enough history yet")
-    res = search(ev)
-    for r in res["top"]:
-        r["verdict"] = verdict(r)
-    res["nifty_macd"] = nifty_macd(nifty if nifty is not None else pd.DataFrame(), bars)
+    if stocks is None:
+        stocks, indices = load_history(cfg)
+    if weights is None:
+        try:
+            import indices as IX
+            weights = {k: d.get("w", {}) for k, d in IX.load().items()}
+        except Exception:
+            weights = {}
+    log(f"{len(stocks)} F&O stocks, {len(indices or {})} indices loaded")
+    T = build_table(stocks, U.FNO_SECTOR_OF)
+    if not T:
+        raise RuntimeError("not enough history yet")
+    res = {"stocks": search(T)}
+    res["indices"] = index_research(indices or {}, stocks, weights)
     res["run_at"] = datetime.now(IST).isoformat(timespec="seconds")
     res["seconds"] = round(time.time() - t0)
-    res["best"] = next((r for r in res["top"] if r["verdict"] == "pass"), None)
+    res["best"] = res["stocks"]["best"]
     tmp = BOT_DIR / "latest.json.tmp"
     tmp.write_text(json.dumps(res, indent=2, default=str))
     os.replace(tmp, BOT_DIR / "latest.json")
     try:
         import cloudstore
-        cloudstore.configure(None, None) if not cloudstore.enabled() else None
+        if not cloudstore.enabled():
+            try:
+                import streamlit as st
+                sb = dict(st.secrets.get("supabase") or {})
+                cloudstore.configure(sb.get("url"), sb.get("key"))
+            except Exception:
+                cloudstore.configure(None, None)
         cloudstore.upsert_rows("bot_results", [{"run_at": res["run_at"], "result": json.loads(json.dumps(res, default=str))}],
                                "run_at")
+        time.sleep(3)  # the upload runs in the background: give it a moment before the process ends
     except Exception as e:
         log(f"Supabase: {e}")
-    log(f"done in {res['seconds']}s: {sum(r['verdict'] == 'pass' for r in res['top'])} passed, "
-        f"{sum(r['verdict'] == 'watch' for r in res['top'])} to watch")
+    n_pass = sum(r["verdict"] == "pass" for r in res["stocks"]["top"])
+    n_ix = sum(1 for v in res["indices"].values() if v.get("best"))
+    log(f"done in {res['seconds']}s: {n_pass} stock rule(s) passed, {n_ix} index rule(s) passed")
     return res
 
 
