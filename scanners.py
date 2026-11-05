@@ -319,6 +319,77 @@ def version3(S: dict, nifty: Stock | None, top=2, vol_mult=1.5, until=dtime(12, 
     return pd.DataFrame(rows), ranked.head(10)
 
 
+def v3_diagnose(S: dict, nifty: Stock | None, top_n=10, top=2, vol_mult=1.5, until=dtime(12, 0), stop_atr=0.5,
+                trail_atr=1.0, early_by="09:45") -> tuple[pd.DataFrame, dict | None]:
+    """For each of the top_n stocks of V3's 9:30 ranking: its first opening-range breakout until `until`, the volume
+    and Nifty checks on that candle, and why it was or was not traded by V3 (top 2 + filters). Also the 'V3 early pick'
+    (research/v3_study.py: the day's first top-10 breakout by 9:45, no block deal, not gapped 0-1% the trade's way:
+    54 days 57% wins, +0.59% a trade after costs; to be confirmed live) with its trade (stop 0.5 ATR, trail 1 ATR,
+    exit 15:20). Returns (table, early_pick_row or None)."""
+    _, ranked = version3(S, nifty, top=top_n, vol_mult=vol_mult, until=until, filters=False)
+    if ranked is None or ranked.empty:
+        return pd.DataFrame(), None
+    n_hi = n_lo = None
+    if nifty is not None:
+        no = nifty.bars_until(dtime(9, 30))
+        if len(no):
+            n_hi, n_lo = no["High"].max(), no["Low"].min()
+    rows, cands = [], []
+    for i, rr in enumerate(ranked.head(top_n).itertuples(index=False), start=1):
+        s = S.get(rr.Stock)
+        if s is None:
+            continue
+        orb = s.bars_until(dtime(9, 30))
+        hi, lo = orb["High"].max(), orb["Low"].min()
+        cand = s.today[(s.today.index.time >= dtime(9, 30)) & (s.today.index.time < until)]
+        brk = None
+        for ts, b in cand.iterrows():
+            side = 1 if b["Close"] > hi else (-1 if b["Close"] < lo else 0)
+            if side:
+                avg = s.slot_avg(ts.strftime("%H:%M"), 10)
+                vx = b["Volume"] / avg if avg and avg > 0 else np.nan
+                nok = True
+                if nifty is not None and n_hi is not None:
+                    nb = nifty.today[(nifty.today.index.time >= dtime(9, 30)) & (nifty.today.index <= ts)]
+                    nok = not ((side > 0 and (nb["Close"] < n_lo).any()) or (side < 0 and (nb["Close"] > n_hi).any()))
+                brk = (ts, side, vx, nok)
+                break
+        block = rr[6] == "Yes"           # ranked columns: Stock, Score, ATR %, range %, RVOL, Gap %, Block deal?
+        gap = float(rr[5])
+        if brk is None:
+            why = "no breakout of the 9:15-9:30 range by 12:00"
+        else:
+            ts, side, vx, nok = brk
+            vol_ok = bool(np.isfinite(vx) and vx >= vol_mult)
+            if i > top:
+                why = f"broke out at {ts:%H:%M} but not in V3's top {top}"
+            elif not vol_ok:
+                why = f"broke out at {ts:%H:%M}: volume only {vx:.1f}x (needs {vol_mult}x)"
+            elif not nok:
+                why = f"broke out at {ts:%H:%M}: Nifty had broken the other way"
+            else:
+                why = f"TRADED by V3 at {ts:%H:%M}"
+            gap_with = side * gap
+            if ts.strftime("%H:%M") <= early_by and not block and not (0 <= gap_with <= 1):
+                cands.append((ts, i, s, side))
+        rows.append({"Rank": i, "Stock": rr.Stock, "Score": rr.Score, "Breakout": (brk[0].strftime("%H:%M") if brk else "—"),
+                     "Side": ("BUY" if brk and brk[1] > 0 else "SELL" if brk else ""),
+                     "Volume x": round(brk[2], 2) if brk and np.isfinite(brk[2]) else None,
+                     "Nifty OK": ("Yes" if brk and brk[3] else "No" if brk else ""), "Gap %": round(gap, 2),
+                     "Block deal?": "Yes" if block else "", "Why": why})
+    table = pd.DataFrame(rows)
+    early = None
+    if cands:
+        ts, i, s, side = sorted(cands, key=lambda c: (c[0], c[1]))[0]
+        et, entry = _next_bar(s, ts)
+        entry = entry if entry is not None else s.ltp
+        r = _row(s, side, ts, et, entry, entry - side * stop_atr * s.atr, {"Rank": i, "Gap %": s.gap * 100},
+                 trail=trail_atr * s.atr)
+        early = r
+        table.loc[table["Stock"] == s.sym, "Why"] = table.loc[table["Stock"] == s.sym, "Why"] + " · ★ V3 EARLY PICK"
+    return table, early
+
+
 # ---------------------------------------------------------------- 3. momentum radar (today's window vs the same window, last X days)
 
 RADAR_CACHE: dict = {}

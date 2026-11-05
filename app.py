@@ -3959,7 +3959,20 @@ def scanner_body(svc, uni):
             st.caption("No breakout signal yet." if live_today else "No signal that session.")
         else:
             data_table(v, "scan_v3", signed=signed, name_col="Stock", height=200)
-        with st.expander("Top-ranked stocks at 9:30"):
+        try:
+            diag, early = SC.v3_diagnose(S, N)
+        except Exception:
+            diag, early = pd.DataFrame(), None
+        st.markdown("**★ V3 early pick** (testing next to V3: the day's first top-10 breakout by 9:45, no block deal, "
+                    "not gapped 0-1% the trade's way · 54 days: 57% wins, +0.59% a trade after costs, to be confirmed live)")
+        if early:
+            data_table(pd.DataFrame([early]), "scan_v3_early", signed=signed, name_col="Stock", height=110)
+        else:
+            st.caption("No early pick yet (none by 9:45 that passes)." if live_today else "No early pick that session.")
+        if not diag.empty:
+            st.markdown("**Top 10 at 9:30: why each was or was not traded**")
+            data_table(diag, "scan_v3_why", signed=("Gap %",), name_col="Stock", height=380)
+        with st.expander("Top-ranked stocks at 9:30 (ranking details)"):
             if not ranked.empty:
                 data_table(ranked, "scan_v3_rank", signed=("Gap %",), name_col="Stock", height=380)
                 note("Block deal? = opening volume 20x+ its 20-day usual: almost always one large negotiated "
@@ -7679,7 +7692,15 @@ def _btc_paper_section():
                         "entry_at_ist": str(t_.get("entry_at", ""))[5:16], "entry": t_.get("entry"), "sl": t_["sl"], "tp": t_["tp"],
                         "result": t_["status"], "exit_at": str(t_.get("exit_at") or "")[5:16], "r": t_["r"],
                         "pct": round(t_["pts"] / t_["entry"] * 100, 3) if t_.get("entry") else None})
-    tested = {"Bank Nifty EBP 1h (overnight)": ("+0.40R", "27%"), "BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%"),
+    try:
+        for x_ in json.loads((PATHS.DATA / "bots" / "v3_record.json").read_text()):
+            rec.append({**x_, "setup": " ".join(x_["setup"].split(" ")[:-1]), "result": (
+                "time" if str(x_.get("result", "")).startswith("Closed") else "stop" if str(x_.get("result", "")).startswith(("Stopped", "Trailed"))
+                else "open")})
+    except Exception:
+        pass
+    tested = {"V3 early pick": ("+0.59% a trade", "57%"), "V3 (top 2, filters)": ("-0.05% (54 days)", "48%"),
+              "Bank Nifty EBP 1h (overnight)": ("+0.40R", "27%"), "BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%"),
               "BTC burst momentum": ("+0.15R (+0.21%)", ""), "ETH burst momentum": ("+0.13R (+0.36%)", ""),
               "SOL burst momentum": ("+0.24R (+0.61%)", "")}
     cards = []

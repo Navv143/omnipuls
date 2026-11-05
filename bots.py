@@ -1097,6 +1097,60 @@ def bn_ebp_step(mkt: "Market", now: datetime) -> dict:
     return st
 
 
+# ---------------------------------------------------------------- Breakout V3 and the V3 early pick (paper record)
+
+V3_FILE = OUT / "v3_record.json"
+
+
+def v3_step(mkt: "Market", now: datetime):
+    """V3 (top 2 with the volume and Nifty filters, as on the Scanners page) and the V3 early pick, recorded with their
+    result (stop 0.5 ATR, trail 1 ATR, exit 15:20): <data>/bots/v3_record.json and Supabase crypto_paper."""
+    import scanners as SC
+    if now.strftime("%H:%M") < "09:31":
+        return
+    nb = mkt.bars("NIFTY")
+    session = SC.session_of(nb)
+    if session is None or session.strftime("%Y-%m-%d") != now.strftime("%Y-%m-%d"):
+        return
+    S = SC.prepare(mkt.stock_bars(), session)
+    if len(S) < 50:
+        return
+    N = SC.Stock("NIFTY 50", nb, session)
+    v3, _ = SC.version3(S, N if N.ok else None)
+    _, early = SC.v3_diagnose(S, N if N.ok else None)
+    picks = [("V3 (top 2, filters)", r) for r in (v3.to_dict("records") if v3 is not None and not v3.empty else [])]
+    if early:
+        picks.append(("V3 early pick", early))
+    day = now.strftime("%Y-%m-%d")
+    try:
+        rec = json.loads(V3_FILE.read_text())
+    except Exception:
+        rec = []
+    have = {(x["day"], x["setup"]): x for x in rec}
+    rows = []
+    for setup, r in picks:
+        side = 1 if str(r["Side"]).startswith("BUY") else -1
+        entry, stop = float(r["Entry"]), float(r["Stop"])
+        stop_pct = abs(entry - stop) / entry * 100 if entry else None
+        pct = float(r["P&L %"]) - (0.12 if str(r["Status"]).startswith(("Closed", "Stopped", "Trailed")) else 0)
+        row = {"day": day, "setup": f"{setup} {r['Stock']}", "symbol": r["Stock"], "side": side, "signal_at": r["Signal"],
+               "entry_at": r["Signal"], "entry_at_ist": r["Signal"], "entry": round(entry, 2), "sl": round(stop, 2), "tp": None,
+               "stop_pct": round(stop_pct, 3) if stop_pct else None, "result": r["Status"],
+               "exit_at": r.get("Exit time") or None, "exit_px": round(float(r["Exit/LTP"]), 2),
+               "r": round(pct / stop_pct, 2) if stop_pct else None, "pct": round(pct, 3)}
+        if have.get((day, row["setup"])) != row:
+            if (day, row["setup"]) not in have:
+                log(f"{setup}: {r['Stock']} {r['Side']} {entry} stop {stop}")
+            have[(day, row["setup"])] = row
+            rows.append(row)
+    if rows:
+        V3_FILE.write_text(json.dumps(list(have.values()), default=str))
+        try:
+            _cloud().upsert_rows("crypto_paper", _clean(rows), "day,setup")
+        except Exception as e:
+            log(f"v3 record: {e}")
+
+
 def plan_for(mkt: "Market", stock: str, side: int) -> dict | None:
     """Entry / stop / targets for a stock idea, the same plan as the Momentum Funnel (funnel.trade_plan)."""
     import funnel as FN
@@ -1161,6 +1215,10 @@ def cycle(mkt: Market) -> dict:
         bn_ebp_step(mkt, now)
     except Exception as e:
         log(f"bn ebp: {e}")
+    try:
+        v3_step(mkt, now)
+    except Exception as e:
+        log(f"v3: {e}")
     closing = None
     if now.strftime("%H:%M") >= CLOSE_FROM:
         try:

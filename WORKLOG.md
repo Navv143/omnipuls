@@ -601,3 +601,12 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - Stored in funnel_log (quality, q_mkt, q_gap, q_calm, gap_atr, mkt_prev) and in each recorded funnel trade's note
   ("Q2/3: market ✓ · no gap ✓ · calm ✗"); watch cards show the three flags and the quality. Picks are not filtered:
   the live record will show whether quality 3/3 beats the rest.
+
+## 5 Nov 2026: V3 early pick and "why picked / why not"
+- scanners.v3_diagnose: for the top 10 of V3's 9:30 ranking, the first opening-range breakout until 12:00, its volume
+  and Nifty checks and the reason it was or was not traded ("TRADED by V3", "not in V3's top 2", "volume only 1.1x",
+  "Nifty had broken the other way", "no breakout by 12:00"); plus the V3 early pick (the day's first top-10 breakout
+  by 9:45, no block deal, not gapped 0-1% the trade's way) with its trade (stop 0.5 ATR, trail 1 ATR, exit 15:20).
+- Scanners → Breakout (V3): V3 unchanged; new "★ V3 early pick" table and the top-10 "why" table.
+- bots.v3_step records V3 (top 2, filters) and the V3 early pick every cycle: <data>/bots/v3_record.json and Supabase
+  crypto_paper; both appear in the Auto Trader page's per-setup record.
