@@ -188,3 +188,21 @@ trail 1 ATR, exit 15:20, 0.12% costs).
   most days the first qualifying breakout is the 9:30 candle).
 - Live 5 Nov (Dhan): Motilal ranked 1, broke out at 9:30 with volume 5.2x → traded by V3 and the early pick;
   PI Industries (rank 4) a block deal (85x) → skipped (it lost 1.7%).
+
+## How the day's top gainers / losers look at 9:30 (5 Nov 2026, `research/toppers_study.py`)
+235 F&O stocks, 45 days (Yahoo 5-min, 11 Aug - 5 Nov): 10,520 stock-days; topper = the day's top 10 gainers or
+losers (8.6% of stocks). Readings from the 9:15-9:30 candles only.
+- Toppers are mostly the big movers already at 9:30: of the top 5 movers at 9:30 (move from yesterday's close), 68%
+  finish as toppers; top 10 → 55%, top 20 → 38% (and they make 38% of all toppers).
+- 9:30 readings that raise the topper rate (lowest → highest fifth): opening range vs ATR 3.8% → 19.2%, opening
+  volume vs usual 5.0% → 18.0%, move so far vs ATR 4.7% → 20.1%, first 15 min vs Nifty 4.2% → 20.3%, gap vs ATR
+  6.6% → 15.6%, ATR % 4.4% → 14.0%; beyond yesterday's high / low 12.2% vs 6.5% inside; all three candles the same
+  colour 11.6% vs 7.7%; first 15 min continuing the gap 10.4% vs 6.5%. Same in both halves. These are V3's ranking
+  inputs (ATR, opening range, RVOL, gap), which is why V3's top names are often the day's toppers.
+- But the move AFTER 9:30 is a coin flip without a trigger: continuing the direction so far from 9:30 to 15:25 goes
+  on 48-51% of the time and loses after costs (all stocks -0.05%, top-20 movers -0.08%). Best static subset: top-20
+  movers with opening range >1 ATR or volume >6x: +0.16% after costs, halves +0.09 / +0.20 (thin). Very volatile
+  stocks (ATR >4.5%) among the top movers: -0.86%, both halves.
+- The tradable part needs the breakout trigger (V3: a close beyond the 9:15-9:30 range, best on the 9:30 candle):
+  the V3 early pick +0.58% a trade vs +0.16% for the best static 9:30 selection. Skipping ATR >4.5% does not help
+  the early pick (its 3 such picks won).
