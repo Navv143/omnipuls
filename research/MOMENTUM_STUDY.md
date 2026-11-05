@@ -296,3 +296,20 @@ Sector index = average move (ATR from yesterday's close) of the sector's stocks 
     when also below VWAP and near the low - but only 14 days and two of four quarters negative.
   - UP against a falling Nifty: only 8 days, about 0.
 Added "Sector top 2 UP" and "Sector top 2 DOWN vs Nifty" as paper setups (momentum_paper.sector_picks).
+
+## Setup scan: breakouts AND their opposites, small stops, 2 stocks a day, 1 index trade (5 Nov 2026)
+`research/setup_scan.py` (45 days, 5-min, all F&O stocks + Nifty / Bank Nifty): pdh_break vs pdh_sweep, orb_break vs
+orb_fade, first-hour break vs fade, day-extreme break vs sweep-and-reclaim, VWAP cross, gap go vs gap fill, ignition vs
+its fade. Structure stop at the signal candle, only small stops (0.1-0.5 ATR), exits 1R / 2R / 3R / close.
+- Stocks: median stop 0.4% of price, so 0.12% costs = 0.3R a trade; every setup and its opposite loses after costs
+  (best pdh_break -0.06R, gap_fill -0.01R). Before costs breakouts are slightly positive (+0.1 to +0.25R held to the
+  close) and the sweeps / fades slightly negative: "the other side" of a failed breakout is not better.
+- Top 2 a day: only ORB break ranked by the day's move (= the V3 logic) is positive in both halves (+0.38R, halves
+  +0.68 / +0.09). Warning: an arbitrary top-2 of gap fills showed +0.71R while all gap fills are ~0R - with ~90 trades
+  +-0.7R is within luck.
+- Index: Nifty ORB break, first of the day, stop at the breakout candle (~0.16%, ~40 points), held to the close: +1.31R
+  (22 days, halves +1.08 / +1.44) but made by 4 trend days (+14R, +9R, +6.5R, +5.4R); Bank Nifty same rule ~0R.
+`research/index_hourly_scan.py` (3 years of hourly candles, ~720 days): with small structure stops nothing is reliably
+positive - first-hour break 0.00R (Nifty) / -0.14R (Bank Nifty); best Nifty first-hour breakdown short +0.09R (t 1.0,
+every year positive); pdh / gap / sweep versions -0.35R to +0.2R, none significant. A tight index stop is mostly hit by
+normal noise. "Nifty ORB break" added as a paper record to see whether the 5-min version holds on new days.
