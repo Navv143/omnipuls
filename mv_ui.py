@@ -825,9 +825,16 @@ def momentum_card(key: str, mo: dict) -> str:
     if mo.get("now_x") is not None:
         rd.append(f"ATR {mo['now_x']:.1f}x")
     sigs = mo.get("signals") or []
+    def _oi(g):
+        o = g.get("oi") or {}
+        if not o:
+            return ""
+        col = UP if o.get("oi_ok") else WARN
+        return (f"<div class='px' style='font-size:var(--fs-2xs);color:{col}'>OI {'confirms' if o.get('oi_ok') else 'does not confirm'}"
+                f" · 15 min: {_e(o.get('oi_15m') or '-')} · day: {_e(o.get('oi_day') or '-')} ({o.get('oi_chg_pct')}%)</div>")
     body = "".join(f"<div style='margin-top:8px;font-weight:700;color:{UP if g['side'] == 'LONG' else DOWN}'>{g['side']} at "
                    f"{g['time']} @ {_num(g['price'])}</div><div class='px' style='font-family:Inter,sans-serif;"
-                   f"font-size:var(--fs-2xs)'>{_e(g['why'])}</div>{plan_html(g['plan'])}" for g in sigs[-2:])
+                   f"font-size:var(--fs-2xs)'>{_e(g['why'])}</div>{_oi(g)}{plan_html(g['plan'])}" for g in sigs[-2:])
     tag = f" <span class='mx-mini'>{_e(mo.get('rule', ''))}</span>" + (" <span class='mx-mini'>trend day</span>" if mo.get("trend_day") else "")
     return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(mo.get('name', key))}{tag}</span>"
             f"<span class='sd' style='--c:{c}'>{_e(st_.split(' but')[0][:22])}</span></div>"

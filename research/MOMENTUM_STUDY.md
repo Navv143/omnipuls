@@ -101,3 +101,13 @@ Yahoo 5-minute, 45 days, entry next candle, funnel plan (stop beyond the 30-min 
 Rules per index were chosen on this same data: confirm on the live record. 3 years hourly (Nifty): confirmed moves
 +0.03% vs +0.01% unconfirmed, both halves +; Bank Nifty momentum no edge (consistent with fading it).
 Trend day = 1+ ATR from yesterday's close with 75%+ breadth the same way.
+
+## Do OI, net volume or order-book buy/sell help the momentum bot? (5 Nov 2026)
+- OI: yes, by the earlier study on real Nifty / Bank Nifty futures 1-minute data 2015-2023 (FINAL_SETUPS.md,
+  "Index option buying"): trend days WITH futures OI rising carried the edge; without OI it halved (Bank Nifty) /
+  vanished (Nifty). No intraday OI history exists for the 45-day test, so the momentum bot now attaches the futures
+  build-up (15 min and the day) to every signal and the server records it (trade_signals.note) to compare
+  confirmed vs unconfirmed on the live record.
+- Net volume / cumulative delta: little extra (moves with RSI, MACD, breaks: all measure momentum; stock-level net
+  money adds ~nothing beyond the price move). The bot's money condition already covers it.
+- Order-book buy / sell quantity: no evidence yet; recorded every minute by the recorder, to be tested later.

@@ -704,12 +704,16 @@ def collect_signals(mkt: "Market", fun: dict) -> list:
                 out.append({"source": "Index funnel", "symbol": r["key"], "side": 1 if g["side"] == "LONG" else -1,
                             "time": g["time"], **{k: p[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}, "score": None})
         for k, nm in IF.INDEXES.items():  # index momentum bot: every confirmed burst (Bank Nifty: faded)
-            mo = IF.momentum_now(mkt.bars(k), mkt.stock_bars(), mkt.weights.get(k, {}), nm, mode=IF.MOM_MODE.get(k)) or {}
+            mo = IF.momentum_now(mkt.bars(k), mkt.stock_bars(), mkt.weights.get(k, {}), nm, mode=IF.MOM_MODE.get(k),
+                                 fut=mkt.fut.get(k)) or {}
             mkt.momentum[k] = {kk: v for kk, v in mo.items()}
             for g in mo.get("signals", []):
                 p = g["plan"]
+                o = g.get("oi") or {}
                 out.append({"source": "Index momentum bot", "symbol": f"{k} {g['time']}", "side": 1 if g["side"] == "LONG" else -1,
-                            "time": g["time"], **{kk: p[kk] for kk in ("entry", "sl", "tp1", "tp2", "risk_pct")}, "score": None})
+                            "time": g["time"], **{kk: p[kk] for kk in ("entry", "sl", "tp1", "tp2", "risk_pct")}, "score": None,
+                            "note": (f"OI {'confirms' if o.get('oi_ok') else 'does not confirm'}: 15 min {o.get('oi_15m') or '-'}, "
+                                     f"day {o.get('oi_day') or '-'} ({o.get('oi_chg_pct')}%)") if o else "OI n/a"})
         for k in ("NIFTY", "BANKNIFTY"):
             gg = IF.gap_go(mkt.bars(k), mkt.stock_bars(), mkt.weights.get(k, {})) or {}
             g = gg.get("signal") or {}
@@ -762,7 +766,7 @@ def track_trades(mkt: "Market", day: str, signals: list, final: bool = False):
     if changed:
         rows = [{"day": day, "time": t["time"], "source": t["source"], "symbol": t["symbol"], "side": int(t["side"]),
                  "entry": t["entry"], "sl": t["sl"], "tp1": t["tp1"], "tp2": t["tp2"], "risk_pct": t["risk_pct"],
-                 "score": t.get("score"), "status": t.get("status"), "outcome": t.get("outcome"), "r": t.get("r"),
+                 "score": t.get("score"), "note": t.get("note"), "status": t.get("status"), "outcome": t.get("outcome"), "r": t.get("r"),
                  "pct": t.get("pct")} for t in {id(x): x for x in changed}.values()]
         try:
             _cloud().upsert_rows("trade_signals", rows, "day,source,symbol")

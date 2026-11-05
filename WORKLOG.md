@@ -475,3 +475,8 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   several a day, 1 h apart) and scored at the close. Cards on the Bots page and Market View; signals in the list.
 - First test (45 days): 141 trades, +0.10% (+0.26R), 60% wins, both halves positive; replay of 5 Nov: Nifty LONG 09:50
   @ 24,413 → target 1; Bank Nifty fades skipped (trend day).
+
+## 5 Nov 2026: OI on every momentum signal
+- `index_funnel._oi_at`: the index future's build-up over the signal's 15 minutes and for the day; "OI confirms" when
+  new positions are on the burst's side. Shown on the momentum cards, saved in trade_signals.note (new column) so the
+  live record can be split by OI confirmation.
