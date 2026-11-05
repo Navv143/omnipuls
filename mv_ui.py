@@ -984,3 +984,57 @@ def closing_cards(rows: list, kind: str = "stock", ltps: dict | None = None, emp
         return f"<div class='mx-quiet'>{_e(empty)}</div>"
     ltps = ltps or {}
     return "<div class='wl'>" + "".join(closing_card(r, kind, ltps.get(r.get("key") or r.get("symbol"))) for r in rows) + "</div>"
+
+
+AUTO_CSS = """<style>
+.at-pipe{display:grid;grid-template-columns:repeat(6,1fr);gap:22px;margin:10px 0 4px}
+@media (max-width:1000px){.at-pipe{grid-template-columns:repeat(2,1fr);gap:12px}}
+.at-ag{position:relative;border:1px solid var(--om-border);border-radius:var(--r-md);padding:11px 12px 10px;
+  background:linear-gradient(160deg,color-mix(in srgb,var(--c) 14%,transparent),transparent 60%),var(--om-surface)}
+.at-ag:before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--c);border-radius:var(--r-md) var(--r-md) 0 0}
+@media (min-width:1001px){.at-ag:not(:last-child):after{content:"➜";position:absolute;right:-19px;top:42%;color:var(--om-faint);font-size:14px}}
+.at-ag .no{font-size:var(--fs-2xs);letter-spacing:.08em;text-transform:uppercase;color:var(--om-muted)}
+.at-ag .nm{font-weight:700;margin-top:1px}
+.at-ag .big{font-family:var(--font-num);font-size:var(--fs-xl);font-weight:700;color:var(--c);margin-top:4px}
+.at-ag .sub{font-size:var(--fs-xs);color:var(--om-text-3);margin-top:2px;line-height:1.3}
+.at-pos{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.at-p{border:1px solid var(--om-border);border-left:3px solid var(--c);border-radius:var(--r-sm);padding:9px 11px;background:var(--om-surface)}
+.at-p .top{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.at-p .pl{font-family:var(--font-num);color:var(--v)}
+.at-p .px{font-family:var(--font-num);font-size:var(--fs-xs);color:var(--om-text-3);margin-top:3px}
+</style>"""
+
+
+def agent_pipeline(f: dict, pnl: float, equity: float, start: float, updated: str = "") -> str:
+    """The six agents as one pipeline: what each did today."""
+    f = f or {}
+    steps = [("1", "Scanner", f"{f.get('scanned', 0):,}", "stocks & indices scanned every 5 min", ACCENT),
+             ("2", "Filter", f"{f.get('signals', 0)} → {f.get('filtered', 0)}", "signals → passed (tested setups, time, stop)", ACCENT),
+             ("3", "Analyst", f"{f.get('analysed', 0)}", "plans checked, reward:risk ≥ 1.5", ACCENT),
+             ("4", "Risk manager", f"{f.get('executed', 0)}", "sized at 1% risk · max 5 open · -3% day stop", WARN),
+             ("5", "Executor", f"{f.get('open', 0)} open · {f.get('closed', 0)} closed", "paper orders, managed exits", UP),
+             ("6", "Reporter", f"₹{pnl:+,.0f}", f"{f.get('wins', 0)} wins · {f.get('losses', 0)} losses · "
+                                                f"{(equity / start - 1) * 100 if start else 0:+.2f}% today", tone_color(pnl))]
+    return "<div class='at-pipe'>" + "".join(
+        f"<div class='at-ag' style='--c:{c}'><div class='no'>Agent {n}</div><div class='nm'>{_e(nm)}</div>"
+        f"<div class='big'>{_e(big)}</div><div class='sub'>{_e(sub)}</div></div>" for n, nm, big, sub, c in steps) + "</div>"
+
+
+def position_cards(rows: list) -> str:
+    if not rows:
+        return "<div class='mx-quiet'>No paper position today yet.</div>"
+    out = []
+    for d in rows:
+        m, p = d.get("mark") or {}, d["pos"]
+        c = UP if d["side"] > 0 else DOWN
+        pl = m.get("pnl") or 0.0
+        st_ = "CLOSED" if m.get("closed") else "OPEN"
+        out.append(f"<div class='at-p' style='--c:{c};--v:{tone_color(pl)}'><div class='top'><span>{_e(d['symbol'])}"
+                   f"{tv_link(d['symbol'].split(' ')[0])}</span><span class='pl'>₹{pl:+,.0f}</span></div>"
+                   f"<div class='px'>{'BUY' if d['side'] > 0 else 'SELL'} {p['qty']} @ {_num(p['entry'])} · ⏱ {_e(d.get('time', ''))} · "
+                   f"{_e(d['source'])}</div>"
+                   f"<div class='px'>stop {_num(p['sl'])} · T1 {_num(d.get('tp1'))} · T2 {_num(d.get('tp2'))} · risk ₹{p['risk']:,.0f}</div>"
+                   f"<div class='px'><b>{st_}</b>" + (f" · now {_num(m['ltp'])}" if m.get("ltp") else "")
+                   + (f" · {m['r']:+.2f}R" if m.get("r") is not None else "")
+                   + (f" · {_e(m['exit'])}" if m.get("exit") else (f" · {_e(m['advice'])}" if m.get("advice") else "")) + "</div></div>")
+    return "<div class='at-pos'>" + "".join(out) + "</div>"

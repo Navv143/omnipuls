@@ -533,3 +533,14 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   the Momentum Funnel build (~10 s) ran on every refresh of every viewer; now they are rebuilt only when new candles
   arrive, in the background, and the last result shows at once (`_index_bots`, `_funnel_now`).
 - Page timings logged to Supabase `app_perf` (page, seconds, Market View per section) to find what is still slow.
+
+## 5 Nov 2026: Auto Trader (paper account, six agents)
+- `autotrader.py`: Scanner → Filter (tested setups only, 9:20-15:00, stop 0.15-2.5%, one open position per symbol) →
+  Analyst (plan order, reward:risk ≥ 1.5) → Risk manager (1% risk a trade, max 5 open, no new trades at -3% for the
+  day, position ≤ 3x equity) → Executor (paper position at the signal entry, managed exits from the signal record) →
+  Reporter (equity, P&L, wins / losses, equity curve). Starting capital ₹1,00,000 (paper).
+- Server (`bots.py auto_step`): every 5 minutes on the day's signal records; decisions fixed once made;
+  `<data>/autotrader/<day>.json`, `account.json` (daily history, closed at 15:35) and Supabase `auto_trades`.
+- New page "Auto Trader" (Today menu): the six agents as a pipeline with today's counts, account KPIs, position cards
+  (qty, entry, stop, targets, R, P&L, exit), equity curve, every decision with its reason, daily record and the rules.
+- Replay on 5 Nov's real signals: 8 trades, +₹3,770 (index trades won, funnel stocks lost). No real orders.

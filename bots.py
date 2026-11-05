@@ -990,6 +990,57 @@ def score_closing(mkt: "Market", today: str, final: bool = False):
                 log(f"closing_picks score: {e}")
 
 
+# ---------------------------------------------------------------- Auto Trader (paper account, autotrader.py)
+
+AUTO_DIR = paths.DATA / "autotrader"
+
+
+def _auto_account() -> dict:
+    import autotrader as AT
+    try:
+        return json.loads((AUTO_DIR / "account.json").read_text())
+    except Exception:
+        return {"start": AT.RULES["capital"], "equity": AT.RULES["capital"], "history": [], "rules": AT.RULES}
+
+
+def auto_step(mkt: "Market", now: datetime, scanned: int, final: bool = False) -> dict:
+    """The six agents on today's signal records: new signals decided once (filter, analyst, risk, paper order),
+    positions marked to the managed results; <data>/autotrader/<day>.json and Supabase auto_trades."""
+    import autotrader as AT
+    AUTO_DIR.mkdir(parents=True, exist_ok=True)
+    day = now.strftime("%Y-%m-%d")
+    f = AUTO_DIR / f"{day}.json"
+    acc = _auto_account()
+    try:
+        book = json.loads(f.read_text())
+    except Exception:
+        prior = [h for h in acc.get("history", []) if h["day"] < day]
+        book = {"day": day, "equity_start": prior[-1]["equity"] if prior else acc.get("start", AT.RULES["capital"]),
+                "decisions": {}}
+    book = AT.step(book, mkt.trades, float(book["equity_start"]), now.strftime("%H:%M"), scanned)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps(_clean(book), default=str))
+    os.replace(tmp, f)
+    if final and book.get("decisions"):   # market holidays (no signal at all) don't enter the history
+        acc = AT.close_day(acc, day, book)
+        acc["rules"] = AT.RULES
+        (AUTO_DIR / "account.json").write_text(json.dumps(_clean(acc), default=str))
+    rows = []
+    for d in book["decisions"].values():
+        m, p = d.get("mark") or {}, d.get("pos") or {}
+        rows.append({"day": day, "time": d.get("time"), "source": d["source"], "symbol": d["symbol"], "side": d["side"],
+                     "decision": "TRADE" if d.get("ok") else "REJECTED", "stage": d.get("stage"), "reason": d.get("why"),
+                     "qty": p.get("qty"), "entry": d.get("entry"), "sl": d.get("sl"), "tp1": d.get("tp1"), "tp2": d.get("tp2"),
+                     "value": p.get("value"), "risk": p.get("risk"), "r": m.get("r"), "pnl": m.get("pnl"),
+                     "status": ("closed" if m.get("closed") else "open") if p else None, "exit": m.get("exit")})
+    try:
+        if rows:
+            _cloud().upsert_rows("auto_trades", _clean(rows), "day,source,symbol")
+    except Exception as e:
+        log(f"auto_trades: {e}")
+    return {k: book.get(k) for k in ("funnel", "pnl", "equity", "equity_start", "updated")}
+
+
 def plan_for(mkt: "Market", stock: str, side: int) -> dict | None:
     """Entry / stop / targets for a stock idea, the same plan as the Momentum Funnel (funnel.trade_plan)."""
     import funnel as FN
@@ -1045,6 +1096,11 @@ def cycle(mkt: Market) -> dict:
         track_trades(mkt, now.strftime("%Y-%m-%d"), collect_signals(mkt, fun) + idea_sigs)
     except Exception as e:
         log(f"trades: {e}")
+    auto = None
+    try:
+        auto = auto_step(mkt, now, int(len(L)) + 5)
+    except Exception as e:
+        log(f"auto trader: {e}")
     closing = None
     if now.strftime("%H:%M") >= CLOSE_FROM:
         try:
@@ -1060,7 +1116,7 @@ def cycle(mkt: Market) -> dict:
     return {"updated": now.isoformat(timespec="seconds"), "health": health, "feed": mkt.feed[:120],
             "bots": {"index": idx, "sector": sec, "movers": mov, "unusual": unu, "radar": radar, "master": master},
             "odds_check": _odds_check(), "funnel": {k: v for k, v in fun.items() if k != "plans"}, "indices": ixs,
-            "trades": mkt.trades, "momentum": mkt.momentum, "closing": closing}
+            "trades": mkt.trades, "momentum": mkt.momentum, "closing": closing, "auto": auto}
 
 
 def save(state: dict):
@@ -1143,6 +1199,11 @@ def main():
                 if mkt.trades:
                     track_trades(mkt, day, [], final=True)
                     log(f"closed {len(mkt.trades)} signals")
+                try:
+                    a_ = auto_step(mkt, now, 0, final=True)
+                    log(f"auto trader day closed: P&L {a_.get('pnl')}")
+                except Exception as e:
+                    log(f"auto trader close: {e}")
                 try:
                     score_closing(mkt, (now + pd.Timedelta(days=1)).strftime("%Y-%m-%d"), final=True)
                 except Exception as e:

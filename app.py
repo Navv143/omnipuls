@@ -30,7 +30,7 @@ def _reload_changed_modules():
         seen = bootstrap._mtimes = {}
     base = os.path.dirname(os.path.abspath(__file__))
     for name in ("mv_ui", "funnel", "index_funnel", "index_levels", "desk_agents", "agents", "market_view", "bot",
-                 "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex"):
+                 "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex", "autotrader", "closing"):
         try:
             m = os.stat(os.path.join(base, name + ".py")).st_mtime
         except OSError:
@@ -7512,11 +7512,108 @@ def page_closing():
                "here to be tested on the live record before you trust them. Overnight positions carry gap risk.")
 
 
+def page_auto():
+    """Auto Trader (paper): six agents turn the bots' signals into sized paper trades (server: bots.py + autotrader.py)."""
+    import autotrader as AT
+    status_strip()
+    for _c in (MX.CSS, MX.FUNNEL_CSS, MX.AUTO_CSS):
+        st.markdown(_c, unsafe_allow_html=True)
+    d_ = PATHS.DATA / "autotrader"
+    try:
+        acc = json.loads((d_ / "account.json").read_text())
+    except Exception:
+        acc = {"start": AT.RULES["capital"], "equity": AT.RULES["capital"], "history": []}
+    files = sorted(d_.glob("20*.json")) if d_.exists() else []
+    today = datetime.now(IST).strftime("%Y-%m-%d")
+    book = None
+    for f in reversed(files):
+        try:
+            book = json.loads(f.read_text())
+            break
+        except Exception:
+            continue
+    start_cap = float(acc.get("start", AT.RULES["capital"]))
+    st.markdown(MX.section("Auto Trader · paper account", "six agents trade the bots' signals with fixed risk rules · "
+                           "no real orders"), unsafe_allow_html=True)
+    if not book:
+        st.info("The paper account starts with the first signal in market hours (the server's bots run it every 5 minutes).",
+                icon=":material/smart_toy:")
+        book = {"funnel": {}, "pnl": 0.0, "equity": start_cap, "equity_start": start_cap, "decisions": {}, "day": today}
+    day = book.get("day") or (files[-1].stem if files else today)
+    is_today = day == today
+    pnl, eq, eq0 = float(book.get("pnl") or 0), float(book.get("equity") or start_cap), float(book.get("equity_start") or start_cap)
+    st.caption(("Today" if is_today else f"Last trading day {day}") + (f" · updated {book.get('updated')}" if book.get("updated") else ""))
+    st.markdown(MX.agent_pipeline(book.get("funnel"), pnl, eq, eq0), unsafe_allow_html=True)
+    hist = [h for h in acc.get("history", []) if h["day"] != day]
+    total = eq - start_cap
+    closed_days = hist + [{"day": day, "pnl": pnl, "equity": eq, **{k: (book.get("funnel") or {}).get(k, 0) for k in ("wins", "losses")}}]
+    wins = sum(h.get("wins", 0) for h in closed_days)
+    losses = sum(h.get("losses", 0) for h in closed_days)
+    st.markdown(MX.kpis([
+        MX.kpi("Account", f"₹{eq:,.0f}", f"started ₹{start_cap:,.0f}", MX.tone_color(total)),
+        MX.kpi("Total P&L", f"₹{total:+,.0f}", f"{total / start_cap * 100:+.2f}% · {len(closed_days)} day{'s' if len(closed_days) != 1 else ''}", MX.tone_color(total)),
+        MX.kpi("Today" if is_today else day, f"₹{pnl:+,.0f}", f"{pnl / eq0 * 100 if eq0 else 0:+.2f}%", MX.tone_color(pnl)),
+        MX.kpi("Wins / losses", f"{wins} / {losses}", f"{wins / (wins + losses) * 100:.0f}% wins" if wins + losses else "—"),
+    ]), unsafe_allow_html=True)
+    decs = list((book.get("decisions") or {}).values())
+    taken = sorted([x for x in decs if x.get("pos")], key=lambda x: x.get("time", ""), reverse=True)
+    st.markdown(MX.section("Positions", f"{sum(1 for x in taken if not (x.get('mark') or {}).get('closed'))} open · "
+                           f"{len(taken)} today · marked every 5 minutes"), unsafe_allow_html=True)
+    st.markdown(MX.position_cards(taken), unsafe_allow_html=True)
+    # equity curve over the days
+    if closed_days:
+        import plotly.graph_objects as go
+        xs = ["start"] + [h["day"] for h in closed_days]
+        ys = [start_cap] + [h["equity"] for h in closed_days]
+        fig = go.Figure(go.Scatter(x=xs, y=ys, mode="lines+markers", line=dict(width=2.5, color="#22c55e" if total >= 0 else "#ef4444"),
+                                   fill="tozeroy", fillcolor="rgba(34,197,94,.08)" if total >= 0 else "rgba(239,68,68,.08)",
+                                   hovertemplate="%{x}<br>₹%{y:,.0f}<extra></extra>"))
+        fig.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                          yaxis=dict(range=[min(ys) * 0.995, max(ys) * 1.005], tickformat=",.0f", gridcolor="rgba(128,128,128,.15)"),
+                          xaxis=dict(type="category", showgrid=False))
+        st.markdown(MX.section("Equity curve", "account value at each day's close"), unsafe_allow_html=True)
+        st.plotly_chart(fig, width="stretch", key="auto_equity", config={"displayModeBar": False})
+    st.markdown(MX.section("Agent decisions", "every signal the bots gave today: traded or rejected, and why"),
+                unsafe_allow_html=True)
+    if decs:
+        df = pd.DataFrame([{"Time": x.get("time"), "Setup": x["source"], "Symbol": x["symbol"],
+                            "Side": "BUY" if x["side"] > 0 else "SELL", "Decision": "TRADE" if x.get("ok") else "REJECTED",
+                            "Agent": x.get("stage"), "Why": x.get("why"), "Qty": (x.get("pos") or {}).get("qty"),
+                            "Entry": x.get("entry"), "Stop": x.get("sl"), "R": (x.get("mark") or {}).get("r"),
+                            "P&L ₹": (x.get("mark") or {}).get("pnl"),
+                            "TradingView": MX.tv_url(str(x["symbol"]).split(" ")[0])} for x in decs]).sort_values("Time", ascending=False)
+        st.dataframe(df, hide_index=True, width="stretch", height=360,
+                     column_config={"Why": st.column_config.TextColumn(width="large"),
+                                    "Entry": st.column_config.NumberColumn(format="%.2f"),
+                                    "Stop": st.column_config.NumberColumn(format="%.2f"),
+                                    "R": st.column_config.NumberColumn(format="%+.2f"),
+                                    "P&L ₹": st.column_config.NumberColumn(format="%+.0f"),
+                                    "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
+    else:
+        st.caption("No signal yet today.")
+    if hist:
+        with st.expander(f"Daily record ({len(hist)} days)", icon=":material/calendar_month:"):
+            st.dataframe(pd.DataFrame(hist[::-1]).rename(columns={"day": "Day", "pnl": "P&L ₹", "equity": "Account ₹", "trades": "Trades",
+                                                                   "wins": "Wins", "losses": "Losses", "signals": "Signals"}),
+                         hide_index=True, width="stretch")
+    r_ = AT.RULES
+    st.markdown(MX.section("Rules", "the risk manager's limits"), unsafe_allow_html=True)
+    st.markdown(f"- Capital ₹{r_['capital']:,.0f} (paper) · risk **{r_['risk_pct']}%** of the account per trade (entry → stop × quantity)\n"
+                f"- At most **{r_['max_open']}** positions open, one per symbol · no new trades after **{r_['last_entry']}** · "
+                f"stop for the day at **-{r_['max_day_loss_pct']}%**\n"
+                f"- Trades only: {', '.join(AT.TRADE_SOURCES)} · stop {r_['min_stop_pct']}-{r_['max_stop_pct']}% away · "
+                f"reward:risk ≥ 1.5\n- Exits: half at target 1 then stop to entry and trail, target 2, stop, momentum slowing "
+                f"before target 1, 15:15 · costs {r_['cost_index_pct']}% index / {r_['cost_stock_pct']}% stocks per round trip")
+    st.caption("Paper trading only: no orders are sent to Dhan. Index quantities are in index units (points × quantity), "
+               "not lots. Judge it after a few weeks, not a day.")
+
+
 PAGE_DEFS = [  # (url, function, menu title, icon)
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
     ("funnel", page_funnel, "Momentum Funnel", ":material/filter_alt:"),
     ("agents", page_agents, "AI Desk", ":material/groups:"),
     ("closing", page_closing, "Closing Picks", ":material/nightlight:"),
+    ("auto", page_auto, "Auto Trader", ":material/robot_2:"),
     ("bot", page_bot, "Bots", ":material/smart_toy:"),
     ("dashboard", page_dashboard, "Trading Desk", ":material/space_dashboard:"),
     ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
@@ -7546,7 +7643,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "view"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({  # grouped by what you are doing: today's trading, the market, tools, your account
-    "Today": [P["view"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["scanners"], P["bot"], P["options"]],
+    "Today": [P["view"], P["auto"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["scanners"], P["bot"], P["options"]],
     "Markets": [P["indices"], P["sectors"], P["smart"], P["apex"], P["fno"], P["oi"], P["global"], P["mcx"], P["cdsfut"]],
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["odds"]],
     "Account": [P["account"]] + ([P["portfolio"], P["dhan"], P["review"], P["research"]] if IS_ADMIN else []),
