@@ -921,3 +921,64 @@ def live_html(m: dict | None) -> str:
             f"<b>{(m.get('move_pts') or 0):+,.2f} ({(m.get('move_pct') or 0):+.2f}%) · {(r or 0):+.2f}R</b></div>"
             f"<div class='l2'>best {(m.get('best_r') or 0):+.2f}R · worst {(m.get('worst_r') or 0):+.2f}R · stop now "
             f"{_num(m.get('stop_now'))}</div><div class='adv'>{_e(adv)}</div></div>")
+
+
+def closing_card(r: dict, kind: str = "stock", ltp: float | None = None) -> str:
+    """A closing pick (buy near the close, sell next day): the verdict, what the last 15-30 minutes added, the price
+    at the pick and the live price since."""
+    side = int(r.get("side") or 0)
+    c = UP if side > 0 else DOWN if side < 0 else NEUTRAL
+    sym = r.get("key") or r.get("symbol") or ""
+    name = r.get("name") or sym
+    if kind == "index":
+        lab = ("TESTED", UP) if r.get("tested") else ("WATCH", WARN) if side else ("NO TRADE", NEUTRAL)
+        verdict = r.get("verdict", "")
+        rows = [("Close in day's range", f"{(r.get('clv') or 0) * 100:.0f}%"), ("Day", f"{_sgn(r.get('ret_day'))} · {(r.get('ret_atr') or 0):+.1f} ATR"),
+                ("Index money 30 min", f"₹{(r.get('net_30') or 0):+,.0f} Cr")]
+        if r.get("breadth") == r.get("breadth"):
+            rows.append(("Breadth", f"{r['breadth']:.0f}% up ({(r.get('breadth_chg_30') or 0):+.0f} in 30 min)"))
+        if r.get("buildup_30"):
+            rows.append(("Futures OI 30 min", f"{(r.get('oi_30_pct') or 0):+.2f}% · {r['buildup_30']}"))
+        w = r.get("writers_30") or {}
+        if w:
+            rows.append(("Options written 30 min", f"calls {w.get('ce', 0):+,.0f} (most at {w.get('ce_top', '-')}) · "
+                                                   f"puts {w.get('pe', 0):+,.0f} (most at {w.get('pe_top', '-')})"))
+        conf = r.get("confirmations") or []
+        foot = ("Confirms: " + ", ".join(conf)) if conf else "No late confirmation (money / breadth / OI / writing)"
+    else:
+        lab = ("UNTESTED", WARN)
+        verdict = ("BUY near the close" if side > 0 else "SELL near the close") + " · exit next day"
+        rows = [("Last 30 min money", f"₹{(r.get('net_30') or 0):+,.1f} Cr ({(r.get('flow_30') or 50):.0f}% buying)"),
+                ("Last 15 min money", f"₹{(r.get('net_15') or 0):+,.1f} Cr"),
+                ("Close in day's range", f"{(r.get('clv') or 0) * 100:.0f}% · day {_sgn(r.get('ret_day'))}"),
+                ("Volume 30 min", f"{(r.get('vol_30_x') or 0):.1f}x usual"),
+                ("Sector 30 min", f"{_e(r.get('sector', ''))} ₹{(r.get('sec_net_30') or 0):+,.0f} Cr")]
+        if r.get("buildup_30"):
+            rows.append(("Futures OI 30 min", f"{(r.get('oi_30_pct') or 0):+.1f}% · {r['buildup_30']}"))
+        foot = f"Score {r.get('score', 0):.0f}"
+    px = float(r.get("price") or 0)
+    live = ""
+    if ltp and px:
+        mv = (side or 1) * (ltp / px - 1) * 100
+        live = (f"<div class='px' style='margin-top:6px'>Now {_num(ltp)} · <b style='color:{tone_color(mv)}'>{mv:+.2f}%</b> "
+                "since the pick</div>")
+    res = ""
+    if r.get("open_pct") is not None:
+        res = (f"<div class='px' style='margin-top:6px'>Next day {_e(r.get('next_day', ''))}: open "
+               f"<b style='color:{tone_color(r['open_pct'])}'>{r['open_pct']:+.2f}%</b> · close "
+               f"<b style='color:{tone_color(r.get('close_pct') or 0)}'>{(r.get('close_pct') or 0):+.2f}%</b> (after costs)</div>")
+    body = "".join(f"<div style='display:flex;justify-content:space-between;gap:8px'><span style='color:var(--om-text-3)'>{_e(k)}</span>"
+                   f"<span style='text-align:right'>{v}</span></div>" for k, v in rows)
+    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(name)}{tv_link(sym)}</span>"
+            f"<span class='sd' style='--c:{lab[1]}'>{lab[0]}</span></div>"
+            f"<div class='px'>at {_e(r.get('time', ''))} · price {_num(px)}</div>"
+            f"<div style='font-weight:700;margin:8px 0 6px;color:{c}'>{_e(verdict)}</div>"
+            f"<div class='px' style='font-family:Inter,sans-serif;font-size:var(--fs-xs);display:grid;gap:3px'>{body}</div>"
+            + live + res + f"<div class='px' style='margin-top:6px;font-size:var(--fs-xs)'>{_e(foot)}</div></div>")
+
+
+def closing_cards(rows: list, kind: str = "stock", ltps: dict | None = None, empty: str = "No pick.") -> str:
+    if not rows:
+        return f"<div class='mx-quiet'>{_e(empty)}</div>"
+    ltps = ltps or {}
+    return "<div class='wl'>" + "".join(closing_card(r, kind, ltps.get(r.get("key") or r.get("symbol"))) for r in rows) + "</div>"

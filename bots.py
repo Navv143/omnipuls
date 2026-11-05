@@ -782,6 +782,214 @@ def track_trades(mkt: "Market", day: str, signals: list, final: bool = False):
             log(f"trade_signals: {e}")
 
 
+# ---------------------------------------------------------------- closing picks (buy near the close, sell next day)
+
+CLOSE_DIR = paths.DATA / "closing"
+CLOSE_FROM, CLOSE_AT = "14:45", "15:15"   # live preview from 14:45; the picks are fixed with the data up to 15:15
+
+
+def _close_file(day: str):
+    CLOSE_DIR.mkdir(parents=True, exist_ok=True)
+    return CLOSE_DIR / f"{day}.json"
+
+
+def oi_last(day: str, mins: int = 30, cut: str = CLOSE_AT) -> dict:
+    """{symbol: futures OI change % over the last `mins` minutes before `cut`, the price change of the future and
+    the build-up} from the recorder's live quote files."""
+    import index_levels as LV
+    files = _quote_files(day)
+    if not files:
+        return {}
+    try:
+        df = pd.concat(pd.read_parquet(f, columns=["time", "kind", "symbol", "oi", "ltp"]) for f in files[-12:])
+    except Exception:
+        try:
+            df = pd.concat(pd.read_parquet(f, columns=["time", "kind", "symbol", "oi"]) for f in files[-12:])
+        except Exception:
+            return {}
+    f = df[df["kind"] == "future"].copy()
+    if f.empty:
+        return {}
+    f["time"] = pd.to_datetime(f["time"])
+    f = f[f["time"].dt.strftime("%H:%M") <= cut]
+    agg = {"oi": ("oi", "sum")} | ({"px": ("ltp", "first")} if "ltp" in f else {})
+    g = f.groupby(["symbol", "time"]).agg(**agg).reset_index().sort_values("time")
+    out = {}
+    for sym, x in g.groupby("symbol"):
+        end = x["time"].iloc[-1]
+        then = x[x["time"] <= end - pd.Timedelta(minutes=mins)]
+        if then.empty or not then["oi"].iloc[-1]:
+            continue
+        d_oi = float(x["oi"].iloc[-1] - then["oi"].iloc[-1])
+        d_px = float(x["px"].iloc[-1] - then["px"].iloc[-1]) if "px" in x else float("nan")
+        out[sym] = {"oi_30_pct": round(d_oi / float(then["oi"].iloc[-1]) * 100, 2), "buildup_30": LV.buildup(d_px, d_oi)}
+    return out
+
+
+def chain_writing(index: str, day: str, mins: int = 30, cut: str = CLOSE_AT, strikes: int = 6) -> dict:
+    """Option OI added in the last `mins` minutes near the money (nearest expiry, ±`strikes` strikes): calls written
+    (ce) and puts written (pe), from the recorder's option-chain parts."""
+    d = OUT.parent / "option_chain" / "parts" / day
+    files = sorted(d.glob("*.parquet")) if d.exists() else []
+    if not files:
+        return {}
+    try:
+        c = pd.concat(pd.read_parquet(f) for f in files[-16:])
+    except Exception:
+        return {}
+    c = c[c["index"] == index]
+    if c.empty:
+        return {}
+    c["time"] = pd.to_datetime(c["time"])
+    c = c[(c["time"].dt.strftime("%H:%M") <= cut) & (c["expiry"] == c["expiry"].min())]
+    if c.empty:
+        return {}
+    end = c["time"].max()
+    then_t = c[c["time"] <= end - pd.Timedelta(minutes=mins)]["time"]
+    if then_t.empty:
+        return {}
+    a, b = c[c["time"] == end], c[c["time"] == then_t.max()]
+    spot = float(a["spot"].iloc[0])
+    ks = sorted(a["strike"].unique(), key=lambda k: abs(k - spot))[: 2 * strikes + 1]
+    a, b = a[a["strike"].isin(ks)].set_index("strike"), b[b["strike"].isin(ks)].set_index("strike")
+    ce = float((a["ce_oi"] - b["ce_oi"].reindex(a.index)).fillna(0).sum())
+    pe = float((a["pe_oi"] - b["pe_oi"].reindex(a.index)).fillna(0).sum())
+    big = lambda col: int((a[col] - b[col].reindex(a.index)).fillna(0).idxmax()) if len(a) else None
+    return {"ce": ce, "pe": pe, "from": then_t.max().strftime("%H:%M"), "to": end.strftime("%H:%M"),
+            "ce_top": big("ce_oi"), "pe_top": big("pe_oi"), "spot": spot}
+
+
+def closing_read(mkt: "Market", now: datetime) -> dict:
+    """The closing read: index picks (tested: close near the day's high) and stock picks (untested) with what the last
+    15-30 minutes added: money, close location, volume, sector money, futures OI and option writing."""
+    import closing as CL
+    import index_funnel as IF
+    import universe as U
+    day = now.strftime("%Y-%m-%d")
+    cut = min(now.strftime("%H:%M"), CLOSE_AT)
+    stocks = mkt.stock_bars()
+    idx = []
+    for k in ("NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX"):
+        if k not in IF.INDEXES:
+            continue
+        try:
+            w30 = chain_writing(k, day, cut=cut)
+            r = CL.index_pick(IF.INDEXES[k], mkt.bars(k), stocks, mkt.weights.get(k, {}), mkt.fut.get(k), w30, cut)
+        except Exception as e:
+            log(f"closing {k}: {e}")
+            r = None
+        if r:
+            r["key"] = k
+            r["tested"] = bool(r["tested"] and k in ("NIFTY", "BANKNIFTY"))  # the 10-year test covers these two
+            if k not in ("NIFTY", "BANKNIFTY") and r["side"]:
+                r["verdict"] = "WATCH (close near the high, not tested on this index)"
+            idx.append(r)
+    oi30 = oi_last(day, cut=cut)
+    sp = CL.stock_picks(stocks, U.FNO_SECTOR_OF, cut)
+    picks = []
+    for _, r in sp.iterrows():
+        o = oi30.get(r["symbol"], {})
+        d = {k: (None if isinstance(v, float) and not np.isfinite(v) else (round(v, 3) if isinstance(v, float) else v))
+             for k, v in r.to_dict().items()}
+        d["side"] = int(d["side"])
+        d.update(o)
+        if o.get("buildup_30"):
+            d["why"] += f" · futures OI {o['oi_30_pct']:+.1f}% in 30 min ({o['buildup_30'].lower()})"
+        picks.append(d)
+    return {"day": day, "time": cut, "final": now.strftime("%H:%M") >= CLOSE_AT, "indices": idx, "stocks": picks}
+
+
+def _clean(x):
+    if isinstance(x, dict):
+        return {k: _clean(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_clean(v) for v in x]
+    if isinstance(x, (np.floating, float)):
+        return None if not np.isfinite(x) else float(x)
+    if isinstance(x, (np.integer,)):
+        return int(x)
+    if isinstance(x, np.bool_):
+        return bool(x)
+    return x
+
+
+def record_closing(read: dict):
+    """Stores the 15:15 picks once (<data>/closing/<day>.json and Supabase closing_picks), to be scored next day."""
+    f = _close_file(read["day"])
+    if f.exists():
+        return
+    read = _clean(read)
+    f.write_text(json.dumps(read, default=str))
+    rows = []
+    for r in read["indices"]:
+        rows.append({"day": read["day"], "time": r["time"], "kind": "index", "symbol": r["key"], "side": int(r["side"]),
+                     "price": float(r["price"]), "score": None, "tested": bool(r["tested"]), "verdict": r["verdict"],
+                     "reasons": ", ".join(r.get("confirmations") or []) or None,
+                     "readings": {k: r.get(k) for k in ("clv", "ret_day", "ret_atr", "net_30", "breadth", "breadth_chg_30",
+                                                         "oi_30_pct", "buildup_30", "writers_30")}})
+    for r in read["stocks"]:
+        rows.append({"day": read["day"], "time": r["time"], "kind": "stock", "symbol": r["symbol"], "side": int(r["side"]),
+                     "price": float(r["price"]), "score": r.get("score"), "tested": False,
+                     "verdict": "BUY (untested)" if r["side"] > 0 else "SELL (untested)", "reasons": r.get("why"),
+                     "readings": {k: r.get(k) for k in ("sector", "clv", "ret_day", "ret_30", "net_30", "net_15", "flow_30",
+                                                         "vol_30_x", "sec_net_30", "oi_30_pct", "buildup_30")}})
+    try:
+        if rows:
+            _cloud().upsert_rows("closing_picks", _clean(rows), "day,kind,symbol")
+    except Exception as e:
+        log(f"closing_picks: {e}")
+    log(f"closing picks recorded: {len(read['indices'])} indices, {len(read['stocks'])} stocks")
+
+
+def score_closing(mkt: "Market", today: str, final: bool = False):
+    """Every recorded day before today whose picks are not scored: the next trading day's open (gap) and close,
+    after costs (0.02% index futures, 0.12% stocks). At the open only the gap is filled; the close at 15:35."""
+    import closing as CL
+    files = sorted(CLOSE_DIR.glob("*.json")) if CLOSE_DIR.exists() else []
+    for f in files[-10:]:
+        if f.stem >= today:
+            continue
+        try:
+            rec = json.loads(f.read_text())
+        except Exception:
+            continue
+        if rec.get("scored") == "close":
+            continue
+        rows, changed = [], False
+        for kind, lst, key in (("index", rec.get("indices", []), "key"), ("stock", rec.get("stocks", []), "symbol")):
+            cost = 0.02 if kind == "index" else 0.12
+            for r in lst:
+                b = mkt.bars(r[key])
+                if b is None or b.empty:
+                    continue
+                nxt_day = sorted(d for d in set(b.index.normalize()) if d.strftime("%Y-%m-%d") > rec["day"])
+                if not nxt_day:
+                    continue
+                nx = b[b.index.normalize() == nxt_day[0]]
+                side = int(r.get("side") or 0) or 1   # a NO TRADE index read is scored as a long, to compare with the picks
+                res = CL.score_next_day(float(r["price"]), side, nx)
+                if not res:
+                    continue
+                res = {k: round(v, 3) for k, v in res.items()}
+                res["open_pct"] = round(res["open_pct"] - cost, 3)
+                res["close_pct"] = round(res["close_pct"] - cost, 3)
+                res["next_day"] = nxt_day[0].strftime("%Y-%m-%d")
+                if any(r.get(k) != v for k, v in res.items()):
+                    r.update(res)
+                    changed = True
+                rows.append({"day": rec["day"], "kind": kind, "symbol": r[key], **res})
+        if not rows:
+            continue
+        nxt_done = all(x["next_day"] < today for x in rows) or final
+        rec["scored"] = "close" if nxt_done else "open"
+        f.write_text(json.dumps(rec, default=str))
+        if changed:
+            try:
+                _cloud().upsert_rows("closing_picks", _clean(rows), "day,kind,symbol")
+            except Exception as e:
+                log(f"closing_picks score: {e}")
+
+
 def plan_for(mkt: "Market", stock: str, side: int) -> dict | None:
     """Entry / stop / targets for a stock idea, the same plan as the Momentum Funnel (funnel.trade_plan)."""
     import funnel as FN
@@ -837,6 +1045,14 @@ def cycle(mkt: Market) -> dict:
         track_trades(mkt, now.strftime("%Y-%m-%d"), collect_signals(mkt, fun) + idea_sigs)
     except Exception as e:
         log(f"trades: {e}")
+    closing = None
+    if now.strftime("%H:%M") >= CLOSE_FROM:
+        try:
+            closing = closing_read(mkt, now)
+            if closing["final"]:
+                record_closing(closing)
+        except Exception as e:
+            log(f"closing: {e}")
     last_bar = max((b.index.max() for b in mkt.today.values() if b is not None and not b.empty), default=None)
     health = {"stocks_live": int(len(L)), "last_candle": str(last_bar)[11:16] if last_bar is not None else None,
               "oi_from_recorder": int(len(oi)), "odds_days": mkt.odds.get("days"), "odds_built": mkt.odds.get("built"),
@@ -844,7 +1060,7 @@ def cycle(mkt: Market) -> dict:
     return {"updated": now.isoformat(timespec="seconds"), "health": health, "feed": mkt.feed[:120],
             "bots": {"index": idx, "sector": sec, "movers": mov, "unusual": unu, "radar": radar, "master": master},
             "odds_check": _odds_check(), "funnel": {k: v for k, v in fun.items() if k != "plans"}, "indices": ixs,
-            "trades": mkt.trades, "momentum": mkt.momentum}
+            "trades": mkt.trades, "momentum": mkt.momentum, "closing": closing}
 
 
 def save(state: dict):
@@ -891,12 +1107,12 @@ def main():
         cfg = D.load_config()
     mkt = Market(cfg)
     mkt.load()
-    day, seen, scored, last, logged = None, {}, False, 0.0, set()
+    day, seen, scored, last, logged, opened = None, {}, False, 0.0, set(), False
     while True:
         now = datetime.now(IST)
         try:
             if now.strftime("%Y-%m-%d") != day:
-                day, seen, scored, logged = now.strftime("%Y-%m-%d"), {}, False, set()
+                day, seen, scored, logged, opened = now.strftime("%Y-%m-%d"), {}, False, set(), False
                 mkt.today, mkt.feed, mkt.ev_seen = {}, [], set()
                 try:  # a restart in the day keeps the day's trades
                     mkt.trades = json.loads(_trade_file(day).read_text())
@@ -912,6 +1128,12 @@ def main():
                 save(state)
                 log_ideas(day, state["bots"]["master"]["ideas"], seen)
                 log_radar(day, mkt.feed, logged)
+                if now.strftime("%H:%M") >= "09:20" and not opened:
+                    opened = True
+                    try:
+                        score_closing(mkt, day)
+                    except Exception as e:
+                        log(f"closing score: {e}")
             if not market_open(now) and now.weekday() < 5 and now.strftime("%H:%M") >= "15:35" and not scored:
                 scored = True
                 if seen:
@@ -921,6 +1143,10 @@ def main():
                 if mkt.trades:
                     track_trades(mkt, day, [], final=True)
                     log(f"closed {len(mkt.trades)} signals")
+                try:
+                    score_closing(mkt, (now + pd.Timedelta(days=1)).strftime("%Y-%m-%d"), final=True)
+                except Exception as e:
+                    log(f"closing score: {e}")
             if research_due(now):
                 run_research()
                 mkt.odds = load_odds(mkt.syms, force=True)   # tonight's history joins the odds

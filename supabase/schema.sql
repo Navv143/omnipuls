@@ -132,3 +132,15 @@ create table if not exists public.trade_signals (
   unique (day, source, symbol)
 );
 alter table public.trade_signals enable row level security;
+
+-- Closing picks (buy near the close, sell next day): recorded at 15:15 by bots.py, scored on the next trading day
+create table if not exists public.closing_picks (
+  id bigint generated always as identity primary key,
+  day date not null, time text, kind text not null, symbol text not null, side smallint,
+  price double precision, score double precision, tested boolean, verdict text, reasons text, readings jsonb,
+  next_day date, next_open double precision, next_close double precision,
+  open_pct double precision, close_pct double precision, next_high_pct double precision,
+  updated_at timestamptz not null default now(),
+  unique (day, kind, symbol)
+);
+alter table public.closing_picks enable row level security;
