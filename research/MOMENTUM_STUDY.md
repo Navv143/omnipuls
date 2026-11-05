@@ -313,3 +313,17 @@ its fade. Structure stop at the signal candle, only small stops (0.1-0.5 ATR), e
 positive - first-hour break 0.00R (Nifty) / -0.14R (Bank Nifty); best Nifty first-hour breakdown short +0.09R (t 1.0,
 every year positive); pdh / gap / sweep versions -0.35R to +0.2R, none significant. A tight index stop is mostly hit by
 normal noise. "Nifty ORB break" added as a paper record to see whether the 5-min version holds on new days.
+
+## The option sellers' edge: what options promise vs what happens (5 Nov 2026, `research/option_edge_study.py`)
+Daily Nifty and India VIX 2015-2026 (Yahoo), hourly Nifty 3 years.
+- Volatility premium is real and persistent: VIX was above the next month's realized volatility on 79% of days (avg 16.5
+  vs 14.1). Short ATM straddle proxy (Black-Scholes at VIX): 1-day wins 69% (avg +0.14% of the index); 1-week wins 64%
+  (avg +0.24% a week), positive in every year 2015-2026, last 12 months +0.26% - but worst weeks -12% (Mar 2020),
+  -3% to -6% in other bad weeks: never unhedged.
+- Weekly iron fly (bought wings at 2 weekly SDs, defined risk): wins 62% of weeks, avg +0.20% of the index a week, max
+  loss ~2.8%; positive every year (2024 +0.01%, 2026 so far +0.07% - thin years); the buyer of the same (retail side)
+  loses -0.20% a week. Wings at 1.5 SD: +0.16%, max loss 1.7%. Caveats: Black-Scholes at VIX (real wings cost more -
+  skew), no brokerage / STT / slippage on 4 legs, weekly IV differs from the 30-day VIX: to be checked on real option
+  prices from the recorder before any money.
+- Expected-move fade (Nifty already beyond the VIX-implied day move by 11:15-14:15, 28% of days): no snap-back (-0.03%).
+- Expiry pin to 100-point strikes: none worth trading (close 24.4 vs 25.4 pts from a strike, 33% vs 29% within 15 pts).
