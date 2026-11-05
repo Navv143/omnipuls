@@ -60,3 +60,15 @@ index money and breadth from their stocks (weighted). Signal = first candle 9:30
 By day (all indices) +0.11% (t 1.5); Nifty alone +0.25% a signal, 61% wins, t 2.6, both halves positive; Bank
 Nifty about zero (fading it also loses). Most signals fire at 9:30-9:35. Promising, not proven: the server re-runs it
 nightly on a year of Dhan data.
+
+## Bank Nifty variants (5 Nov 2026, Yahoo 52 days, `index_funnel.banknifty_study`)
+| Variant | Trades | %/trade | ≈ pts | Win % | 1st / 2nd half % |
+|---|---|---|---|---|---|
+| Funnel (steps 1-4) | 27 | -0.00 | -1 | 48 | +0.08 / -0.08 |
+| Funnel from 10:00 | 20 | +0.03 | 16 | 50 | +0.09 / -0.03 |
+| Nifty 50 money as the leader | 28 | +0.04 | 21 | 54 | +0.08 / -0.00 |
+| Funnel + Nifty money | 25 | +0.05 | 26 | 52 | +0.13 / -0.03 |
+| **Failed break of yesterday's high/low, faded** | 33 | **+0.12** | **67** | **61** | +0.11 / +0.13 |
+HDFC+ICICI money as the leader, shorter holds (30-90 min) and fading money divergences did not help. The failed-break
+fade matches the older research (Bank Nifty breaks usually fail). Re-tested nightly on the Dhan year and, with the
+OI step, on the server's index snapshots (Supabase index_log) after a week of data.

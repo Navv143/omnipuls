@@ -625,6 +625,64 @@ def funnel_snapshot(mkt: "Market", now: datetime) -> dict:
                 ["Stock", "Sector", "side", "price", "move_pct", "time", "day_x", "now_x", "range_x", "score", "sec_net", "net",
                  "net_before", "why"]].to_dict("records")}
 
+
+def _latest_chain(index: str, day: str) -> tuple[float, pd.DataFrame]:
+    """The recorder's latest option-chain snapshot (nearest expiry) for an index, in the app's column names."""
+    d = OUT.parent / "option_chain" / "parts" / day
+    files = sorted(d.glob("*.parquet")) if d.exists() else []
+    for f in reversed(files[-3:]):
+        try:
+            c = pd.read_parquet(f)
+        except Exception:
+            continue
+        c = c[c["index"] == index]
+        if c.empty:
+            continue
+        c = c[c["time"] == c["time"].max()]
+        c = c[c["expiry"] == c["expiry"].min()]
+        ren = {"strike": "Strike", "ce_oi": "CE OI", "pe_oi": "PE OI", "ce_chg_oi": "CE Chg OI", "pe_chg_oi": "PE Chg OI"}
+        return float(c["spot"].iloc[0]), c.rename(columns=ren)
+    return 0.0, pd.DataFrame()
+
+
+def index_snapshot(mkt: "Market", now: datetime) -> list:
+    """Every 5 minutes: each index's funnel steps, index money, futures OI and option OI, to Supabase index_log, so
+    the OI step (and Bank Nifty variants) can be tested later on what was known at each moment."""
+    import index_funnel as IF
+    import index_levels as LV
+    stocks = mkt.stock_bars()
+    vix = mkt.bars("INDIAVIX")
+    day = now.strftime("%Y-%m-%d")
+    rows = []
+    for k in IF.INDEXES:
+        t = IF.index_table(mkt.bars(k), stocks, mkt.weights.get(k, {}), vix, today_only=True)
+        if t.empty:
+            continue
+        r = t.iloc[-1]
+        side = int(r["side"])
+        fo = LV.futures_oi(mkt.fut.get(k)) if mkt.fut.get(k) is not None else {}
+        spot, ch = _latest_chain(k, day) if k in ("NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX") else (0.0, pd.DataFrame())
+        co = LV.chain_oi(ch, spot or float(r["Close"])) if not ch.empty else {}
+        oi = LV.oi_step(side, fo, co)
+        rows.append({"day": day, "time": f"{(int(r['m']) + 5) // 60:02d}:{(int(r['m']) + 5) % 60:02d}", "index": k,
+                     "price": float(r["Close"]), "move_pct": _f(r["move_pct"], 3), "side": side,
+                     "day_x": _f(r["day_x"], 3), "now_x": _f(r["now_x"], 3), "range_x": _f(r["range_x"], 3),
+                     "net": _f(r["net"], 2), "net_before": _f(r["net_before"], 2), "buy_share": _f(r["buy_share"], 1),
+                     "breadth": _f(r["breadth_with"], 1), "vix_chg": _f(r["vix_chg"], 2),
+                     "fut_oi": _f(fo.get("oi"), 0), "fut_oi_chg": _f(fo.get("oi_chg_pct"), 3),
+                     "fut_buildup": fo.get("buildup_day") or None, "fut_buildup_15m": fo.get("buildup_15m") or None,
+                     "ce_oi": _f(co.get("ce_oi"), 0), "pe_oi": _f(co.get("pe_oi"), 0),
+                     "ce_chg_near": _f(co.get("ce_chg_near"), 0), "pe_chg_near": _f(co.get("pe_chg_near"), 0),
+                     "pcr": _f(co.get("pcr"), 3), "support": (co.get("support") or [None])[0],
+                     "resistance": (co.get("resistance") or [None])[0], "writers": co.get("writers"),
+                     "step": sum(int(bool(r[f"step{i}"])) for i in (1, 2, 3, 4)), "oi_pass": bool(oi["pass"])})
+    try:
+        if rows:
+            _cloud().upsert_rows("index_log", rows, "day,time,index")
+    except Exception as e:
+        log(f"index_log: {e}")
+    return rows
+
 # ---------------------------------------------------------------- loop
 
 
@@ -650,13 +708,17 @@ def cycle(mkt: Market) -> dict:
     except Exception as e:
         fun = {"error": str(e)[:200]}
     master = master_bot(L, idx, sec, mov, unu, vix_chg, radar, fun.get("top"))
+    try:
+        ixs = index_snapshot(mkt, now)
+    except Exception as e:
+        ixs = [{"error": str(e)[:200]}]
     last_bar = max((b.index.max() for b in mkt.today.values() if b is not None and not b.empty), default=None)
     health = {"stocks_live": int(len(L)), "last_candle": str(last_bar)[11:16] if last_bar is not None else None,
               "oi_from_recorder": int(len(oi)), "odds_days": mkt.odds.get("days"), "odds_built": mkt.odds.get("built"),
               "research_run": (research or {}).get("run_at"), "errors": STATUS["errors"][-3:]}
     return {"updated": now.isoformat(timespec="seconds"), "health": health, "feed": mkt.feed[:120],
             "bots": {"index": idx, "sector": sec, "movers": mov, "unusual": unu, "radar": radar, "master": master},
-            "odds_check": _odds_check(), "funnel": fun}
+            "odds_check": _odds_check(), "funnel": fun, "indices": ixs}
 
 
 def save(state: dict):

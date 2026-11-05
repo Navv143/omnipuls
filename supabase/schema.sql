@@ -105,3 +105,19 @@ create table if not exists public.funnel_log (
   unique (day, time, stock)
 );
 alter table public.funnel_log enable row level security;
+
+-- Index snapshots (bots.py, every 5 minutes): funnel steps, index money, futures OI and option OI per index.
+create table if not exists public.index_log (
+  id bigint generated always as identity primary key,
+  day date not null, time text not null, index text not null,
+  price double precision, move_pct double precision, side smallint,
+  day_x double precision, now_x double precision, range_x double precision,
+  net double precision, net_before double precision, buy_share double precision, breadth double precision,
+  vix_chg double precision, fut_oi double precision, fut_oi_chg double precision, fut_buildup text, fut_buildup_15m text,
+  ce_oi double precision, pe_oi double precision, ce_chg_near double precision, pe_chg_near double precision,
+  pcr double precision, support double precision, resistance double precision, writers smallint,
+  step smallint, oi_pass boolean,
+  updated_at timestamptz not null default now(),
+  unique (day, time, index)
+);
+alter table public.index_log enable row level security;
