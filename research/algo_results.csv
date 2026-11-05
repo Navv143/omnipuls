@@ -1,0 +1,221 @@
+market,setup,n,per_wk,win,avgR,tune,test,yrs_pos,t,stop%
+BTC,Asia range fade 2R [London],918,4.6,33,-0.457,-0.491,-0.422,0/4,-9.65,0.15
+BTC,Asia range fade 2R [London] +4H bias,460,2.3,34,-0.403,-0.485,-0.325,0/4,-5.95,0.15
+BTC,Asia range fade→other side [London],909,4.6,15,-0.302,-0.379,-0.222,0/4,-2.7,0.15
+BTC,Asia range fade→other side [London] +4H bias,460,2.3,17,-0.208,-0.274,-0.144,1/4,-1.39,0.15
+BTC,Asia range break 2R [London],948,4.8,34,-0.2,-0.224,-0.178,0/4,-4.35,0.24
+BTC,Asia range break 2R [London] +4H bias,485,2.5,39,-0.074,-0.138,-0.008,2/4,-1.12,0.24
+BTC,Asia range fade 2R [NY],1196,6.0,34,-0.306,-0.315,-0.296,0/4,-7.53,0.22
+BTC,Asia range fade 2R [NY] +4H bias,600,3.0,34,-0.302,-0.342,-0.256,0/4,-5.28,0.22
+BTC,Asia range fade→other side [NY],1175,5.9,24,-0.317,-0.328,-0.304,0/4,-4.74,0.22
+BTC,Asia range fade→other side [NY] +4H bias,598,3.0,23,-0.31,-0.361,-0.251,0/4,-3.25,0.22
+BTC,Asia range break 2R [NY],1186,6.0,35,-0.165,-0.186,-0.142,0/4,-4.13,0.27
+BTC,Asia range break 2R [NY] +4H bias,613,3.1,35,-0.187,-0.191,-0.184,0/4,-3.38,0.26
+BTC,London range fade 2R [NY],1467,7.4,32,-0.38,-0.33,-0.434,0/4,-10.39,0.22
+BTC,London range fade 2R [NY] +4H bias,770,3.9,32,-0.387,-0.399,-0.373,0/4,-7.74,0.22
+BTC,London range fade→other side [NY],1445,7.3,26,-0.32,-0.237,-0.412,0/4,-5.6,0.22
+BTC,London range fade→other side [NY] +4H bias,765,3.9,26,-0.344,-0.305,-0.39,0/4,-4.77,0.22
+BTC,London range break 2R [NY],1535,7.8,33,-0.235,-0.258,-0.21,0/4,-6.81,0.27
+BTC,London range break 2R [NY] +4H bias,797,4.0,34,-0.217,-0.19,-0.245,0/4,-4.5,0.26
+BTC,Prev day H/L fade 2R [07-20],828,4.2,33,-0.338,-0.211,-0.455,0/4,-7.02,0.23
+BTC,Prev day H/L fade 2R [07-20] +4H bias,394,2.0,33,-0.366,-0.265,-0.446,0/4,-5.28,0.22
+BTC,Prev day H/L fade→other side [07-20],819,4.1,18,-0.419,-0.368,-0.467,0/4,-3.96,0.23
+BTC,Prev day H/L fade→other side [07-20] +4H bias,393,2.0,18,-0.464,-0.481,-0.45,0/4,-2.75,0.22
+BTC,Prev day H/L break 2R [07-20],850,4.3,35,-0.16,-0.169,-0.152,0/4,-3.35,0.27
+BTC,Prev day H/L break 2R [07-20] +4H bias,451,2.3,36,-0.141,-0.177,-0.106,0/4,-2.14,0.27
+BTC,Prev 4H candle H/L fade 2R [24h],2761,14.0,35,-0.416,-0.425,-0.407,0/4,-14.96,0.14
+BTC,Prev 4H candle H/L fade 2R [24h] +4H bias,2368,12.0,36,-0.355,-0.339,-0.372,0/4,-12.09,0.15
+BTC,Prev 4H candle H/L fade→other side [24h],2753,13.9,20,-0.283,-0.239,-0.329,0/4,-4.88,0.15
+BTC,Prev 4H candle H/L fade→other side [24h] +4H bias,2349,11.9,22,-0.238,-0.189,-0.29,0/4,-4.09,0.15
+BTC,Prev 4H candle H/L break 2R [24h],2763,14.0,33,-0.236,-0.245,-0.226,0/4,-8.86,0.24
+BTC,Prev 4H candle H/L break 2R [24h] +4H bias,2351,11.9,35,-0.166,-0.155,-0.178,0/4,-5.88,0.24
+BTC,Prev 1H candle H/L fade 2R [07-20],2771,14.0,34,-0.536,-0.455,-0.622,0/4,-19.05,0.11
+BTC,Prev 1H candle H/L fade 2R [07-20] +4H bias,2727,13.8,34,-0.533,-0.467,-0.603,0/4,-18.89,0.12
+BTC,Prev 1H candle H/L fade→other side [07-20],2771,14.0,26,-0.542,-0.472,-0.616,0/4,-13.47,0.11
+BTC,Prev 1H candle H/L fade→other side [07-20] +4H bias,2719,13.7,27,-0.521,-0.459,-0.587,0/4,-12.98,0.12
+BTC,Prev 1H candle H/L break 2R [07-20],2767,14.0,34,-0.216,-0.222,-0.209,0/4,-8.0,0.22
+BTC,Prev 1H candle H/L break 2R [07-20] +4H bias,2702,13.7,35,-0.199,-0.19,-0.208,0/4,-7.31,0.22
+BTC,VP prev day: fade VAH/VAL → POC,1240,6.2,27,-0.492,-0.473,-0.515,0/4,-5.46,0.15
+BTC,VP prev day: fade VAH/VAL → POC +4H bias,612,3.1,27,-0.588,-0.611,-0.561,0/4,-7.04,0.15
+BTC,VP prev day: 80% rule,337,1.7,42,-0.064,-0.099,-0.028,1/4,-0.89,0.65
+BTC,VP Asia session: fade edges → POC [London-NY],1993,10.0,30,-0.738,-0.683,-0.799,0/4,-11.39,0.11
+BTC,VP Asia session: fade edges +4H bias,1000,5.0,30,-0.767,-0.71,-0.832,0/4,-9.86,0.11
+BTC,EMA 9/21 cross 5m,2731,13.7,35,-0.224,-0.231,-0.216,0/4,-8.36,0.26
+BTC,EMA 9/21 cross 5m +4H bias,2661,13.3,36,-0.209,-0.215,-0.204,0/4,-7.8,0.26
+BTC,EMA 20/50 cross 5m,2429,12.2,34,-2.571,-0.486,-4.918,0/4,-1.65,0.25
+BTC,EMA 20/50 cross 5m +4H bias,1891,9.5,35,-2.531,-0.473,-4.847,0/4,-1.19,0.26
+BTC,EMA 9/21 cross 15m,2253,11.3,32,-17.54,-8.493,-27.813,0/4,-3.3,0.2
+BTC,EMA 9/21 cross 15m +4H bias,1583,7.9,34,-17.097,-5.796,-29.905,0/4,-2.65,0.2
+BTC,EMA 20/50 cross 15m,1345,6.7,32,-15.078,-16.019,-14.022,0/4,-2.75,0.19
+BTC,EMA 20/50 cross 15m +4H bias,760,3.8,32,-10.224,-19.035,-0.788,0/4,-2.14,0.2
+BTC,EMA 9/21 cross + VWAP side 5m,2590,13.0,37,-0.17,-0.187,-0.152,0/4,-6.14,0.28
+BTC,EMA 9/21 cross + VWAP side + 4H bias 5m,1792,9.0,37,-0.174,-0.2,-0.144,0/4,-5.38,0.29
+BTC,VWAP cross with EMA9>21,2094,10.5,35,-0.221,-0.246,-0.193,0/4,-6.97,0.31
+BTC,VWAP cross with EMA9>21 +4H bias,1427,7.1,37,-0.176,-0.17,-0.182,0/4,-4.64,0.3
+BTC,HTF bias (4H+1H) + 5m EMA20 pullback 2R,2044,10.2,35,-0.198,-0.252,-0.136,0/4,-6.4,0.29
+BTC,HTF bias (4H+1H) + 5m EMA20 pullback 3R,1998,10.0,29,-0.191,-0.251,-0.122,0/4,-5.09,0.29
+ETH,Asia range fade 2R [London],897,4.5,31,-0.387,-0.427,-0.346,0/4,-8.21,0.2
+ETH,Asia range fade 2R [London] +4H bias,474,2.4,29,-0.431,-0.346,-0.52,0/4,-6.8,0.2
+ETH,Asia range fade→other side [London],885,4.5,13,-0.371,-0.515,-0.223,0/4,-3.78,0.2
+ETH,Asia range fade→other side [London] +4H bias,474,2.4,12,-0.408,-0.632,-0.174,0/4,-2.99,0.2
+ETH,Asia range break 2R [London],933,4.7,32,-0.19,-0.178,-0.201,0/4,-4.15,0.34
+ETH,Asia range break 2R [London] +4H bias,442,2.3,32,-0.191,-0.203,-0.179,0/4,-2.88,0.33
+ETH,Asia range fade 2R [NY],1204,6.1,33,-0.286,-0.325,-0.242,0/4,-7.28,0.3
+ETH,Asia range fade 2R [NY] +4H bias,629,3.2,34,-0.248,-0.301,-0.189,0/4,-4.58,0.3
+ETH,Asia range fade→other side [NY],1172,5.9,24,-0.227,-0.225,-0.23,0/4,-3.25,0.3
+ETH,Asia range fade→other side [NY] +4H bias,627,3.2,24,-0.272,-0.235,-0.313,0/4,-3.16,0.3
+ETH,Asia range break 2R [NY],1156,5.8,34,-0.172,-0.201,-0.14,0/4,-4.31,0.35
+ETH,Asia range break 2R [NY] +4H bias,578,2.9,34,-0.174,-0.249,-0.094,0/4,-3.08,0.36
+ETH,London range fade 2R [NY],1427,7.2,32,-0.32,-0.323,-0.316,0/4,-8.82,0.28
+ETH,London range fade 2R [NY] +4H bias,754,3.8,32,-0.314,-0.252,-0.384,0/4,-6.31,0.29
+ETH,London range fade→other side [NY],1404,7.1,23,-0.322,-0.322,-0.321,0/4,-5.77,0.28
+ETH,London range fade→other side [NY] +4H bias,750,3.8,25,-0.291,-0.198,-0.395,0/4,-3.73,0.28
+ETH,London range break 2R [NY],1457,7.4,35,-0.126,-0.177,-0.069,0/4,-3.5,0.36
+ETH,London range break 2R [NY] +4H bias,730,3.7,35,-0.13,-0.238,-0.006,1/4,-2.53,0.35
+ETH,Prev day H/L fade 2R [07-20],858,4.3,35,-0.21,-0.19,-0.23,0/4,-4.44,0.3
+ETH,Prev day H/L fade 2R [07-20] +4H bias,409,2.1,35,-0.193,-0.121,-0.277,1/4,-2.8,0.29
+ETH,Prev day H/L fade→other side [07-20],846,4.3,20,-0.19,-0.268,-0.11,1/4,-1.97,0.29
+ETH,Prev day H/L fade→other side [07-20] +4H bias,409,2.1,21,-0.245,-0.191,-0.309,1/4,-1.95,0.29
+ETH,Prev day H/L break 2R [07-20],846,4.3,36,-0.091,-0.135,-0.048,1/4,-1.91,0.38
+ETH,Prev day H/L break 2R [07-20] +4H bias,437,2.2,35,-0.113,-0.091,-0.134,1/4,-1.71,0.37
+ETH,Prev 4H candle H/L fade 2R [24h],2762,14.0,35,-0.295,-0.338,-0.249,0/4,-10.78,0.19
+ETH,Prev 4H candle H/L fade 2R [24h] +4H bias,2359,11.9,35,-0.292,-0.298,-0.284,0/4,-10.12,0.2
+ETH,Prev 4H candle H/L fade→other side [24h],2753,13.9,19,-0.224,-0.165,-0.287,0/4,-4.11,0.2
+ETH,Prev 4H candle H/L fade→other side [24h] +4H bias,2336,11.8,20,-0.264,-0.237,-0.293,0/4,-4.87,0.21
+ETH,Prev 4H candle H/L break 2R [24h],2761,14.0,34,-0.147,-0.162,-0.13,0/4,-5.46,0.33
+ETH,Prev 4H candle H/L break 2R [24h] +4H bias,2289,11.6,34,-0.128,-0.185,-0.067,0/4,-4.49,0.34
+ETH,Prev 1H candle H/L fade 2R [07-20],2771,14.0,34,-0.388,-0.43,-0.343,0/4,-14.04,0.15
+ETH,Prev 1H candle H/L fade 2R [07-20] +4H bias,2739,13.8,34,-0.377,-0.416,-0.335,0/4,-13.69,0.16
+ETH,Prev 1H candle H/L fade→other side [07-20],2771,14.0,28,-0.364,-0.403,-0.322,0/4,-9.26,0.15
+ETH,Prev 1H candle H/L fade→other side [07-20] +4H bias,2739,13.8,27,-0.399,-0.431,-0.365,0/4,-10.41,0.16
+ETH,Prev 1H candle H/L break 2R [07-20],2762,14.0,34,-0.153,-0.178,-0.127,0/4,-5.67,0.3
+ETH,Prev 1H candle H/L break 2R [07-20] +4H bias,2694,13.6,33,-0.187,-0.254,-0.116,0/4,-6.92,0.3
+ETH,VP prev day: fade VAH/VAL → POC,1226,6.1,27,-0.362,-0.451,-0.263,0/4,-5.13,0.2
+ETH,VP prev day: fade VAH/VAL → POC +4H bias,628,3.1,30,-0.244,-0.453,0.018,1/4,-2.29,0.2
+ETH,VP prev day: 80% rule,314,1.6,50,0.076,0.184,-0.052,2/4,1.05,0.88
+ETH,VP Asia session: fade edges → POC [London-NY],1929,9.7,34,-0.466,-0.499,-0.43,0/4,-10.05,0.16
+ETH,VP Asia session: fade edges +4H bias,989,5.0,34,-0.483,-0.554,-0.404,0/4,-7.6,0.16
+ETH,EMA 9/21 cross 5m,2732,13.7,35,-0.205,-0.201,-0.211,0/4,-7.2,0.34
+ETH,EMA 9/21 cross 5m +4H bias,2663,13.3,35,-0.165,-0.184,-0.143,0/4,-6.12,0.34
+ETH,EMA 20/50 cross 5m,2389,12.0,36,-0.219,-0.281,-0.151,0/4,-5.61,0.34
+ETH,EMA 20/50 cross 5m +4H bias,1869,9.4,35,-0.231,-0.325,-0.122,0/4,-4.98,0.34
+ETH,EMA 9/21 cross 15m,2168,10.8,34,-0.961,-1.04,-0.872,0/4,-5.83,0.27
+ETH,EMA 9/21 cross 15m +4H bias,1498,7.5,34,-1.009,-1.081,-0.926,0/4,-4.73,0.27
+ETH,EMA 20/50 cross 15m,1337,6.7,33,-1.083,-1.184,-0.973,0/4,-4.6,0.25
+ETH,EMA 20/50 cross 15m +4H bias,743,3.7,32,-1.034,-1.266,-0.78,0/4,-3.17,0.26
+ETH,EMA 9/21 cross + VWAP side 5m,2567,12.8,37,-0.098,-0.14,-0.052,0/4,-3.56,0.36
+ETH,EMA 9/21 cross + VWAP side + 4H bias 5m,1734,8.7,38,-0.085,-0.147,-0.017,1/4,-2.56,0.38
+ETH,VWAP cross with EMA9>21,2057,10.3,37,-0.107,-0.089,-0.129,1/4,-3.56,0.42
+ETH,VWAP cross with EMA9>21 +4H bias,1375,6.9,37,-0.117,-0.116,-0.118,0/4,-3.19,0.4
+ETH,HTF bias (4H+1H) + 5m EMA20 pullback 2R,1976,9.9,37,-0.089,-0.164,-0.004,1/4,-2.83,0.38
+ETH,HTF bias (4H+1H) + 5m EMA20 pullback 3R,1922,9.6,30,-0.097,-0.192,0.013,1/4,-2.54,0.38
+SOL,Asia range fade 2R [London],936,4.7,32,-0.305,-0.22,-0.39,0/4,-6.56,0.27
+SOL,Asia range fade 2R [London] +4H bias,456,2.3,35,-0.219,-0.142,-0.293,1/4,-3.21,0.27
+SOL,Asia range fade→other side [London],925,4.7,13,-0.318,-0.266,-0.371,0/4,-3.16,0.27
+SOL,Asia range fade→other side [London] +4H bias,456,2.3,14,-0.2,-0.243,-0.159,0/4,-1.32,0.27
+SOL,Asia range break 2R [London],947,4.8,33,-0.139,-0.12,-0.157,0/4,-3.03,0.48
+SOL,Asia range break 2R [London] +4H bias,489,2.5,35,-0.085,-0.078,-0.093,1/4,-1.32,0.49
+SOL,Asia range fade 2R [NY],1120,5.7,34,-0.222,-0.231,-0.213,0/4,-5.32,0.4
+SOL,Asia range fade 2R [NY] +4H bias,542,2.7,34,-0.235,-0.266,-0.206,0/4,-3.93,0.37
+SOL,Asia range fade→other side [NY],1108,5.6,22,-0.313,-0.244,-0.385,0/4,-5.1,0.4
+SOL,Asia range fade→other side [NY] +4H bias,541,2.7,22,-0.273,-0.213,-0.331,0/4,-2.91,0.37
+SOL,Asia range break 2R [NY],1109,5.6,36,-0.067,-0.007,-0.126,1/4,-1.61,0.5
+SOL,Asia range break 2R [NY] +4H bias,577,2.9,37,-0.031,-0.024,-0.037,2/4,-0.52,0.5
+SOL,London range fade 2R [NY],1427,7.2,32,-0.253,-0.215,-0.293,0/4,-6.91,0.38
+SOL,London range fade 2R [NY] +4H bias,735,3.7,33,-0.253,-0.194,-0.316,0/4,-4.9,0.37
+SOL,London range fade→other side [NY],1397,7.1,23,-0.227,-0.224,-0.231,0/4,-3.71,0.38
+SOL,London range fade→other side [NY] +4H bias,733,3.7,24,-0.242,-0.336,-0.141,1/4,-3.0,0.37
+SOL,London range break 2R [NY],1434,7.2,37,-0.037,0.032,-0.108,2/4,-1.0,0.49
+SOL,London range break 2R [NY] +4H bias,724,3.7,38,-0.014,0.07,-0.094,2/4,-0.27,0.49
+SOL,Prev day H/L fade 2R [07-20],879,4.5,30,-0.339,-0.289,-0.388,0/4,-7.43,0.35
+SOL,Prev day H/L fade 2R [07-20] +4H bias,402,2.0,32,-0.28,-0.264,-0.296,0/4,-4.11,0.33
+SOL,Prev day H/L fade→other side [07-20],873,4.4,15,-0.455,-0.371,-0.539,0/4,-5.46,0.35
+SOL,Prev day H/L fade→other side [07-20] +4H bias,401,2.0,15,-0.407,-0.212,-0.6,0/4,-3.22,0.33
+SOL,Prev day H/L break 2R [07-20],892,4.5,36,-0.061,-0.078,-0.043,1/4,-1.28,0.49
+SOL,Prev day H/L break 2R [07-20] +4H bias,478,2.4,36,-0.038,-0.081,0.007,1/4,-0.59,0.5
+SOL,Prev 4H candle H/L fade 2R [24h],2757,13.9,34,-0.228,-0.125,-0.338,0/4,-8.23,0.28
+SOL,Prev 4H candle H/L fade 2R [24h] +4H bias,2364,11.9,35,-0.237,-0.181,-0.296,0/4,-8.22,0.29
+SOL,Prev 4H candle H/L fade→other side [24h],2746,13.9,19,-0.151,-0.041,-0.269,0/4,-2.8,0.28
+SOL,Prev 4H candle H/L fade→other side [24h] +4H bias,2344,11.8,21,-0.18,-0.046,-0.323,1/4,-3.18,0.29
+SOL,Prev 4H candle H/L break 2R [24h],2764,14.0,33,-0.161,-0.158,-0.163,0/4,-6.04,0.46
+SOL,Prev 4H candle H/L break 2R [24h] +4H bias,2361,11.9,35,-0.097,-0.077,-0.118,0/4,-3.42,0.47
+SOL,Prev 1H candle H/L fade 2R [07-20],2771,14.0,35,-0.255,-0.154,-0.363,0/4,-9.14,0.24
+SOL,Prev 1H candle H/L fade 2R [07-20] +4H bias,2728,13.8,35,-0.245,-0.184,-0.311,0/4,-8.77,0.24
+SOL,Prev 1H candle H/L fade→other side [07-20],2771,14.0,28,-0.225,-0.168,-0.287,0/4,-5.7,0.24
+SOL,Prev 1H candle H/L fade→other side [07-20] +4H bias,2725,13.8,28,-0.22,-0.203,-0.237,0/4,-5.49,0.24
+SOL,Prev 1H candle H/L break 2R [07-20],2766,14.0,34,-0.138,-0.111,-0.167,0/4,-5.1,0.43
+SOL,Prev 1H candle H/L break 2R [07-20] +4H bias,2690,13.6,34,-0.132,-0.115,-0.151,0/4,-4.87,0.43
+SOL,VP prev day: fade VAH/VAL → POC,1175,5.9,25,-0.367,-0.306,-0.437,0/4,-4.48,0.3
+SOL,VP prev day: fade VAH/VAL → POC +4H bias,581,2.9,23,-0.471,-0.43,-0.518,0/4,-5.36,0.29
+SOL,VP prev day: 80% rule,334,1.7,52,0.065,0.137,-0.02,3/4,0.99,1.37
+SOL,VP Asia session: fade edges → POC [London-NY],1900,9.5,31,-0.49,-0.496,-0.484,0/4,-11.47,0.23
+SOL,VP Asia session: fade edges +4H bias,961,4.8,31,-0.545,-0.599,-0.485,0/4,-9.92,0.23
+SOL,EMA 9/21 cross 5m,2739,13.7,34,-0.155,-0.129,-0.183,0/4,-5.88,0.55
+SOL,EMA 9/21 cross 5m +4H bias,2660,13.3,37,-0.083,-0.111,-0.053,1/4,-3.08,0.55
+SOL,EMA 20/50 cross 5m,2378,11.9,34,-0.186,-0.171,-0.203,0/4,-6.57,0.55
+SOL,EMA 20/50 cross 5m +4H bias,1858,9.3,35,-0.177,-0.217,-0.136,0/4,-5.67,0.56
+SOL,EMA 9/21 cross 15m,2177,10.9,34,-0.3,-0.292,-0.308,0/4,-9.13,0.46
+SOL,EMA 9/21 cross 15m +4H bias,1485,7.4,34,-0.259,-0.275,-0.24,0/4,-6.61,0.47
+SOL,EMA 20/50 cross 15m,1268,6.3,35,-0.328,-0.291,-0.367,0/4,-7.12,0.41
+SOL,EMA 20/50 cross 15m +4H bias,694,3.5,36,-0.305,-0.208,-0.405,0/4,-4.95,0.42
+SOL,EMA 9/21 cross + VWAP side 5m,2549,12.8,36,-0.098,-0.083,-0.114,0/4,-3.58,0.58
+SOL,EMA 9/21 cross + VWAP side + 4H bias 5m,1770,8.9,38,-0.036,-0.063,-0.007,1/4,-1.12,0.61
+SOL,VWAP cross with EMA9>21,2034,10.2,35,-0.12,-0.078,-0.166,0/4,-4.04,0.66
+SOL,VWAP cross with EMA9>21 +4H bias,1339,6.7,36,-0.084,-0.096,-0.07,0/4,-2.28,0.64
+SOL,HTF bias (4H+1H) + 5m EMA20 pullback 2R,1959,9.8,35,-0.088,-0.074,-0.103,0/4,-2.81,0.59
+SOL,HTF bias (4H+1H) + 5m EMA20 pullback 3R,1911,9.6,29,-0.079,-0.098,-0.057,0/4,-2.08,0.6
+GOLD,Asia range fade 2R [London],622,3.2,31,-0.281,-0.287,-0.275,0/4,-4.46,0.11
+GOLD,Asia range fade 2R [London] +4H bias,303,1.5,35,-0.177,-0.134,-0.215,1/4,-1.96,0.11
+GOLD,Asia range fade→other side [London],616,3.1,20,-0.112,-0.238,0.007,1/4,-0.83,0.11
+GOLD,Asia range fade→other side [London] +4H bias,299,1.5,23,0.125,-0.058,0.279,2/4,0.56,0.11
+GOLD,Asia range break 2R [London],658,3.4,27,-0.288,-0.383,-0.195,0/4,-3.26,0.11
+GOLD,Asia range break 2R [London] +4H bias,338,1.7,28,-0.329,-0.552,-0.098,1/4,-3.95,0.11
+GOLD,Asia range fade 2R [NY],712,3.6,35,-0.161,-0.143,-0.18,0/4,-2.78,0.15
+GOLD,Asia range fade 2R [NY] +4H bias,372,1.9,36,-0.139,-0.223,-0.049,0/4,-1.75,0.16
+GOLD,Asia range fade→other side [NY],706,3.6,29,-0.148,-0.23,-0.059,0/4,-1.74,0.15
+GOLD,Asia range fade→other side [NY] +4H bias,370,1.9,31,-0.083,-0.213,0.055,2/4,-0.68,0.15
+GOLD,Asia range break 2R [NY],775,3.9,34,-0.122,-0.241,0.018,1/4,-2.11,0.13
+GOLD,Asia range break 2R [NY] +4H bias,397,2.0,32,-0.16,-0.274,-0.029,1/4,-1.97,0.13
+GOLD,London range fade 2R [NY],837,4.3,33,-0.159,0.044,-0.338,1/4,-2.03,0.15
+GOLD,London range fade 2R [NY] +4H bias,451,2.3,33,-0.076,0.131,-0.264,1/4,-0.59,0.15
+GOLD,London range fade→other side [NY],830,4.2,27,0.057,0.38,-0.243,1/4,0.3,0.15
+GOLD,London range fade→other side [NY] +4H bias,445,2.3,27,0.001,0.245,-0.226,1/4,0.0,0.15
+GOLD,London range break 2R [NY],913,4.6,32,-0.182,-0.299,-0.066,0/4,-3.47,0.13
+GOLD,London range break 2R [NY] +4H bias,455,2.3,33,-0.12,-0.212,-0.033,1/4,-1.61,0.13
+GOLD,Prev day H/L fade 2R [07-20],622,3.2,35,0.098,0.27,-0.109,2/4,0.54,0.15
+GOLD,Prev day H/L fade 2R [07-20] +4H bias,288,1.5,36,0.185,0.355,-0.025,2/4,0.63,0.14
+GOLD,Prev day H/L fade→other side [07-20],612,3.1,22,-0.137,-0.088,-0.196,2/4,-0.91,0.14
+GOLD,Prev day H/L fade→other side [07-20] +4H bias,277,1.4,23,-0.241,-0.226,-0.26,0/4,-1.58,0.14
+GOLD,Prev day H/L break 2R [07-20],654,3.3,30,-0.273,-0.423,-0.086,1/4,-4.5,0.12
+GOLD,Prev day H/L break 2R [07-20] +4H bias,360,1.8,32,-0.179,-0.297,-0.032,1/4,-2.01,0.12
+GOLD,Prev 4H candle H/L fade 2R [24h],1900,9.6,33,-0.224,-0.211,-0.237,0/4,-6.2,0.11
+GOLD,Prev 4H candle H/L fade 2R [24h] +4H bias,1470,7.5,35,-0.152,-0.017,-0.272,1/4,-2.86,0.11
+GOLD,Prev 4H candle H/L fade→other side [24h],1907,9.7,26,-0.091,-0.076,-0.106,1/4,-1.3,0.11
+GOLD,Prev 4H candle H/L fade→other side [24h] +4H bias,1465,7.4,29,0.01,0.183,-0.145,1/4,0.1,0.11
+GOLD,Prev 4H candle H/L break 2R [24h],1952,9.9,29,-0.256,-0.438,-0.064,0/4,-5.73,0.12
+GOLD,Prev 4H candle H/L break 2R [24h] +4H bias,1589,8.1,29,-0.254,-0.45,-0.073,0/4,-6.71,0.12
+GOLD,Prev 1H candle H/L fade 2R [07-20],1902,9.7,33,-0.183,-0.11,-0.256,1/4,-3.19,0.11
+GOLD,Prev 1H candle H/L fade 2R [07-20] +4H bias,1768,9.0,34,-0.081,0.055,-0.203,1/4,-0.93,0.11
+GOLD,Prev 1H candle H/L fade→other side [07-20],1911,9.7,38,0.005,0.146,-0.135,3/4,0.07,0.11
+GOLD,Prev 1H candle H/L fade→other side [07-20] +4H bias,1761,8.9,39,-0.009,0.168,-0.167,2/4,-0.13,0.11
+GOLD,Prev 1H candle H/L break 2R [07-20],1966,10.0,26,-0.414,-0.576,-0.243,0/4,-5.97,0.11
+GOLD,Prev 1H candle H/L break 2R [07-20] +4H bias,1873,9.5,26,-0.419,-0.578,-0.263,0/4,-5.86,0.12
+GOLD,VP prev day: fade VAH/VAL → POC,800,4.0,25,-0.632,-0.667,-0.589,0/4,-4.7,0.1
+GOLD,VP prev day: fade VAH/VAL → POC +4H bias,394,2.0,29,-0.619,-0.532,-0.719,0/4,-2.38,0.1
+GOLD,VP prev day: 80% rule,201,1.0,38,-0.247,-0.419,-0.043,1/4,-3.12,0.31
+GOLD,VP Asia session: fade edges → POC [London-NY],1189,6.0,32,-0.479,-0.558,-0.399,0/4,-9.5,0.09
+GOLD,VP Asia session: fade edges +4H bias,581,2.9,34,-0.444,-0.546,-0.349,0/4,-7.18,0.1
+GOLD,EMA 9/21 cross 5m,1949,9.8,26,-0.376,-0.536,-0.201,0/4,-12.32,0.17
+GOLD,EMA 9/21 cross 5m +4H bias,1892,9.5,28,-0.341,-0.493,-0.173,0/4,-11.0,0.17
+GOLD,EMA 20/50 cross 5m,1683,8.4,28,-0.379,-0.436,-0.313,0/4,-8.94,0.17
+GOLD,EMA 20/50 cross 5m +4H bias,1353,6.8,29,-0.368,-0.435,-0.292,0/4,-7.45,0.17
+GOLD,EMA 9/21 cross 15m,1503,7.5,29,-0.51,-0.456,-0.572,0/4,-6.15,0.15
+GOLD,EMA 9/21 cross 15m +4H bias,1042,5.2,30,-0.539,-0.42,-0.676,0/4,-4.59,0.15
+GOLD,EMA 20/50 cross 15m,868,4.4,28,-0.569,-0.434,-0.734,0/4,-5.24,0.13
+GOLD,EMA 20/50 cross 15m +4H bias,474,2.4,30,-0.606,-0.458,-0.785,0/4,-3.28,0.13
+GOLD,EMA 9/21 cross + VWAP side 5m,1831,9.2,28,-0.314,-0.49,-0.116,0/4,-9.91,0.18
+GOLD,EMA 9/21 cross + VWAP side + 4H bias 5m,1332,6.7,28,-0.357,-0.547,-0.112,0/4,-9.99,0.18
+GOLD,VWAP cross with EMA9>21,1529,7.7,27,-0.371,-0.497,-0.208,0/4,-11.15,0.2
+GOLD,VWAP cross with EMA9>21 +4H bias,1107,5.6,27,-0.377,-0.526,-0.165,0/4,-9.63,0.18
+GOLD,HTF bias (4H+1H) + 5m EMA20 pullback 2R,1342,6.7,31,-0.234,-0.348,-0.123,0/4,-6.34,0.2
+GOLD,HTF bias (4H+1H) + 5m EMA20 pullback 3R,1314,6.6,27,-0.259,-0.391,-0.133,0/4,-6.1,0.2
