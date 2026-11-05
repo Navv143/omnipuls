@@ -696,8 +696,10 @@ def watch_card(r: dict, show_why: bool = False) -> str:
     c = UP if r["side"] > 0 else DOWN
     rising = "▲" if r["net"] > r["net_before"] else "▼"  # direction of the change in the last 15 minutes
     return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['Stock'])}{tv_link(r['Stock'])}</span>"
-            f"<span class='sd'>{'LONG' if r['side'] > 0 else 'SHORT'}</span></div>"
-            f"<div class='px'>{_num(r['price'])} · {_sgn(r['move_pct'])} from open · {_e(r['Sector'])} · {_e(r['time'])}</div>"
+            f"<span class='sd'>{'LONG' if r['side'] > 0 else 'SHORT'}"
+            + (f" ⏱ {_e(r['entry_time'])}" if r.get("entry_time") else "") + "</span></div>"
+            f"<div class='px'>{_num(r['price'])} · {_sgn(r['move_pct'])} from open · {_e(r['Sector'])} · as of {_e(r['time'])}"
+            + (f" · entry signal at <b>{_e(r['entry_time'])}</b>" if r.get("entry_time") else "") + "</div>"
             f"{sparkline(r.get('net_series') or [], c, 0.0)}"
             f"<div class='g'><div><small>ATR 9:15→now</small><b>{r['day_x']:.2f}× usual</b></div>"
             f"<div><small>ATR last 15 min</small><b>{r['now_x']:.2f}× usual</b></div>"

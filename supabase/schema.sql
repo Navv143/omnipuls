@@ -144,3 +144,11 @@ create table if not exists public.closing_picks (
   unique (day, kind, symbol)
 );
 alter table public.closing_picks enable row level security;
+
+-- How long each page takes on the server (app.py, at most one row a minute per page and viewer)
+create table if not exists public.app_perf (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  page text not null, secs double precision, market boolean, sections jsonb
+);
+alter table public.app_perf enable row level security;
