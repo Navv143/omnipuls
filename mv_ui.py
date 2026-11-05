@@ -638,3 +638,58 @@ def decision_cards(rows: list, risk: bool = True, limit: int = 12) -> str:
     if not rows:
         return "<div class='mx-quiet'>None right now.</div>"
     return "<div class='dc'>" + "".join(decision_card(r, risk) for r in rows[:limit]) + "</div>"
+
+
+# ---------------------------------------------------------------- momentum funnel
+
+FUNNEL_CSS = """<style>
+.fn{display:flex;flex-direction:column;align-items:center;gap:6px;margin:8px 0 6px}
+.fn .st{display:flex;justify-content:space-between;align-items:center;border-radius:12px;padding:9px 16px;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--c) 24%,#0A1020),color-mix(in srgb,var(--c) 8%,#0A1020));
+  border:1px solid color-mix(in srgb,var(--c) 55%,transparent);min-width:260px}
+.fn .st b{font-family:var(--font-num);font-size:var(--fs-xl);color:var(--c)}
+.fn .st span{font-size:var(--fs-sm);color:var(--om-text-2)}
+.fn .st small{display:block;font-size:var(--fs-2xs);color:var(--om-faint)}
+.wl{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.wc{border:1px solid color-mix(in srgb,var(--c) 50%,var(--om-border));border-radius:14px;padding:11px 13px;background:var(--om-surface)}
+.wc .top{display:flex;justify-content:space-between;align-items:center}
+.wc .nm{font-weight:700;font-size:var(--fs-md)}
+.wc .sd{font-family:Sora,Inter,sans-serif;font-weight:800;font-size:var(--fs-xs);letter-spacing:.1em;color:var(--c);
+  border:1px solid var(--c);border-radius:7px;padding:1px 8px}
+.wc .px{font-family:var(--font-num);font-size:var(--fs-sm);color:var(--om-text-3);margin-top:2px}
+.wc .g{display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin-top:8px}
+.wc .g div{background:var(--om-sunken);border:1px solid var(--om-border-soft);border-radius:8px;padding:4px 8px}
+.wc .g small{display:block;font-size:.58rem;letter-spacing:.07em;text-transform:uppercase;color:var(--om-faint)}
+.wc .g b{font-family:var(--font-num);font-size:var(--fs-sm)}
+</style>"""
+
+
+def funnel(steps: list[tuple[str, int, str]]) -> str:
+    """steps: (label, count, note); widths shrink like a funnel."""
+    cols = ["var(--om-neutral)", "var(--om-accent)", "#A855F7", "#22D3EE", "var(--om-up)"]
+    out = []
+    n = len(steps)
+    for i, (label, cnt, note) in enumerate(steps):
+        w = 100 - i * (55 / max(n - 1, 1))
+        out.append(f"<div class='st' style='--c:{cols[i % len(cols)]};width:{w:.0f}%'><span>{_e(label)}<small>{_e(note)}</small></span>"
+                   f"<b>{cnt}</b></div>")
+    return "<div class='fn'>" + "".join(out) + "</div>"
+
+
+def watch_card(r: dict) -> str:
+    c = UP if r["side"] > 0 else DOWN
+    rising = "▲" if r["net"] > r["net_before"] else "▼"  # direction of the change in the last 15 minutes
+    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['Stock'])}</span>"
+            f"<span class='sd'>{'LONG' if r['side'] > 0 else 'SHORT'}</span></div>"
+            f"<div class='px'>{_num(r['price'])} · {_sgn(r['move_pct'])} from open · {_e(r['Sector'])} · {_e(r['time'])}</div>"
+            f"{sparkline(r.get('net_series') or [], c, 0.0)}"
+            f"<div class='g'><div><small>ATR 9:15→now</small><b>{r['day_x']:.2f}× usual</b></div>"
+            f"<div><small>ATR last 15 min</small><b>{r['now_x']:.2f}× usual</b></div>"
+            f"<div><small>Sector net</small><b style='color:{tone_color(r['sec_net'])}'>₹{r['sec_net']:+,.0f} Cr</b></div>"
+            f"<div><small>Stock net</small><b style='color:{tone_color(r['net'])}'>₹{r['net']:+,.1f} Cr {rising}</b></div></div></div>")
+
+
+def watch_cards(rows: list[dict]) -> str:
+    if not rows:
+        return "<div class='mx-quiet'>No stock passes all three steps right now.</div>"
+    return "<div class='wl'>" + "".join(watch_card(r) for r in rows) + "</div>"
