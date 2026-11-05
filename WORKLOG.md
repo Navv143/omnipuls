@@ -523,3 +523,13 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   minutes, futures OI change in the last 30 minutes (recorder quotes); top 10 buys, sells under an expander.
 - Scored on the next trading day: the gap at the open (after 9:20) and the close (15:35), after costs; the record table
   and KPIs (index BUY vs NO TRADE days, stock BUY / SELL) show the results.
+
+## 5 Nov 2026: Entry time on every signal, faster pages
+- Market View signals all carry a Time (first column of the table, ⏱ on every chip): Breakout V3 its signal time with
+  entry and stop; CE / PE focus stocks, smart-money picks and funnel picks the first time they showed today (and the
+  price then), kept in `<data>/signals_seen/<day>.json` for every viewer and for later tests. Funnel pick cards show
+  "entry signal at HH:MM" (the recorded signal's time).
+- Speed: the index bots (index funnel, Bank Nifty fade, trend day / Gap & go, momentum bot for 5 indices, ~5 s) and
+  the Momentum Funnel build (~10 s) ran on every refresh of every viewer; now they are rebuilt only when new candles
+  arrive, in the background, and the last result shows at once (`_index_bots`, `_funnel_now`).
+- Page timings logged to Supabase `app_perf` (page, seconds, Market View per section) to find what is still slow.

@@ -2088,6 +2088,75 @@ def _scan_now(svc):
     return _fresh_or_last(_SCAN_CACHE, key, compute)
 
 
+class _timed:
+    """Adds this block's seconds to the page's timing record (st.session_state["_perf"], sent to app_perf)."""
+    def __init__(self, name: str):
+        self.name = name
+
+    def __enter__(self):
+        self.t = time.time()
+
+    def __exit__(self, *a):
+        try:
+            pf = st.session_state.setdefault("_perf", {})
+            pf[self.name] = pf.get(self.name, 0) + time.time() - self.t
+        except Exception:
+            pass
+        return False
+
+
+_IXBOT_CACHE = _memo("ixbots")
+
+
+def _index_bots(svc) -> dict:
+    """The index bots on the loader's latest candles (index funnel, Bank Nifty fade, trend day / Gap & go, momentum
+    bot for every index), rebuilt only when new candles arrive and in the background (the last result shows at
+    once): they took ~5 s on every refresh of every viewer. A fresh copy each call (callers add live blocks)."""
+    import copy
+    bars, nifty_df = svc.bars()
+    if not bars:
+        return {"ix_rows": [], "bn_fb": None, "gaps": {}, "moms": {}}
+    idx_b = svc.idx_bars()
+    key = ((id(svc), datetime.now(IST).strftime("%Y-%m-%d")), svc.last_pass, len(bars),
+           str(max((b.index.max() for b in idx_b.values() if b is not None and len(b)), default="")))
+
+    def compute():
+        w = {k: d.get("w", {}) for k, d in index_defs().items()}
+        fut = svc.ifut_bars()
+        out = {"ix_rows": [], "bn_fb": None, "gaps": {}, "moms": {}}
+        try:
+            out["ix_rows"] = IF.live(idx_b, bars, w, idx_b.get("INDIAVIX"))
+            out["bn_fb"] = LV.failed_break(idx_b.get("BANKNIFTY"))
+        except Exception as e:
+            print(f"index bots: setups: {e}", flush=True)
+        for k in ("NIFTY", "BANKNIFTY"):
+            try:
+                out["gaps"][k] = (IF.day_trend(idx_b.get(k), bars, w.get(k, {})), IF.gap_go(idx_b.get(k), bars, w.get(k, {})))
+            except Exception as e:
+                print(f"index bots: gap & go {k}: {e}", flush=True)
+        for k, nm in IF.INDEXES.items():
+            try:
+                out["moms"][k] = IF.momentum_now(idx_b.get(k), bars, w.get(k, {}), nm, mode=IF.MOM_MODE.get(k), fut=fut.get(k))
+            except Exception as e:
+                print(f"index bots: momentum {k}: {e}", flush=True)
+        return out
+
+    return copy.deepcopy(_fresh_or_last(_IXBOT_CACHE, key, compute))
+
+
+_FUNNEL_CACHE = _memo("funnel")
+
+
+def _funnel_now(svc, bars: dict, per: dict, cfg: dict):
+    """FN.build for every F&O stock (~10 s), rebuilt only when new candles arrive or the settings change, in the
+    background after the first time."""
+    fno = set(U.FNO_SECTOR_OF)
+    key = ((id(svc), datetime.now(IST).strftime("%Y-%m-%d"), tuple(sorted(cfg.items()))), svc.last_pass, len(bars))
+    t, sec = _fresh_or_last(_FUNNEL_CACHE, key, lambda: FN.build({s: b for s, b in bars.items() if s in fno}, per,
+                                                                 U.FNO_SECTOR_OF, cfg))
+    return t.copy(), sec
+
+
 def _names(df: pd.DataFrame, n: int = 3, side_col: str | None = None, extra: str | None = None) -> str:
     out = []
     for _, r in df.head(n).iterrows():
@@ -2559,8 +2628,10 @@ def todays_plan(svc, idx_b: dict, og, trend: list):
 @st.fragment(run_every=120)
 def dashboard_desk(svc, t: pd.DataFrame):
     """One screen for a running market: how strong it is, what every scanner says now, where the money goes."""
-    sf = sector_flow_table()
-    box = apex_live(_dhan_sig())
+    with _timed("sector futures money"):
+        sf = sector_flow_table()
+    with _timed("index build-up"):
+        box = apex_live(_dhan_sig())
     act = _activity_data(svc)
     R, E, per, _ = act if act else (pd.DataFrame(), pd.DataFrame(), {}, None)
     flow = A.flow_window(per, None) if per else pd.DataFrame()
@@ -2570,10 +2641,13 @@ def dashboard_desk(svc, t: pd.DataFrame):
     secflow = A.sector_flow(flow) if not flow.empty else pd.DataFrame()
     idx_b, fut_b = svc.idx_bars(), svc.ifut_bars()
 
-    og = opening_signals()
-    sc = _scan_now(svc)
-    rf, _ = smart_money_stocks(svc)
-    picks = best_picks(rf, sf) if not rf.empty and not sf.empty else pd.DataFrame()
+    with _timed("opening signals"):
+        og = opening_signals()
+    with _timed("scanners"):
+        sc = _scan_now(svc)
+    with _timed("smart money"):
+        rf, _ = smart_money_stocks(svc)
+        picks = best_picks(rf, sf) if not rf.empty and not sf.empty else pd.DataFrame()
     vix = idx_b.get("INDIAVIX")
     trend = []
     for k in ("NIFTY", "BANKNIFTY"):
@@ -6354,9 +6428,46 @@ def _mv_chain(sid: int, seg: str):
     return spot, ch, D.max_pain(ch)
 
 
+@st.cache_resource(show_spinner=False)
+def _seen_store() -> dict:
+    return {"day": None, "seen": {}}
+
+
+def _first_seen(key: str, price=None) -> tuple[str, float | None]:
+    """When a signal (e.g. 'PE focus: TCS') first showed today, and its price then: shared by every viewer and kept in
+    <data>/signals_seen/<day>.json, so a restart keeps the times (scanners without their own signal time)."""
+    import threading
+    now = datetime.now(IST)
+    day = now.strftime("%Y-%m-%d")
+    stt = _seen_store()
+    f = PATHS.DATA / "signals_seen" / f"{day}.json"
+    if stt["day"] != day:
+        try:
+            stt["seen"] = json.loads(f.read_text())
+        except Exception:
+            stt["seen"] = {}
+        stt["day"] = day
+    if key not in stt["seen"]:
+        t_ = now.strftime("%H:%M") if SS.market_hours() else None
+        if not t_:
+            return "", None
+        stt["seen"][key] = [t_, float(price) if price is not None and np.isfinite(price) else None]
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            tmp = f.with_suffix(".tmp")
+            tmp.write_text(json.dumps(stt["seen"]))
+            os.replace(tmp, f)
+        except Exception:
+            pass
+    t_, p_ = stt["seen"][key]
+    return t_, p_
+
+
 def _mv_signals(plan_rows: list, ce: pd.DataFrame, pe: pd.DataFrame, sc, picks: pd.DataFrame,
                 bot_rows: list | None = None) -> pd.DataFrame:
-    """Every signal from every scanner in one table, the tested ones first."""
+    """Every signal from every scanner in one table, the tested ones first, each with its time (signal time, or the
+    first time it showed today)."""
+    import re as _re
     rows = []
     order = {"fired": 0, "closed": 1, "wait": 2, "none": 3, "nodata": 4}
     status = {"fired": "● SIGNAL", "closed": "Done today", "wait": "Waiting", "none": "None today", "nodata": "No data"}
@@ -6368,17 +6479,34 @@ def _mv_signals(plan_rows: list, ce: pd.DataFrame, pe: pd.DataFrame, sc, picks: 
     if sc is not None:
         _, v3, _ = sc
         for _, r in (v3 if v3 is not None else pd.DataFrame()).head(5).iterrows():
+            ent, stp = r.get("Entry"), r.get("Stop")
             rows.append({"Signal": f"Breakout V3: {r.get('Stock', '')} {r.get('Side', '')}", "Status": "● SIGNAL",
-                         "Evidence": "Small edge", "Details": "Top-2 mover, 15-min breakout with volume, exit 15:20",
-                         "_o": 5})
+                         "Evidence": "Small edge", "Time": str(r.get("Signal") or ""),
+                         "Details": f"signal {r.get('Signal', '')}"
+                                    + (f" · entry {float(ent):,.2f}" if ent is not None and pd.notna(ent) else "")
+                                    + (f" · stop {float(stp):,.2f}" if stp is not None and pd.notna(stp) else "")
+                                    + " · top-2 mover, 15-min breakout with volume, exit 15:20", "_o": 5})
     for df, side in ((ce, "CE / long"), (pe, "PE / short")):
         for _, r in (df if df is not None else pd.DataFrame()).iterrows():
+            t_, p_ = _first_seen(f"{side} focus: {r['Stock']}", r.get("Price"))
             rows.append({"Signal": f"{side} focus: {r['Stock']} ({r['Chg %']:+.2f}%)", "Status": "Confluence",
-                         "Evidence": "Context", "Details": str(r.get("Why", "")), "_o": 6})
+                         "Evidence": "Context", "Time": t_,
+                         "Details": (f"first seen {t_}" + (f" @ {p_:,.2f}" if p_ else "") + " · " if t_ else "")
+                                    + str(r.get("Why", "")), "_o": 6})
     for _, r in (picks if picks is not None else pd.DataFrame()).head(5).iterrows():
+        t_, p_ = _first_seen(f"Smart-money pick: {r.get('Stock', '')} {r.get('Side', '')}", r.get("Price"))
         rows.append({"Signal": f"Smart-money pick: {r.get('Stock', '')} {r.get('Side', '')}", "Status": "Confluence",
-                     "Evidence": "Context", "Details": "Top R-factor stock moving with a favoured sector", "_o": 7})
-    return pd.DataFrame(rows).sort_values("_o", kind="stable").drop(columns="_o") if rows else pd.DataFrame()
+                     "Evidence": "Context", "Time": t_,
+                     "Details": (f"first seen {t_}" + (f" @ {p_:,.2f}" if p_ else "") + " · " if t_ else "")
+                                + "Top R-factor stock moving with a favoured sector", "_o": 7})
+    for r in rows:  # every row gets a Time: its own, or the first time in its text
+        if not r.get("Time"):
+            m = _re.search(r"\b(\d{1,2}:\d{2})\b", f"{r['Signal']} {r.get('Details', '')}")
+            r["Time"] = m.group(1) if m else ""
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows).sort_values("_o", kind="stable").drop(columns="_o")
+    return df[["Time"] + [c for c in df.columns if c != "Time"]]
 
 
 @st.fragment(run_every=LIVE_EVERY)
@@ -6387,7 +6515,8 @@ def market_view_body(svc, t: pd.DataFrame):
     sf = sector_flow_table()
     box = apex_live(_dhan_sig())
     share = AP.dominance(box["bars"])[0] if box.get("bars") is not None else None
-    act = _activity_data(svc)
+    with _timed("unusual activity"):
+        act = _activity_data(svc)
     R = act[0] if act else pd.DataFrame()
     per = act[2] if act else {}
     flow = A.flow_window(per, None) if per else pd.DataFrame()
@@ -6423,18 +6552,22 @@ def market_view_body(svc, t: pd.DataFrame):
         tr = dict(trend).get(k)
         if x:
             plans.append(DK.index_plan(name, x["last"], TA.STEP.get(k, 50), verdict, tr, share if k == "NIFTY" else None))
+    _tl = time.time()
     try:  # the desk log (Supabase) keeps recording when people use this page instead of the Trading Desk
         _log_desk(snaps, verdict, plans, ce, pe)
         if datetime.now(IST).weekday() < 5:
             _log_paper(svc, idx_b, og, datetime.now(IST).replace(tzinfo=None))
     except Exception as e:
         DL.STATUS["error"] = f"market view log: {e}"[:200]
-    plan_rows = _plan_rows(svc, idx_b, og, trend)
+    st.session_state.setdefault("_perf", {})["desk log"] = time.time() - _tl
+    with _timed("index plans"):
+        plan_rows = _plan_rows(svc, idx_b, og, trend)
 
     # ---- readings with what they mean
     idx_reads = [MV.index_read(name, idx_b.get(k), fut_b.get(k)) for k, name in
                  (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"), ("FINNIFTY", "Fin Nifty"), ("SENSEX", "Sensex"))]
     chains, chain_px = [], []
+    _tc = time.time()
     for k, sid in (("NIFTY", 13), ("BANKNIFTY", 25)):
         try:
             spot, ch, mp = _mv_chain(sid, "IDX_I")
@@ -6443,6 +6576,7 @@ def market_view_body(svc, t: pd.DataFrame):
         except Exception:
             chains.append(None)
             chain_px.append((None, None))
+    st.session_state.setdefault("_perf", {})["option chains"] = time.time() - _tc
     market = [MV.vix_read(snaps.get("INDIAVIX")), MV.buildup_read(share), MV.breadth_read(adv, dec),
               MV.futures_money_read(sf)]
     money = [MV.flow_read(secflow), MV.activity_read(R)]
@@ -6454,7 +6588,7 @@ def market_view_body(svc, t: pd.DataFrame):
         if bs and not bs.get("stale"):
             for i in ((bs.get("bots") or {}).get("master") or {}).get("ideas") or []:
                 ok = i["status"] == "passed"
-                bot_rows.append({"Signal": f"Master bot: {i['side']} {i['stock']}",
+                bot_rows.append({"Signal": f"Master bot: {i['side']} {i['stock']}", "Time": str(i.get("time") or ""),
                                  "Status": "● SIGNAL" if ok else "Good odds" if i["status"] == "odds" else "Watch",
                                  "Evidence": "Tested" if ok else "Past odds" if i["status"] == "odds" else "Context",
                                  "Details": f"since {i['time']} @ {float(i['price']):,.2f}"
@@ -6462,21 +6596,10 @@ def market_view_body(svc, t: pd.DataFrame):
                                  + f", checks {i['agree']} · {i['why']}"})
     except Exception:
         pass
-    # index funnel (all five indices) and the Bank Nifty failed-break fade
-    ix_rows, bn_fb = [], None
-    try:
-        ix_rows = IF.live(idx_b, svc.bars()[0], {k: d.get("w", {}) for k, d in index_defs().items()}, idx_b.get("INDIAVIX"))
-        bn_fb = LV.failed_break(idx_b.get("BANKNIFTY"))
-    except Exception as e:
-        print(f"market view index setups: {e}", flush=True)
-    gaps = {}
-    try:
-        _w = {k: d.get("w", {}) for k, d in index_defs().items()}
-        _sb = svc.bars()[0]
-        for _k in ("NIFTY", "BANKNIFTY"):
-            gaps[_k] = (IF.day_trend(idx_b.get(_k), _sb, _w.get(_k, {})), IF.gap_go(idx_b.get(_k), _sb, _w.get(_k, {})))
-    except Exception as e:
-        print(f"market view gap & go: {e}", flush=True)
+    # index funnel (all five indices), the Bank Nifty failed-break fade, trend day / Gap & go, momentum bot (cached)
+    with _timed("index bots"):
+        _ib = _index_bots(svc)
+    ix_rows, bn_fb, gaps = _ib["ix_rows"], _ib["bn_fb"], _ib["gaps"]
     for _k, (_dt, _gg) in gaps.items():
         g = (_gg or {}).get("signal")
         if g:
@@ -6486,15 +6609,7 @@ def market_view_body(svc, t: pd.DataFrame):
                              "Details": f"broke the first hour's {'high' if g['side'] == 'LONG' else 'low'} at {g['time']} @ "
                                         f"{g['price']:,.0f} with breadth {_gg['breadth']:.0f}% vs yesterday"
                                         + (f" · stop {pl['sl']:,.0f} · targets {pl['tp1']:,.0f} / {pl['tp2']:,.0f}" if pl else "")})
-    moms = {}
-    try:
-        _w2 = {k: d.get("w", {}) for k, d in index_defs().items()}
-        _sb2 = svc.bars()[0]
-        for _k, _nm in IF.INDEXES.items():
-            moms[_k] = IF.momentum_now(idx_b.get(_k), _sb2, _w2.get(_k, {}), _nm, mode=IF.MOM_MODE.get(_k),
-                                       fut=svc.ifut_bars().get(_k))
-    except Exception as e:
-        print(f"market view momentum bot: {e}", flush=True)
+    moms = _ib["moms"]
     for _k, _mo in moms.items():
         for g in (_mo or {}).get("signals", []):
             g["live"] = _sig_live(_k, g["side"], g["plan"], g["time"], svc)
@@ -6596,6 +6711,7 @@ def market_view_body(svc, t: pd.DataFrame):
             _tr = {t["symbol"]: t for t in _today_trades() if t.get("source") == "Momentum funnel"}
             for _f in fp:
                 _t = _tr.get(_f["Stock"])
+                _f["entry_time"] = _t["time"] if _t else _first_seen(f"Funnel pick: {_f['Stock']}", _f.get("price"))[0]
                 if _t:
                     _f.update({k: _t[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")})
                     _f["live"] = _sig_live(_f["Stock"], _t["side"], _plan_of(_t), _t["time"], svc) or _rec_live(_t)
@@ -6643,6 +6759,7 @@ def market_view_body(svc, t: pd.DataFrame):
         if rot is not None:
             with st.expander("Money path: from which sectors to which", icon=":material/swap_horiz:"):
                 st.plotly_chart(rot, width="stretch", key="mv_rotation", config={"displayModeBar": False})
+    _tn = time.time()
     nf_today, nf_cross, nf_read = MV.flow_macd(idx_b.get("NIFTY"), MV.index_flow(per, (index_defs().get("NIFTY") or {})
                                                                                    .get("w", {})))
     if not nf_today.empty:
@@ -6654,6 +6771,7 @@ def market_view_body(svc, t: pd.DataFrame):
         st.plotly_chart(nifty_flow_fig(nf_today, nf_cross, 420 if MOBILE else 500), width="stretch",
                         key="mv_nifty_flow", config={"displayModeBar": False})
 
+    st.session_state.setdefault("_perf", {})["nifty flow chart"] = time.time() - _tn
     # ---- 6. option chains
     ch_tiles = [MX.chain_tile(r, px_[0], px_[1]) for r, px_ in zip(chains, chain_px)]
     if any(ch_tiles):
@@ -7093,7 +7211,8 @@ def index_funnel_body():
     bars, _ = svc.bars()
     ib = svc.idx_bars()
     w_all = {k: d.get("w", {}) for k, d in idx.items()}
-    rows = IF.live(ib, bars, w_all, ib.get("INDIAVIX"))
+    _ib = _index_bots(svc)
+    rows = _ib["ix_rows"]
     if not rows:
         st.info("Loading index and constituent candles…", icon=":material/hourglass_top:")
         return
@@ -7106,7 +7225,7 @@ def index_funnel_body():
                 unsafe_allow_html=True)
     for k in ("NIFTY", "BANKNIFTY"):
         try:
-            dt_, gg_ = IF.day_trend(ib.get(k), bars, w_all.get(k, {})), IF.gap_go(ib.get(k), bars, w_all.get(k, {}))
+            dt_, gg_ = _ib["gaps"].get(k, (None, None))
             if (gg_ or {}).get("signal"):
                 gg_["signal"]["live"] = _sig_live(k, gg_["signal"]["side"], gg_["signal"].get("plan"), gg_["signal"]["time"], svc)
             st.markdown(MX.trend_banner(IF.INDEXES[k], dt_, gg_, k), unsafe_allow_html=True)
@@ -7195,9 +7314,7 @@ def page_funnel():
     if not bars or not act:
         st.info("Loading today's 5-minute candles for every F&O stock…", icon=":material/hourglass_top:")
         return
-    fno = set(U.FNO_SECTOR_OF)
-    t, sec = FN.build({s: b for s, b in bars.items() if s in fno}, act[2], U.FNO_SECTOR_OF,
-                      {"day_x": day_x, "now_x": now_x, "range_x": rng_x, "sector_rising": sec_rise})
+    t, sec = _funnel_now(svc, bars, act[2], {"day_x": day_x, "now_x": now_x, "range_x": rng_x, "sector_rising": sec_rise})
     if t.empty:
         st.info("Not enough candles yet: the funnel starts after the first few minutes.", icon=":material/hourglass_top:")
         return
@@ -7205,15 +7322,17 @@ def page_funnel():
     sug = t[t["step5"]].sort_values("score", ascending=False).copy()
     _tr = {x["symbol"]: x for x in _today_trades() if x.get("source") == "Momentum funnel"}
     if len(sug):
-        lives, cols = [], {k: [] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}
+        lives, cols, ets = [], {k: [] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}, []
         for _, r_ in sug.iterrows():
             _t = _tr.get(r_["Stock"])
+            ets.append(_t["time"] if _t else _first_seen(f"Funnel pick: {r_['Stock']}", r_.get("price"))[0])
             for k in cols:
                 cols[k].append(_t[k] if _t else r_[k])
             lives.append((_sig_live(r_["Stock"], _t["side"], _plan_of(_t), _t["time"], svc) or _rec_live(_t)) if _t else None)
         for k, v in cols.items():
             sug[k] = v
         sug["live"] = lives
+        sug["entry_time"] = ets
     mk = float(t["mkt_move"].iloc[0])
     left, right = st.columns([1, 1.6]) if not MOBILE else (st.container(), st.container())
     with left:
@@ -7527,8 +7646,20 @@ if (auto and _page not in SELF_REFRESH | NO_REFRESH
             st.rerun(scope="app")
     _tick()
 
+_t_run = time.time()
+st.session_state["_perf"] = {}
 nav.run()
 st.session_state["_last_full"] = time.time()
+try:  # how long each page takes on the server (Supabase app_perf), at most one row a minute per page and viewer
+    _secs = time.time() - _t_run
+    _pk = f"_perf_at_{_page}"
+    if CS.enabled() and time.time() - st.session_state.get(_pk, 0) >= 60:
+        st.session_state[_pk] = time.time()
+        _row = {"page": _page or "home", "secs": round(_secs, 2), "market": bool(SS.market_hours()),
+                "sections": {k: round(v, 2) for k, v in (st.session_state.get("_perf") or {}).items()}}
+        CS.upsert_rows("app_perf", [_row], "id")
+except Exception:
+    pass
 if _NOTES:  # every method / research text of this page, out of the way until asked for
     with st.expander("How it works: method and research", icon=":material/info:"):
         for kind, args, kw in _NOTES:
