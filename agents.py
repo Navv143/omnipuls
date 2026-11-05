@@ -258,7 +258,7 @@ def crash_tick():
         last = x.iloc[-1]
         st.update(name=cfg["name"], price=float(last["Close"]), ret=float(last["ret"]) if last["ret"] == last["ret"] else None,
                   sigma=float(last["sd"]) if last["sd"] == last["sd"] else None, z=cfg["z"],
-                  trigger_pct=(-cfg["z"] * float(last["sd"])) if last["sd"] == last["sd"] else None,
+                  trigger_pct=((1 if cfg.get("kind") == "burst" else -1) * cfg["z"] * float(last["sd"])) if last["sd"] == last["sd"] else None,
                   as_of=str(x.index[-1] + pd.Timedelta(minutes=5)), checked=str(now))
         tr = CB.trades(x, cfg, since=pd.Timestamp(st["since"]))
         st["pending"] = next((t for t in tr if t.get("status") == "entry next candle"), None)
@@ -271,7 +271,7 @@ def crash_tick():
             rows.append({"day": ny.strftime("%Y-%m-%d"), "setup": f"{cfg['name']} {ny:%H:%M}", "symbol": cfg["inst"], "side": 1,
                          "signal_at": ny.strftime("%H:%M"), "entry_at": f"{ny + pd.Timedelta(minutes=5):%H:%M}",
                          "entry_at_ist": ist.strftime("%d %b %H:%M"), "entry": t["entry"], "sl": t["sl"], "tp": t["tp"],
-                         "stop_pct": cfg["sl"], "result": t["status"],
+                         "stop_pct": cfg.get("sl") or round((t["entry"] - t["sl"]) / t["entry"] * 100, 2), "result": t["status"],
                          "exit_at": (t["exit_at"].tz_localize("UTC").tz_convert("Asia/Kolkata").strftime("%H:%M IST") if t["exit_at"] is not None else None),
                          "exit_px": t["exit_px"], "r": t["r"], "pct": t["pct"]})
         if rows:

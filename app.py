@@ -7550,21 +7550,26 @@ def _btc_paper_section():
         cs = json.loads((d_ / "crash_state.json").read_text())
     except Exception:
         cs = {}
-    st.markdown(MX.section("Crash buy · paper", "BTC and gold: buy the next candle after a sudden 5-min crash (Z x the "
-                           "20-day normal move) · fixed target / stop · 4 h max · tested 2023-26, positive all 4 years"),
+    st.markdown(MX.section("Wild-move setups · paper", "crash buy (BTC, gold): buy after a sudden 5-min crash, fixed "
+                           "target / stop, 4 h max · burst momentum (BTC, ETH, SOL): buy one candle after a giant up-candle, "
+                           "stop at its low, 1 h hold · all tested 2023-26, positive in both halves · checked every minute"),
                 unsafe_allow_html=True)
-    tested = {"BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%")}
+    tested = {"BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%"),
+              "BTC burst momentum": ("+0.15R (+0.21%)", ""), "ETH burst momentum": ("+0.13R (+0.36%)", ""),
+              "SOL burst momentum": ("+0.24R (+0.61%)", "")}
     cards = []
     for key, v in cs.items():
         open_ = [x for x in rec if x["setup"].startswith(v.get("name", "?")) and x.get("result") == "open"]
         trig = v.get("trigger_pct")
-        line = (f"buys if a 5-min candle falls ≥ <b>{abs(trig):.2f}%</b> (now {v.get('price', 0):,.2f}, last candle "
+        word = "rises" if "momentum" in v.get("name", "") else "falls"
+        line = (f"buys if a 5-min candle {word} ≥ <b>{abs(trig):.2f}%</b> (now {v.get('price', 0):,.2f}, last candle "
                 f"{(v.get('ret') or 0):+.2f}%)" if trig else "building the 20-day history")
         if v.get("pending"):
             line += " · <b>crash signal: buying at the next candle's open</b>"
         for t_ in open_:
             line += (f"<br><b style='color:{MX.UP}'>IN TRADE</b> bought {t_['entry']:,.2f} at {t_['entry_at_ist']} IST · stop "
-                     f"{t_['sl']:,.2f} · target {t_['tp']:,.2f} · {t_['r']:+.2f}R")
+                     f"{t_['sl']:,.2f} · " + (f"target {t_['tp']:,.2f}" if t_.get("tp") else "exit after 1 hour")
+                     + f" · {t_['r']:+.2f}R")
         cards.append(f"<div class='mx-idea' style='--c:var(--om-accent);margin:6px 0'><b>{MX._e(v.get('name', key))}</b> · {line}"
                      f" · checked {pd.Timestamp(v['checked']).tz_localize('UTC').tz_convert(IST):%H:%M} IST</div>" if v.get("checked") else "</div>")
     st.markdown("".join(cards) or "<div class='mx-quiet'>Starts on the server within minutes.</div>", unsafe_allow_html=True)
