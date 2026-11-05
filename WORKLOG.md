@@ -593,3 +593,11 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   expiring every 2 minutes) and the desk / paper log 2.5 s. Now the chains come from the recorder's saved parts
   (every minute, ±25 strikes, `_recorder_chain`) when fresher than 5 minutes, Dhan only as a fallback; the paper
   logger runs at most every 5 minutes.
+
+## 5 Nov 2026: Momentum Funnel quality flags
+- funnel.build adds q_mkt (market moving with the trade ≥0.55% from the open), q_gap (the stock did not gap the trade's
+  way, ≤0.13 ATR), q_calm (last 15 min ATR ≤1.82x: not chasing), quality 0-3 and a quality note
+  (research/funnel_winners.py: all three = 72% wins, +0.30R on 1,890 signals vs +0.05R overall; to be confirmed live).
+- Stored in funnel_log (quality, q_mkt, q_gap, q_calm, gap_atr, mkt_prev) and in each recorded funnel trade's note
+  ("Q2/3: market ✓ · no gap ✓ · calm ✗"); watch cards show the three flags and the quality. Picks are not filtered:
+  the live record will show whether quality 3/3 beats the rest.
