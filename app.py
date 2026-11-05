@@ -5876,6 +5876,52 @@ def _radar_table(rows: list) -> pd.DataFrame:
         "Score": r["score"], "Flags": " · ".join(r["events"])} for r in rows])
 
 
+def _momentum_section():
+    try:
+        m = json.loads((PATHS.DATA / "bot" / "momentum.json").read_text())
+    except Exception:
+        return
+    st.subheader("What makes a stock trend intraday")
+    st.caption(f"{m.get('source', '5-minute candles')} · {m['stocks']} F&O stocks · {m['days']} days ({m['first_day']} to {m['last_day']}) · "
+               f"judged on unseen days from {m['split']} · t-stats counted over days. Run {m['run_at'][:16].replace('T', ' ')}.")
+    chk = st.segmented_control("Decision time", list(m["checks"]), default=list(m["checks"])[-1], key="mom_chk") \
+        or list(m["checks"])[-1]
+    c = m["checks"][chk]
+    b = c["base"]
+    st.markdown(MX.kpis([
+        MX.kpi("Trend days", f"{c['base_trend_pct']}%", "open → 15:15 at least 1.5 ATR"),
+        MX.kpi("Average entry now", f"{b['ret']:+.3f}%", "in the move's direction, to 15:15, after 0.12%",
+               MX.tone_color(b["ret"])),
+        MX.kpi("Rules tested", f"{c['rules_tested']:,}", "1-3 conditions"),
+        MX.kpi("Passed", f"{c['rules_pass']}", "unseen days: +0.05%+, t 2+ over days",
+               MX.UP if c["rules_pass"] else MX.NEUTRAL),
+    ]), unsafe_allow_html=True)
+    bk = pd.DataFrame([{"Reading": x["desc"], "Bucket": x["bucket"], "Trend-day lift": x["lift"],
+                        "Trade %": x["all"]["ret"], "t (days)": x["all"]["t"], "Tuning %": x["tune"]["ret"],
+                        "Unseen %": x["unseen"]["ret"], "More ATR after": x["all"]["more"], "Cases": x["all"]["n"]}
+                       for x in c["buckets"]])
+    t1, t2 = st.tabs(["What comes before big moves", "Rules judged on unseen days"])
+    with t1:
+        st.caption("Lift 2.0 = a trend day follows twice as often as on an average day. A reading can predict a big day "
+                   "and still not pay when entered at this time: compare Trade % (after costs) in both periods.")
+        st.dataframe(bk.sort_values("Trend-day lift", ascending=False), hide_index=True, width="stretch", height=460,
+                     column_config={"Trend-day lift": st.column_config.ProgressColumn(min_value=0, max_value=4, format="%.2f×"),
+                                    "Trade %": st.column_config.NumberColumn(format="%+.3f"),
+                                    "Tuning %": st.column_config.NumberColumn(format="%+.3f"),
+                                    "Unseen %": st.column_config.NumberColumn(format="%+.3f")})
+    with t2:
+        rr = c.get("rules") or []
+        if rr:
+            st.dataframe(pd.DataFrame([{"Verdict": {"pass": "✅ Pass", "watch": "👀 Watch", "fail": "✖ Fail"}[x["verdict"]],
+                                        "Rule": x["rule"], "Unseen %/trade": x["unseen"]["ret"], "Unseen t (days)": x["unseen"]["t"],
+                                        "Unseen trades": x["unseen"]["n"], "Unseen days": x["unseen"]["days"],
+                                        "Win %": x["unseen"]["win"], "Tuning %": x["tune"]["ret"], "Tuning t": x["tune"]["t"]}
+                                       for x in rr]), hide_index=True, width="stretch",
+                         column_config={"Rule": st.column_config.TextColumn(width="large")})
+        else:
+            st.caption("No rule made money on the tuning days.")
+
+
 def page_bot():
     status_strip()
     st.header("Bots")
@@ -5979,6 +6025,7 @@ def page_bot():
             _bot_flags(bt.get("unusual"), [("Stock", "name"), ("Move", "value"), ("Sector", "sector"), ("Why", "text")])
 
     st.divider()
+    _momentum_section()
     st.subheader("Setup Finder research")
     res = BOT.latest()
     if not res:

@@ -632,6 +632,11 @@ def run_research():
     log("Setup Finder research: starting")
     r = subprocess.run([sys.executable, str(paths.HERE / "bot.py")], cwd=str(paths.HERE), timeout=4 * 3600)
     log(f"Setup Finder research: finished (exit {r.returncode})")
+    try:  # then the momentum study on the same cached year of candles
+        m = subprocess.run([sys.executable, str(paths.HERE / "momentum_study.py")], cwd=str(paths.HERE), timeout=3 * 3600)
+        log(f"momentum study: finished (exit {m.returncode})")
+    except Exception as e:
+        log(f"momentum study: {e}")
     if r.returncode != 0 and not (B.BOT_DIR / "latest.json").exists():
         B.BOT_DIR.mkdir(parents=True, exist_ok=True)
         (B.BOT_DIR / "latest.json").write_text(json.dumps({"run_at": datetime.now(IST).isoformat(timespec="seconds"),
