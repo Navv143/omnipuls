@@ -2932,11 +2932,11 @@ FNO_COLS = ["Stock", "Sector", "Price", "Chg", "Chg %", "Spark", "Open", "Day Hi
 def page_fno():
     status_strip()
     st.header("F&O stocks")
-    view = st.segmented_control("View", ["Live prices", "Full analytics", "Unusual activity", "Money flow"],
+    view = st.segmented_control("View", ["Live prices", "Full analytics", "Flow radar", "Unusual activity", "Money flow"],
                                 key="fno_view", default=None if "fno_view" in st.session_state else
                                 ("Live prices" if FEED is not None else "Full analytics"),
                                 label_visibility="collapsed") or "Full analytics"
-    if view in ("Unusual activity", "Money flow"):
+    if view in ("Unusual activity", "Money flow", "Flow radar"):
         page_activity(view)
         return
     if view == "Live prices":
@@ -4828,7 +4828,7 @@ def page_activity(view: str = "Unusual activity"):
                                   {m for d in idx.values() for m in d["w"]})))
     svc.set_indices({**{k: d["id"] for k, d in idx.items()}, "INDIAVIX": 21})
     svc.touch()
-    (flow_body if view == "Money flow" else activity_body)(svc)
+    {"Money flow": flow_body, "Flow radar": flow_radar_body}.get(view, activity_body)(svc)
 
 
 @st.fragment(run_every=LIVE_EVERY)
@@ -4936,6 +4936,143 @@ def activity_body(svc):
                        "live quotes about once a minute while this page's loader runs, and saved daily so they can be "
                        "compared with the usual reading over time. Near futures expiry, OI falls as positions roll to the "
                        "next month, so 'long unwinding' readings in the last few days are less meaningful.")
+
+
+def _hhmm_minus(t: str, mins: int) -> str:
+    return (pd.Timestamp(f"2000-01-01 {t}") - pd.Timedelta(minutes=mins)).strftime("%H:%M")
+
+
+def _flow_story(r: pd.Series) -> str:
+    """One plain line on what a stock's money is doing."""
+    bits = [f"₹{r['Net 30m']:+,.0f} Cr in the last 30 min (before that {r['Net prev 30m']:+,.0f})",
+            f"day ₹{r['Net Flow Cr']:+,.0f} Cr", f"price {r['Chg %']:+.2f}%"]
+    if pd.notna(r.get("Turnover x (time)")) and r["Turnover x (time)"] >= 1.5:
+        bits.append(f"{r['Turnover x (time)']:.1f}x usual turnover")
+    if r.get("Buildup"):
+        bits.append(str(r["Buildup"]).lower())
+    if pd.notna(r.get("Smart")) and abs(r["Smart"]) >= 40:
+        bits.append(f"smart score {r['Smart']:+.0f}")
+    if np.sign(r["Net 30m"]) != np.sign(r["Chg %"]) and abs(r["Chg %"]) > 0.3:
+        bits.append("money against the price move (watch for a turn)")
+    return " · ".join(bits)
+
+
+@st.fragment(run_every=LIVE_EVERY)
+def flow_radar_body(svc):
+    """One screen: where money is going in / out right now, what is accelerating, which index stocks pull, and the
+    sudden changes (unusual candles) of the last 30 minutes."""
+    done, total = svc.progress()
+    if done < total:
+        st.progress(done / max(total, 1), text=f"Loading 5-minute history: {done} of {total} stocks…")
+    res = _activity_data(svc)
+    if res is None or res[0].empty:
+        st.info("Waiting for the first data… (" + svc.status + ")", icon=":material/hourglass_top:")
+        return
+    R, E, per, session = res
+    last = R["Time"].max()
+    day = A.flow_window(per, None)
+    if day.empty:
+        st.info("No flow yet.")
+        return
+    w30 = A.flow_window(per, _hhmm_minus(last, 25)).set_index("Stock")["Net Flow Cr"]
+    w60 = A.flow_window(per, _hhmm_minus(last, 55)).set_index("Stock")["Net Flow Cr"]
+    day = day.set_index("Stock")
+    day["Net 30m"] = w30.reindex(day.index).fillna(0)
+    day["Net prev 30m"] = (w60.reindex(day.index).fillna(0) - day["Net 30m"])
+    day["Accel"] = day["Net 30m"] - day["Net prev 30m"]
+    day["Sector"] = day.index.map(U.FNO_SECTOR_OF).fillna("Other")
+    day = day.reset_index()
+    day = day[day["Stock"].isin(set(fno_universe()[0]))] if fno_universe()[0] else day
+    tin, tout = day["Inflow Cr"].sum(), day["Outflow Cr"].sum()
+    sec = A.sector_flow(day)
+    ev30 = E[E["Time"] > _hhmm_minus(last, 30)] if not E.empty else E
+    m = st.columns(5)
+    m[0].metric("Net flow, F&O stocks", f"₹{tin - tout:+,.0f} Cr", f"{tin / max(tin + tout, 1) * 100:.1f}% buying",
+                delta_color="off", border=True)
+    m[1].metric("Last 30 min", f"₹{day['Net 30m'].sum():+,.0f} Cr", f"before: ₹{day['Net prev 30m'].sum():+,.0f} Cr",
+                delta_color="off", border=True)
+    if not sec.empty:
+        m[2].metric("Money going into", sec.iloc[0]["Sector"], f"₹{sec.iloc[0]['Net Flow Cr']:+,.0f} Cr", border=True)
+        m[3].metric("Money leaving", sec.iloc[-1]["Sector"], f"₹{sec.iloc[-1]['Net Flow Cr']:+,.0f} Cr", border=True)
+    m[4].metric("Sudden changes, 30 min", len(ev30), f"last candle {last}", delta_color="off", border=True)
+
+    st.markdown(MX.section("Net flow: top 10 increasing · top 10 decreasing", "last 30 minutes vs the 30 before"),
+                unsafe_allow_html=True)
+    up10 = day[(day["Net 30m"] > 0) & (day["Accel"] > 0)].sort_values("Net 30m", ascending=False).head(10)
+    dn10 = day[(day["Net 30m"] < 0) & (day["Accel"] < 0)].sort_values("Net 30m").head(10)
+    cc = st.columns(2)
+    for col, d, colr, title in ((cc[0], up10, UP, "Money coming in faster"), (cc[1], dn10, DOWN, "Money going out faster")):
+        with col:
+            st.markdown(f"**{title}**")
+            html = "".join(f"<div class='mx-idea' style='--c:{colr};margin:4px 0'><b>{MX._e(r['Stock'])}</b> "
+                           f"<span style='opacity:.7'>{MX._e(r['Sector'])}</span><br><span style='font-size:.86em'>"
+                           f"{MX._e(_flow_story(r))}</span></div>" for _, r in d.iterrows())
+            st.markdown(html or "<div class='mx-quiet'>None right now.</div>", unsafe_allow_html=True)
+
+    st.markdown(MX.section("Inside the index: where the money comes in and goes out",
+                           "box size = index weight · colour = net flow as % of the stock's usual day"),
+                unsafe_allow_html=True)
+    idx = index_defs()
+    pick = st.segmented_control("Index", [d["name"] for d in idx.values()], default=next(iter(idx.values()))["name"],
+                                key="radar_idx") or next(iter(idx.values()))["name"]
+    key = next(k for k, d in idx.items() if d["name"] == pick)
+    _, pc, lvl = _idx_level(svc, key)
+    mm, s_ = _index_stats(day, idx[key], pc)
+    if not mm.empty:
+        lim = float(np.nanpercentile(np.abs(mm["Flow % of usual"].fillna(0)), 90)) or 1.0
+        fig = go.Figure(go.Treemap(
+            labels=mm["Stock"], parents=[""] * len(mm), values=mm["Weight %"],
+            marker=dict(colors=mm["Flow % of usual"].fillna(0).clip(-lim, lim), colorscale=[[0, DOWN], [0.5, "#2a2f3a"], [1, UP]],
+                        cmid=0, cmin=-lim, cmax=lim, colorbar=dict(title="flow %")),
+            customdata=np.c_[mm["Net Flow Cr"], mm["Chg %"], mm["Contribution pts"].fillna(0), mm["Weight %"]],
+            texttemplate="<b>%{label}</b><br>₹%{customdata[0]:+,.0f} Cr<br>%{customdata[1]:+.2f}%",
+            hovertemplate="%{label}: net ₹%{customdata[0]:+,.1f} Cr · price %{customdata[1]:+.2f}% · "
+                          "%{customdata[2]:+,.1f} index pts · weight %{customdata[3]:.1f}%<extra></extra>"))
+        fig.update_layout(height=520, template=plot_template(), margin=dict(l=4, r=4, t=4, b=4))
+        st.plotly_chart(fig, width="stretch", key=f"radar_tree_{key}")
+        st.caption(f"{pick}: constituents net ₹{s_['net']:+,.0f} Cr ({s_['buy']:.0f}% buying), {s_['n_in']} of {s_['n']} "
+                   f"stocks with inflow" + (f" · index points today {s_['pts_up']:+,.0f} / {s_['pts_dn']:+,.0f}" if pc else "")
+                   + ". Big green boxes = heavyweights being bought; big red = heavyweights being sold.")
+
+    st.markdown(MX.section("Sudden changes: unusual candles, last 30 minutes",
+                           "volume 3x / range 2.5x / OI 4x of the usual for that candle"), unsafe_allow_html=True)
+    if ev30.empty:
+        st.markdown("<div class='mx-quiet'>No unusual candles in the last 30 minutes.</div>", unsafe_allow_html=True)
+    else:
+        rows = []
+        for _, e in ev30.sort_values("Time", ascending=False).head(25).iterrows():
+            f = day.set_index("Stock")["Net 30m"].get(e["Stock"], np.nan)
+            txt = (f"{e['Time']} · {e['Candle'].lower()} candle · {e.get('Candle Vol x', np.nan):.1f}x volume · "
+                   f"{e.get('Candle Range x', np.nan):.1f}x range · price {e.get('Chg %', 0):+.2f}%"
+                   + (f" · OI {e['Candle OI x']:.1f}x" if pd.notna(e.get("Candle OI x")) and e.get("Candle OI x", 0) >= 2 else "")
+                   + (f" · money last 30 min ₹{f:+,.0f} Cr" if pd.notna(f) else ""))
+            colr = UP if e["Candle"] == "Bullish" else DOWN
+            rows.append(f"<div class='mx-idea' style='--c:{colr};margin:3px 0'><b>{MX._e(e['Stock'])}</b> "
+                        f"<span style='font-size:.86em'>{MX._e(txt)}</span></div>")
+        st.markdown("".join(rows), unsafe_allow_html=True)
+        st.caption("A single big candle often snaps back; it shows where the activity is. Strongest when the money "
+                   "of the last 30 minutes agrees with the candle.")
+
+    st.markdown(MX.section("All F&O: sectors and their stocks", "box size = turnover today · colour = buying share"),
+                unsafe_allow_html=True)
+    t = day[day["Turnover Cr"] > 0].copy()
+    if not t.empty:
+        secs = t.groupby("Sector").agg(Turnover=("Turnover Cr", "sum"), inflow=("Inflow Cr", "sum"), outflow=("Outflow Cr", "sum"),
+                                       net=("Net Flow Cr", "sum")).reset_index()
+        secs["buy"] = secs["inflow"] / (secs["inflow"] + secs["outflow"]).replace(0, np.nan) * 100
+        labels = list(secs["Sector"]) + list(t["Stock"])
+        parents = [""] * len(secs) + list(t["Sector"])
+        values = list(secs["Turnover"]) + list(t["Turnover Cr"])
+        colors = list(secs["buy"].fillna(50)) + list(t["Buy share %"].fillna(50))
+        nets = list(secs["net"]) + list(t["Net Flow Cr"])
+        fig = go.Figure(go.Treemap(labels=labels, parents=parents, values=values, branchvalues="total",
+                                   marker=dict(colors=colors, colorscale=[[0, DOWN], [0.5, "#2a2f3a"], [1, UP]], cmin=35, cmax=65,
+                                               colorbar=dict(title="buying %")),
+                                   customdata=np.c_[nets], texttemplate="<b>%{label}</b><br>₹%{customdata[0]:+,.0f} Cr",
+                                   hovertemplate="%{label}: net ₹%{customdata[0]:+,.1f} Cr · buying %{color:.0f}%<extra></extra>"))
+        fig.update_layout(height=620, template=plot_template(), margin=dict(l=4, r=4, t=4, b=4))
+        st.plotly_chart(fig, width="stretch", key="radar_tree_all")
+        st.caption("Click a sector to zoom into its stocks. Buying share = turnover on rising candles ÷ all turnover.")
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)

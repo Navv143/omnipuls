@@ -342,3 +342,14 @@ First local run (Yahoo 5-min, 39 days, 24 usable after the 21-day history):
   Added as paper "Footprint top 2 10:00" (momentum_paper.footprint_picks uses candle_study.stock_rows itself).
 - To confirm on the 6-month server run (and 3-min); the in-app table shows it per timeframe and month.
 Also added: ironfly.py - paper weekly Nifty iron fly on the recorder's real option prices (bid / ask), marked every cycle.
+
+## Top 10 gainers / losers by opening gap group (5 Nov 2026, `research/gap_groups_study.py`)
+46 days, all F&O stocks; groups by the size of the opening gap (either direction).
+- Where the toppers come from: gap 0-0.5% 42-46%, 0.5-1% 24%, 1-3% 24-28%, > 3% 6-8%. All stocks: 60% / 25% / 14% / 1%.
+- Odds: a > 3% gap becomes a topper 25-31% of the time, a 1-3% gap 8-9%, a flat open only 3% - but flat opens give the
+  most toppers in number, and their move comes AFTER the open (open-to-close +3.8% of the +3.9% day).
+- Timing (median share of the open-to-close move still ahead): flat opens 83% at 9:30, 69% (gainers) / 57% (losers) at
+  10:00, half done by ~10:05-10:20; 0.5-1% gaps half done ~9:55; 1-3% ~9:35-9:40; > 3% ~9:20-9:30.
+- So: big gaps must be caught at the open (V3); flat opens can be caught at 9:45-10:30 (footprint / grinder window).
+Also: F&O → "Flow radar" view (net flow top 10 increasing / decreasing with a plain story, index treemap of where money
+enters and leaves, sudden-change feed, all-F&O sector treemap).
