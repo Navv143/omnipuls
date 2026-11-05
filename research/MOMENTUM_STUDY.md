@@ -138,3 +138,12 @@ Indices (Yahoo daily, 10 years):
 Small but steady edge. The live page adds the last 30 minutes' index money, breadth change, futures OI build-up and
 option writing (calls vs puts added near the money) as confirmations; whether they add anything is tested on the
 recorded picks (`closing_picks`, next open and next close after costs).
+
+## 5 Nov 2026: Momentum Funnel day rebuilt (the morning was never recorded)
+Trade recording went live at ~13:25, so the funnel's morning picks (10:30-12:55: 94 suggestions, 28 stocks) were not
+in trade_signals. Rebuilt from funnel_log (first suggestion per stock and side) with the bots' plan
+(funnel.trade_plan) and managed exits (funnel.manage) on Yahoo 5-min candles: `research/funnel_rebuild_5nov.csv`.
+- All day: 32 trades closed, 59% wins, +0.13R a trade before costs (+4.1R), about -0.05% a trade after 0.12% costs.
+- Morning (before 13:00): 25 trades, 64% wins, +0.17R; afternoon: 7 trades, 43%, -0.02R.
+- Buys (with the 2.5% up day): +0.30R; sells (against it): -0.37R, 5 of 8 stopped.
+- The recorded afternoon-only view (-0.20R) understated the funnel; one day, still about break-even after costs.
