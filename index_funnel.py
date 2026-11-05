@@ -219,6 +219,46 @@ def save(res: dict, path):
     path.write_text(json.dumps(res, default=str))
 
 
+def banknifty_study(ix_bars: dict, stocks: dict, weights: dict, vix: pd.DataFrame | None) -> dict:
+    """Bank Nifty variants (the plain funnel is ~zero on Bank Nifty): later start, Nifty 50 money as the leader,
+    and the failed break of yesterday's high / low faded (Bank Nifty breaks tend to fail)."""
+    bn = index_table(ix_bars.get("BANKNIFTY"), stocks, weights.get("BANKNIFTY", {}), vix)
+    nf = index_table(ix_bars.get("NIFTY"), stocks, weights.get("NIFTY", {}), vix)
+    if bn.empty or nf.empty:
+        return {}
+    for c in ("buy_share", "net", "net_before", "side"):
+        bn["nif_" + c] = nf[c].reindex(bn.index)
+    s1 = (bn["day_x"] >= DEFAULTS["day_x"]) & (bn["now_x"] >= DEFAULTS["now_x"]) & (bn["range_x"] >= DEFAULTS["range_x"]) & (bn["side"] != 0)
+    own = pd.Series(np.where(bn["side"] > 0, bn["buy_share"] > 50, bn["buy_share"] < 50), index=bn.index) & \
+        (bn["side"] * (bn["net"] - bn["net_before"]) > 0)
+    nifm = pd.Series(np.where(bn["side"] > 0, bn["nif_buy_share"] > 50, bn["nif_buy_share"] < 50), index=bn.index) & \
+        (bn["side"] * (bn["nif_net"] - bn["nif_net_before"]) > 0) & (bn["nif_side"] == bn["side"])
+    br = bn["breadth_with"] >= DEFAULTS["breadth"]
+    dl = bn.groupby("day").agg(h=("High", "max"), l=("Low", "min"))
+    pdh, pdl = bn["day"].map(dl["h"].shift(1)), bn["day"].map(dl["l"].shift(1))
+    hi, lo = bn.groupby("day")["High"].cummax(), bn.groupby("day")["Low"].cummin()
+    fb_s, fb_l = (hi > pdh) & (bn["Close"] < pdh), (lo < pdl) & (bn["Close"] > pdl)
+    variants = {"funnel (steps 1-4)": (s1 & own & br, None, FIRST), "funnel from 10:00": (s1 & own & br, None, 600),
+                "Nifty 50 money as leader": (s1 & nifm, None, FIRST), "funnel + Nifty money": (s1 & own & br & nifm, None, FIRST),
+                "failed break of yesterday's high/low, faded": (fb_s | fb_l, np.where(fb_s, -1, np.where(fb_l, 1, 0)), FIRST)}
+    out = {}
+    for name, (mask, side, first) in variants.items():
+        t = bn.copy()
+        if side is not None:
+            t["side"] = side
+        t["x"] = mask.fillna(False) & (t["side"] != 0)
+        sg = signals(t, "x", first)
+        if sg.empty:
+            out[name] = {"n": 0}
+            continue
+        days = np.sort(sg["day"].unique())
+        mid = days[len(days) // 2]
+        out[name] = {**_stats(sg["ret"]), "first_half": _stats(sg[sg["day"] < mid]["ret"]).get("ret"),
+                     "second_half": _stats(sg[sg["day"] >= mid]["ret"]).get("ret"),
+                     "pts": round(float((sg["ret"] * sg["entry"]).mean()), 1)}
+    return out
+
+
 def run_server() -> dict | None:
     """Nightly on the server: the backtest on the Setup Finder's year of Dhan 5-minute candles (indices, their stocks
     and India VIX) -> <data>/bot/index_funnel.json."""
@@ -236,7 +276,23 @@ def run_server() -> dict | None:
     except Exception:
         weights = {k: IX._norm(v) for k, v in IX.BUILTIN.items()}
     res = backtest(ix, bars, weights, bars.get("INDIAVIX"))
+    res["banknifty"] = banknifty_study(ix, bars, weights, bars.get("INDIAVIX"))
     res["source"] = "Dhan 5-minute (Setup Finder cache)"
+    try:  # also to Supabase, so the results can be read from outside the server
+        import cloudstore
+        if not cloudstore.enabled():
+            try:
+                import streamlit as st
+                sb = dict(st.secrets.get("supabase") or {})
+                cloudstore.configure(sb.get("url"), sb.get("key"))
+            except Exception:
+                pass
+        cloudstore.upsert_rows("bot_results", [{"run_at": "index_funnel " + res["run_at"],
+                                                "result": json.loads(json.dumps(res, default=str))}], "run_at")
+        import time as _t
+        _t.sleep(3)
+    except Exception:
+        pass
     out = paths.DATA / "bot"
     out.mkdir(parents=True, exist_ok=True)
     save(res, out / "index_funnel.json")

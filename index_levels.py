@@ -186,3 +186,24 @@ def ladder(spot: float, piv: dict, vps: dict, chain: dict, side: int = 0, min_ga
         plan = {"stop": res["price"], "stop_at": res["name"], "target": sup["price"], "target_at": sup["name"],
                 "rr": (spot - sup["price"]) / (res["price"] - spot) if res["price"] > spot else None}
     return {"levels": lv, "support": sup, "resistance": res, "plan": plan}
+
+
+def failed_break(bars: pd.DataFrame) -> dict | None:
+    """Today's first failed break of yesterday's high / low: traded beyond it, then a 5-minute close back inside ->
+    fade it (Bank Nifty breaks tend to fail). Signals from 9:30."""
+    today, prev, _ = sessions(bars)
+    if today.empty or prev.empty:
+        return None
+    pdh, pdl = float(prev["High"].max()), float(prev["Low"].min())
+    hi, lo = today["High"].cummax(), today["Low"].cummin()
+    m = today.index.hour * 60 + today.index.minute
+    s = (hi > pdh) & (today["Close"] < pdh) & (m + 5 >= 570) & (m + 5 <= 840)
+    l_ = (lo < pdl) & (today["Close"] > pdl) & (m + 5 >= 570) & (m + 5 <= 840)
+    hits = today[s | l_]
+    out = {"pdh": pdh, "pdl": pdl, "broke_high": bool((hi > pdh).any()), "broke_low": bool((lo < pdl).any())}
+    if hits.empty:
+        return {**out, "signal": None}
+    t0 = hits.index[0]
+    short = bool(s.loc[t0])
+    return {**out, "signal": {"side": "SHORT" if short else "LONG", "time": (t0 + pd.Timedelta(minutes=5)).strftime("%H:%M"),
+                              "price": float(hits["Close"].iloc[0]), "level": pdh if short else pdl}}

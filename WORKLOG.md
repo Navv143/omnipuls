@@ -405,3 +405,11 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   candle + running total), OI since the last check (CE / PE / futures, kept in server memory through the day), levels
   ladder, option OI by strike, futures OI through the day coloured by build-up. The recorder already stores the chain
   every minute and futures OI, so the OI step can be backtested once a few weeks are recorded.
+
+## 5 Nov 2026: Bank Nifty focus, index snapshots for the OI re-test
+
+- Server stores every index's funnel steps, index money, futures OI / build-up and option OI (from the recorder's chain)
+  every 5 minutes in Supabase `index_log`, so the OI step can be re-tested from outside the server.
+- Bank Nifty variants tested (research/MOMENTUM_STUDY.md): the failed break of yesterday's high / low, faded, is the
+  best (+0.12% ≈ 67 pts, 61% wins, both halves); it shows live on the Bank Nifty tab. The nightly server backtest now
+  includes the Bank Nifty variants and writes the result to Supabase bot_results too.

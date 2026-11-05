@@ -6675,6 +6675,17 @@ def _index_detail(key: str, sid: int, ib: dict, fb: dict, bars: dict, weights: d
                (MX.UP if pl["rr"] >= 1.5 else MX.WARN) if pl.get("rr") else MX.NEUTRAL),
     ]), unsafe_allow_html=True)
     st.caption("Step 5 · OI: " + oi["text"])
+    if key == "BANKNIFTY":
+        fbk = LV.failed_break(ib.get(key)) or {}
+        sg = fbk.get("signal")
+        msg = (f"**Failed-break fade: {sg['side']}** at {sg['time']} @ {sg['price']:,.0f} (broke yesterday's "
+               f"{'high' if sg['side'] == 'SHORT' else 'low'} {sg['level']:,.0f} and closed back inside) · exit 15:15"
+               if sg else f"Failed-break fade: no signal yet (yesterday high {fbk.get('pdh', 0):,.0f} / low "
+               f"{fbk.get('pdl', 0):,.0f}; broke high: {'yes' if fbk.get('broke_high') else 'no'}, low: "
+               f"{'yes' if fbk.get('broke_low') else 'no'})")
+        (st.success if sg else st.info)(msg + ". The best Bank Nifty variant so far (first test: +0.12% ≈ 67 pts a trade, "
+                                        "61% wins, both halves positive, 33 trades); the plain funnel is ~zero on Bank Nifty.",
+                                        icon=":material/swap_vert:")
     c1, c2 = st.columns([1.7, 1]) if not MOBILE else (st.container(), st.container())
     with c1:
         st.plotly_chart(_money_fig(t, IF.INDEXES[key]), width="stretch", key=f"ixm_{key}", config={"displayModeBar": False})
@@ -6735,6 +6746,12 @@ def index_funnel_body():
                                     "t": (v.get("step4") or {}).get("t")} for k, v in bt["indices"].items()]),
                      hide_index=True, width="stretch")
         st.caption("Each step's signals after 0.02% costs, held to 15:15. Step 3 (index money) adds the most.")
+        if bt.get("banknifty"):
+            st.markdown(MX.section("Bank Nifty variants", "the plain funnel is ~zero on Bank Nifty"), unsafe_allow_html=True)
+            st.dataframe(pd.DataFrame([{"Variant": k, "Trades": v.get("n"), "%/trade": v.get("ret"), "≈ pts": v.get("pts"),
+                                        "Win %": v.get("win"), "t": v.get("t"), "1st half %": v.get("first_half"),
+                                        "2nd half %": v.get("second_half")} for k, v in bt["banknifty"].items()]),
+                         hide_index=True, width="stretch")
     else:
         st.dataframe(pd.DataFrame([
             {"Index": "Nifty 50", "Signals": 28, "%/trade": 0.252, "Win %": 61, "t": 2.6, "1st half": 0.146, "2nd half": 0.358},
@@ -6742,6 +6759,14 @@ def index_funnel_body():
             {"Index": "Midcap Select", "Signals": 22, "%/trade": 0.197, "Win %": 59, "t": None, "1st half": None, "2nd half": None},
             {"Index": "Fin Nifty", "Signals": 26, "%/trade": 0.047, "Win %": 46, "t": None, "1st half": None, "2nd half": None},
             {"Index": "Bank Nifty", "Signals": 27, "%/trade": -0.002, "Win %": 46, "t": 0.0, "1st half": 0.082, "2nd half": -0.080},
+        ]), hide_index=True, width="stretch")
+        st.markdown(MX.section("Bank Nifty variants", "first test, Yahoo 52 days"), unsafe_allow_html=True)
+        st.dataframe(pd.DataFrame([
+            {"Variant": "funnel (steps 1-4)", "Trades": 27, "%/trade": -0.002, "≈ pts": -1, "Win %": 48, "1st half %": 0.082, "2nd half %": -0.080},
+            {"Variant": "funnel from 10:00", "Trades": 20, "%/trade": 0.029, "≈ pts": 16, "Win %": 50, "1st half %": 0.090, "2nd half %": -0.032},
+            {"Variant": "Nifty 50 money as leader", "Trades": 28, "%/trade": 0.039, "≈ pts": 21, "Win %": 54, "1st half %": 0.080, "2nd half %": -0.002},
+            {"Variant": "funnel + Nifty money", "Trades": 25, "%/trade": 0.046, "≈ pts": 26, "Win %": 52, "1st half %": 0.125, "2nd half %": -0.028},
+            {"Variant": "failed break of yesterday's high/low, faded", "Trades": 33, "%/trade": 0.121, "≈ pts": 67, "Win %": 61, "1st half %": 0.109, "2nd half %": 0.133},
         ]), hide_index=True, width="stretch")
         st.caption("First test on 52 days of Yahoo data (steps 1-4, 0.02% costs, exit 15:15): all indices together "
                    "+0.11% a signal by day (t 1.5); ATR alone +0.03%, adding index money +0.12%. Promising, not proven: the "
