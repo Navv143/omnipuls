@@ -297,3 +297,13 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   Market View lists the master bot's ideas and counts passed ones as tested signals.
 - Tested with mocked market data: planted sector rally → tested-rule signals passed 4/4, watch ideas, each idea
   logged once, scored at the close; app pages render without errors.
+
+## 5 Nov 2026: Market View redesign (visual, not text)
+
+- New `mv_ui.py`: index pulse tiles (price, change chip, today's sparkline vs yesterday's close, range bar with
+  yesterday's high/low, 2-3 word tags), a mood gauge with the readings' votes, the trade idea panel, signals as
+  colour-coded chips (green long, red short; status pill), market-internals meters (build-up, breadth, money flow,
+  fresh futures money, VIX scale, unusual activity), a sector money heatmap (size = turnover, colour = net money)
+  and option-writer bars (spot between support and resistance, max pain marked).
+- The long explanations moved into tooltips and a folded "What each reading means"; the full signal table is folded.
+- Mobbin (design references) needs a paid plan, so the layout follows Sensibull / StockEdge / TradingView patterns.

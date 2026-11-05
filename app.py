@@ -50,6 +50,7 @@ import trend_alert as TA
 import desk as DK
 import twelve as TW
 import market_view as MV
+import mv_ui as MX
 import bot as BOT
 import paths as PATHS
 import cryptocom as CC
@@ -6161,13 +6162,15 @@ def market_view_body(svc, t: pd.DataFrame):
     # ---- readings with what they mean
     idx_reads = [MV.index_read(name, idx_b.get(k), fut_b.get(k)) for k, name in
                  (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"), ("FINNIFTY", "Fin Nifty"), ("SENSEX", "Sensex"))]
-    chains = []
+    chains, chain_px = [], []
     for k, sid in (("NIFTY", 13), ("BANKNIFTY", 25)):
         try:
             spot, ch, mp = _mv_chain(sid, "IDX_I")
             chains.append(MV.chain_read(TREND_NAMES.get(k, k), spot, ch, mp))
+            chain_px.append((spot, mp))
         except Exception:
             chains.append(None)
+            chain_px.append((None, None))
     market = [MV.vix_read(snaps.get("INDIAVIX")), MV.buildup_read(share), MV.breadth_read(adv, dec),
               MV.futures_money_read(sf)]
     money = [MV.flow_read(secflow), MV.activity_read(R)]
@@ -6192,59 +6195,91 @@ def market_view_body(svc, t: pd.DataFrame):
                                "text": "; ".join(r["Signal"].split(": ", 1)[1] + " (" + r["Details"].split(" · ")[0] + ")"
                                                  for r in passed)}] if passed else [])
     idea = MV.trade_idea(idea_rows, verdict, every)
-    c = UP if idea["tone"] > 0 else DOWN if idea["tone"] < 0 else "#94A3B8"
-    g = {UP: "rgba(38,166,154,.18)", DOWN: "rgba(239,83,80,.18)"}.get(c, "rgba(148,163,184,.10)")
     now = datetime.now(IST)
-    st.markdown(f"<div class='mv-idea' style='--mvc:{c};--mvg:{g}'><div class='k'>Trade idea right now · "
-                f"{now:%a %d %b %H:%M} IST</div><h3>{idea['headline']}</h3>"
-                + "".join(f"<p>{_md_inline(x)}</p>" for x in idea["lines"]) + "</div>", unsafe_allow_html=True)
-
-    # ---- 2. all signals
-    st.subheader("All signals, one list")
     sig = _mv_signals(plan_rows, ce, pe, sc, picks, bot_rows)
-    if sig.empty:
-        st.caption("No signals yet.")
-    elif MOBILE:  # phones: a list, so evidence and details aren't cut off by a wide table
-        ev_c = {"Tested": MV_EV_COLOR["tested"], "Small edge": MV_EV_COLOR["edge"], "Context": MV_EV_COLOR["context"]}
-        st.markdown("<div class='mv-grid'>" + "".join(
-            f"<div class='mv-card' style='--mvc:{UP if r['Status'] == '● SIGNAL' else '#94A3B8'};padding:9px 12px'>"
-            f"<div class='t'><span>{r['Status']}</span><span class='mv-ev' style='--evc:{ev_c.get(r['Evidence'], '#94A3B8')}'>"
-            f"{r['Evidence']}</span></div><div style='font-weight:600;margin:3px 0'>{r['Signal']}</div>"
-            f"<div class='d'>{r['Details']}</div></div>" for _, r in sig.iterrows()) + "</div>", unsafe_allow_html=True)
-    else:
-        st.dataframe(sig, hide_index=True, width="stretch", height=min(42 + 35 * len(sig), 460),
-                     column_config={"Details": st.column_config.TextColumn(width="large")})
-    st.caption("Tested = made money after costs in testing (trade these). Small edge = real but thin. "
-               "Context = not tested as a signal: use it to choose the side, not as an entry.")
+    st.markdown(MX.CSS, unsafe_allow_html=True)
 
-    # ---- Nifty 50: where the money goes candle by candle, against price and MACD
+    # ---- 1. pulse: the indices at a glance
+    names = (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"), ("FINNIFTY", "Fin Nifty"), ("SENSEX", "Sensex"))
+    read_of = {r["title"]: r for r in idx_reads if r}
+    tiles = [MX.pulse_tile(nm, snaps.get(k), read_of.get(nm), idx_b.get(k)) for k, nm in names]
+    tiles.append(MX.pulse_tile("India VIX", snaps.get("INDIAVIX"), None, None, invert=True))
+    st.markdown(MX.pulse(tiles), unsafe_allow_html=True)
+
+    # ---- 2. mood gauge + the trade idea
+    bull = sum(1 for r in every if r["tone"] > 0)
+    bear = sum(1 for r in every if r["tone"] < 0)
+    st.markdown("<div class='mx-hero'>" + MX.gauge(verdict.get("score"), verdict.get("label", "Waiting for data"),
+                                                   bull, bear, len(every) - bull - bear)
+                + MX.idea_panel(idea, f"{now:%a %d %b %H:%M} IST", _md_inline) + "</div>", unsafe_allow_html=True)
+
+    # ---- 3. signals as chips
+    n_live = int((sig["Status"] == "● SIGNAL").sum()) if not sig.empty else 0
+    st.markdown(MX.section("Signals", f"{n_live} live · hover a card for details") + MX.signal_cards(sig),
+                unsafe_allow_html=True)
+
+    # ---- 4. market internals as meters
+    rd = {r["title"]: r for r in every}
+    tip = lambda t: (rd.get(t) or {}).get("meaning", "")  # noqa: E731
+    parts = []
+    if share is not None and not (isinstance(share, float) and np.isnan(share)):
+        parts.append(MX.meter_split("Nifty build-up", share, 100 - share, "bulls adding", "bears adding",
+                                    f"{share:.0f}% bullish", tip("Nifty build-up (who is adding positions)")))
+    if adv is not None and dec is not None and adv + dec:
+        parts.append(MX.meter_split("F&O breadth", adv, dec, f"{adv} up", f"{dec} down",
+                                    f"{adv / (adv + dec) * 100:.0f}% up", tip("F&O breadth")))
+    if buy_share is not None and np.isfinite(buy_share):
+        parts.append(MX.meter_split("Money flow", buy_share, 100 - buy_share, "buying", "selling",
+                                    f"{buy_share:.0f}% buying", "Turnover of F&O stocks split by where each candle closed"))
+    if fut_money is not None:
+        parts.append(MX.meter_diverging("Fresh futures money", fut_money, max(abs(fut_money), 2000),
+                                        f"₹{fut_money:+,.0f} Cr", "shorts", "longs", tip("Fresh futures money")))
+    vx_snap = snaps.get("INDIAVIX") or {}
+    parts.append(MX.meter_level("India VIX", vx_snap.get("last"), vx_snap.get("chg"), 10, 25, tip("India VIX (fear)")))
+    if not R.empty and "Smart" in R:
+        nb, ns = int((R["Smart"] >= 40).sum()), int((R["Smart"] <= -40).sum())
+        parts.append(MX.meter_split("Unusual activity", nb, ns, f"{nb} bullish", f"{ns} bearish",
+                                    f"{nb} ▲ · {ns} ▼", tip("Unusual activity")))
+    if parts:
+        st.markdown(MX.section("Market internals", "green = buyers · red = sellers") + MX.meters(parts),
+                    unsafe_allow_html=True)
+
+    # ---- 5. where the money goes: sector heatmap, Nifty 50 flow candle by candle
+    heat = MX.heatmap(secflow)
+    if heat:
+        st.markdown(MX.section("Sector money", "size = turnover · colour = net money in / out") + heat,
+                    unsafe_allow_html=True)
+        rot = money_rotation_fig(secflow, 300 if MOBILE else 340)
+        if rot is not None:
+            with st.expander("Money path: from which sectors to which", icon=":material/swap_horiz:"):
+                st.plotly_chart(rot, width="stretch", key="mv_rotation", config={"displayModeBar": False})
     nf_today, nf_cross, nf_read = MV.flow_macd(idx_b.get("NIFTY"), MV.index_flow(per, (index_defs().get("NIFTY") or {})
                                                                                    .get("w", {})))
     if not nf_today.empty:
-        st.subheader("Nifty 50: money flow candle by candle")
-        if nf_read:
-            st.markdown("<div class='mv-grid' style='grid-template-columns:1fr'>" + _mv_card(nf_read) + "</div>",
+        lead = (nf_read or {}).get("meaning", "").split("\n")[0]
+        st.markdown(MX.section("Nifty 50 money flow × MACD", (nf_read or {}).get("value", "")), unsafe_allow_html=True)
+        if lead:
+            st.markdown(f"<div class='mx-quiet' style='margin:-4px 0 4px;color:var(--om-text-3)'>{_md_inline(lead)}</div>",
                         unsafe_allow_html=True)
-        st.plotly_chart(nifty_flow_fig(nf_today, nf_cross, 460 if MOBILE else 560), width="stretch",
+        st.plotly_chart(nifty_flow_fig(nf_today, nf_cross, 420 if MOBILE else 500), width="stretch",
                         key="mv_nifty_flow", config={"displayModeBar": False})
-        st.caption("Green / red bars: money into / out of the Nifty 50 stocks in each 5-minute candle (darker = more). "
-                   "▲▼ MACD crosses: coloured when money flow backs them, grey when it doesn't.")
-    rot = money_rotation_fig(secflow, 320 if MOBILE else 380)
-    if rot is not None:
-        st.subheader("Where the money moves")
-        st.plotly_chart(rot, width="stretch", key="mv_rotation", config={"displayModeBar": False})
-        st.caption("Red: sectors money is leaving. Green: sectors it is going to. Width = rupees. Updates every minute.")
 
-    # ---- 3. key data, each with what it means
-    for title, group in (("Indices", idx_reads + [market[0]]), ("Who is buying", market[1:] + money),
-                         ("Option chains", chains)):
-        cards = [r for r in group if r]
-        if cards:
-            st.subheader(title)
-            st.markdown("<div class='mv-grid'>" + "".join(_mv_card(r) for r in cards) + "</div>",
-                        unsafe_allow_html=True)
-    st.caption("Refreshes every minute in market hours. Research behind each line: research/FINAL_SETUPS.md. "
-               "For information only, not investment advice.")
+    # ---- 6. option chains
+    ch_tiles = [MX.chain_tile(r, px_[0], px_[1]) for r, px_ in zip(chains, chain_px)]
+    if any(ch_tiles):
+        st.markdown(MX.section("Option writers", "◆ max pain · bar = spot between support and resistance")
+                    + MX.chains(ch_tiles), unsafe_allow_html=True)
+
+    # ---- the detail, folded away
+    with st.expander("All signals as a table", icon=":material/table_rows:"):
+        if not sig.empty:
+            st.dataframe(sig, hide_index=True, width="stretch",
+                         column_config={"Details": st.column_config.TextColumn(width="large")})
+        st.caption("Tested = made money after costs in testing (trade these). Small edge = real but thin. "
+                   "Context = not tested as a signal: use it to choose the side, not as an entry.")
+    with st.expander("What each reading means", icon=":material/menu_book:"):
+        st.markdown("<div class='mv-grid'>" + "".join(_mv_card(r) for r in every) + "</div>", unsafe_allow_html=True)
+    st.caption("Refreshes every minute in market hours. For information only, not investment advice.")
 
 
 def page_view():
