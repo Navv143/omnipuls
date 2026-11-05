@@ -176,3 +176,18 @@ opposite colour, DOL target, 24 settings (entry market / 50% limit, DOL 10 / 20 
 -0.04R overall, shorts -0.19R, so the EBP condition is the edge. Chosen: 50% limit, DOL 20, hold 14 hours: +0.40R a
 trade (165 trades, 27% wins), positive in each third of the period (+0.54 / +0.32 / +0.35), +0.27R at double costs,
 +37 points a trade; worst trade -12.7R (overnight gap). Paper-traded from 5 Nov 2026 (`bn_ebp.py`, bots.py).
+
+## ICT AMD model: liquidity sweep + SMT + CISD (5 Nov 2026, `research/amd_study.py`)
+
+From an envxytrades reel ("30M AMD model"). Accumulation = the range of the last 6 candles of the higher timeframe
+(15m / 30m / 1h / 4h); manipulation = a 5-min sweep beyond it; SMT = the partner market does not sweep its own range
+at the same candle (BTC↔ETH, SOL↔BTC, Bank Nifty↔Nifty; gold without SMT); CISD = a 5-min close back through the
+open of the candle run that made the sweep, within 1 hour; stop at the extreme since the sweep; target 2R or the other
+side of the range. Results: `research/amd_results.csv`, runner `research/amd_run.py`.
+
+- BTC, ETH, SOL (4 years): every version loses, -0.05 to -0.31R a trade; before costs ~0 (-0.04% to +0.03%). The
+  4h range loses least (-0.05 to -0.16R). SMT changes little (±0.03R, either way).
+- Gold (no SMT): -0.19 to -0.38R.
+- Nifty / Bank Nifty (60 days only): Bank Nifty 1h range with SMT +0.31R but 25 trades (halves +0.40 / +0.11); too
+  few to judge; all 15m / 30m versions negative.
+Conclusion: no edge; the Bank Nifty 1h + SMT result needs longer 5-min data before it means anything.
