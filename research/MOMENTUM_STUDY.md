@@ -265,3 +265,19 @@ sector first. 32 days, ~25-30 triggers per side.
   days of data) Nifty is higher 60 minutes later only 40% of the time (avg -0.06%); after a strong one (> 0.1% beyond the
   range, 11 days) only 18% (-0.15%). Down breakouts: 41% (avg -0.03%). Midday breakouts mostly fade; 5 Nov was the
   exception, not the rule. (A fade of strong midday up breakouts is a possible idea, only 11 cases so far.)
+
+## With or against Nifty, stock and sector (5 Nov 2026, `research/divergence_study.py`)
+5 Nov: Nifty +2.4% but 53 stocks fell (PIIND -19%, CUMMINSIND -14%); Capital Goods & Infra (29 stocks, 34% up),
+Chemicals and Telecom went against Nifty. Over 46 days 26% of sector-days move against Nifty and ~9 stocks a day finish
+>= 1 ATR against it (33 with it). At 10:00 / 10:30 / 11:00, stocks already >= 0.5 ATR their way, by group (32 days,
+rest of the day from the next open, 0.12% costs):
+- with/with (stock, its sector and Nifty all the same way): ~50 a day, +0.15% to +0.17%; on >= 2x volume (~12 a day)
+  +0.15% to +0.18% with both halves positive at every check; with a 0.75 ATR stop and 1.5 ATR target at 10:00 +0.16%
+  (halves +0.15 / +0.17, 55% win). Down days (short) only ~3 a day and unstable.
+- against Nifty with the sector also against (a sector going its own way): ~12 a day, halves flip sign (-0.39 / +0.34):
+  continuation depends on the period, not predictable from these readings.
+- against Nifty AND its own sector (alone): fades back - -0.18% to -0.39%, both halves negative; fading it is about 0
+  after costs (+0.15% at 11:00, halves +0.28 / +0.01).
+- Against-Nifty stocks that finish big vs those that fade: already further (1.0 vs 0.6 ATR), gapped their way (0.31 vs
+  0.13 ATR), much more volume (2.1x vs 1.3x) - news-type moves - but trading them is still unstable (halves flip).
+Added "Aligned 10:00" (with/with, >= 0.5 ATR, >= 2x volume) and "Nifty midday fade" as paper setups (momentum_paper.py).
