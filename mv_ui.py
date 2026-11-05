@@ -716,3 +716,35 @@ def index_card(r: dict, weak: bool = False) -> str:
             f"<div class='votes' style='display:flex;flex-direction:column;gap:4px;margin-top:8px'>{chips}</div>"
             + (f"<div class='px' style='margin-top:6px'>Signal at {sig['time']} @ {_num(sig['price'])} · exit 15:15</div>" if sig else "")
             + "</div>")
+
+
+LADDER_CSS = """<style>
+.ld{border:1px solid var(--om-border);border-radius:14px;background:var(--om-surface);padding:8px 0;max-height:520px;overflow:auto}
+.ld .r{display:grid;grid-template-columns:14px 1fr auto auto;gap:8px;align-items:center;padding:4px 12px;font-size:var(--fs-xs)}
+.ld .r i{width:8px;height:8px;border-radius:50%;background:var(--k)}
+.ld .r b{font-family:var(--font-num);color:var(--om-text)}
+.ld .r small{font-family:var(--font-num);color:var(--om-faint)}
+.ld .r.hl{background:color-mix(in srgb,var(--k) 12%,transparent)}
+.ld .spot{display:flex;justify-content:space-between;margin:4px 8px;padding:6px 10px;border-radius:8px;font-weight:700;
+  background:color-mix(in srgb,var(--om-accent) 18%,transparent);border:1px solid var(--om-accent);font-family:var(--font-num)}
+.ld .lg{display:flex;gap:10px;flex-wrap:wrap;padding:2px 12px 6px;font-size:.62rem;color:var(--om-faint)}
+.ld .lg span:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--k);margin-right:4px}
+</style>"""
+LEVEL_COLOR = {"pivot": "#A855F7", "volume": "#22D3EE", "oi": "#F59E0B", "day": "#94A3B8"}
+
+
+def level_ladder(levels: list, spot: float, sup: dict | None, res: dict | None) -> str:
+    rows, placed = [], False
+    for x in levels:
+        if not placed and x["price"] < spot:
+            rows.append(f"<div class='spot'><span>Spot</span><span>{spot:,.2f}</span></div>")
+            placed = True
+        hl = " hl" if (sup and x is sup) or (res and x is res) else ""
+        rows.append(f"<div class='r{hl}' style='--k:{LEVEL_COLOR.get(x['kind'], NEUTRAL)}'><i></i><span>{_e(x['name'])}</span>"
+                    f"<b>{x['price']:,.1f}</b><small>{(x['price'] / spot - 1) * 100:+.2f}%</small></div>")
+    if not placed:
+        rows.append(f"<div class='spot'><span>Spot</span><span>{spot:,.2f}</span></div>")
+    legend = "".join(f"<span style='--k:{c}'>{n}</span>" for n, c in
+                     (("pivots", LEVEL_COLOR["pivot"]), ("volume profile", LEVEL_COLOR["volume"]), ("OI", LEVEL_COLOR["oi"]),
+                      ("yesterday", LEVEL_COLOR["day"])))
+    return f"<div class='ld'><div class='lg'>{legend}</div>{''.join(rows)}</div>"
