@@ -7264,6 +7264,77 @@ def _signal_record(source_filter: str | None = None):
                                 "% after costs": st.column_config.NumberColumn(format="%+.2f"), "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
 
 
+def _ironfly_section():
+    """Paper weekly Nifty iron fly on the recorder's real option prices (ironfly.py)."""
+    try:
+        import ironfly as IFY
+        rows = IFY.load()
+    except Exception:
+        rows = []
+    st.markdown(MX.section("Weekly Nifty iron fly (paper, real option prices)",
+                           "sell ATM call + put, buy wings ~2 SD away · defined risk · opened the day after expiry"),
+                unsafe_allow_html=True)
+    if not rows:
+        st.caption("Opens on the first market cycle after 09:30 once the recorder has a fresh Nifty chain. 11-year model test: "
+                   "wins 62% of weeks, about +0.20% of the index a week, max loss ~2.8%; to be confirmed here on real prices.")
+        return
+    t = rows[-1]
+    lot = t.get("lot")
+    st.markdown(f"<div class='mx-idea' style='--c:var(--om-accent);margin:6px 0'><b>{MX._e(t['setup'])}</b> · "
+                f"{'OPEN' if t['status'] == 'open' else 'closed ' + str(t.get('closed', ''))} · sold {t['atm']:.0f} CE+PE, bought "
+                f"{t['wing_ce']:.0f} CE / {t['wing_pe']:.0f} PE · credit {t['credit']:.1f} pts · max loss {t['max_loss']:.1f} pts · "
+                f"P&L now {t.get('pnl_after_costs_pts', 0):+.1f} pts after costs"
+                + (f" (₹{t.get('pnl_rs_per_lot') or 0:+,.0f} per lot of {lot})" if lot else "")
+                + f" · Nifty {t.get('spot_now', t['spot']):,.0f} (opened {t['spot']:,.0f})</div>", unsafe_allow_html=True)
+    done = [r for r in rows if r.get("status") == "closed"]
+    if done:
+        d = pd.DataFrame(done)
+        st.caption(f"{len(d)} weeks closed · won {(d['pnl_after_costs_pts'] > 0).mean() * 100:.0f}% · "
+                   f"total {d['pnl_after_costs_pts'].sum():+.1f} pts after costs")
+        st.dataframe(d.reindex(columns=["setup", "opened", "closed", "atm", "credit", "max_loss", "pnl_pts", "pnl_after_costs_pts",
+                                        "pnl_rs_per_lot"]), hide_index=True, width="stretch")
+
+
+def _candle_study_results():
+    """Nightly candle study (candle_study.py): the checklist of what the day's top gainers / losers have in common, on
+    6 months of 1-minute candles resampled to 3 / 5 / 15 minutes, and the big-player footprint score."""
+    try:
+        cs = json.loads((PATHS.DATA / "bot" / "candle_study.json").read_text())
+    except Exception:
+        cs = None
+    st.markdown(MX.section("Candle study: what the top gainers and losers have in common",
+                           "6 months of candles, 3 / 5 / 15 min · re-run every night"), unsafe_allow_html=True)
+    if not cs:
+        st.caption("Runs on the server after tonight's research (first run downloads 6 months of 1-minute candles). "
+                   "First local test (39 days, 5-min): at 10:00 the 2 stocks with the most big-player footprints made "
+                   "+0.55% a trade to the close (first 60% of days +0.58%, last 40% +0.51%), long and short alike.")
+        return
+    st.caption(f"{cs.get('source')} · {cs.get('days')} days {cs.get('from')} to {cs.get('to')} · {cs.get('stocks')} stocks · "
+               f"learned before {cs.get('split')}, tested after")
+    tabs = cs.get("tables") or {}
+    rows = []
+    for key, v in tabs.items():
+        f2 = (v.get("footprint") or {}).get("top2") or {}
+        t2 = v.get("top2") or {}
+        rows.append({"Timeframe / time": key, "Footprint top 2: % a trade": f2.get("rest_pct"), "train": f2.get("train"),
+                     "test": f2.get("test"), "win %": f2.get("win_pct"),
+                     "months": " ".join(f"{m[5:]}:{x:+.2f}" for m, x in (f2.get("by_month") or {}).items()),
+                     "Checklist top 2: toppers % (test)": t2.get("test_topper_pct"), "Checklist top 2: % a trade (test)": t2.get("test_rest_pct")})
+    if rows:
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    pick = st.selectbox("Checklist detail", list(tabs), index=min(len(tabs) - 1, list(tabs).index("5m 10:00")) if "5m 10:00" in tabs else 0,
+                        key="cs_pick") if tabs else None
+    if pick:
+        it = pd.DataFrame(tabs[pick].get("items") or [])
+        if not it.empty:
+            st.dataframe(it.rename(columns={"text": "Checklist item", "in_toppers_pct": "In toppers %", "in_others_pct": "In others %",
+                                            "lift_common": "Common lift", "p_topper_pct": "Becomes topper %",
+                                            "p_topper_lift": "Topper lift", "rest_pct": "Rest of day %", "rest_train": "train",
+                                            "rest_test": "test", "months_positive": "Months +", "last_month_rest": "Last month %"}
+                                   ).drop(columns=["item", "share_pct", "p_big_pct", "n"], errors="ignore"),
+                         hide_index=True, width="stretch")
+
+
 def _noise_band_results():
     """Nightly noise-band research (noise_research.py on the server's year of 5-minute candles)."""
     try:
@@ -7709,7 +7780,7 @@ def _btc_paper_section():
     tested = {"Grinder 10:30": ("+0.18% a trade", "56%"), "Ignition big mover": ("+0.13% a trade", "40%"),
               "Aligned 10:00": ("+0.16% a trade", "55%"), "Nifty midday fade": ("+0.09% (11 days)", "82%"),
               "Sector top 2 UP": ("+0.22% a trade", "56%"), "Sector top 2 DOWN vs Nifty": ("+0.13% (14 days)", "62%"),
-              "Nifty ORB break": ("+1.31R (22 days)", "41%"), "V3 early pick": ("+0.58% a trade", "57%"), "V3 (top 2, filters)": ("-0.05% (54 days)", "48%"),
+              "Nifty ORB break": ("+1.31R (22 days)", "41%"), "Footprint top 2 10:00": ("+0.55% (39 days)", "65%"), "V3 early pick": ("+0.58% a trade", "57%"), "V3 (top 2, filters)": ("-0.05% (54 days)", "48%"),
               "Bank Nifty EBP 1h (overnight)": ("+0.40R", "27%"), "BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%"),
               "BTC burst momentum": ("+0.15R (+0.21%)", ""), "ETH burst momentum": ("+0.13R (+0.36%)", ""),
               "SOL burst momentum": ("+0.24R (+0.61%)", "")}
@@ -7816,6 +7887,8 @@ def page_auto():
                            f"{len(taken)} today · marked every 5 minutes"), unsafe_allow_html=True)
     st.markdown(MX.position_cards(taken), unsafe_allow_html=True)
     _btc_paper_section()
+    _ironfly_section()
+    _candle_study_results()
     # equity curve over the days
     if closed_days:
         import plotly.graph_objects as go

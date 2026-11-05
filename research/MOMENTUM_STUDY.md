@@ -327,3 +327,18 @@ Daily Nifty and India VIX 2015-2026 (Yahoo), hourly Nifty 3 years.
   prices from the recorder before any money.
 - Expected-move fade (Nifty already beyond the VIX-implied day move by 11:15-14:15, 28% of days): no snap-back (-0.03%).
 - Expiry pin to 100-point strikes: none worth trading (close 24.4 vs 25.4 pts from a strike, 33% vs 29% within 15 pts).
+
+## Candle study: the mandatory checklist + big-player footprints (5 Nov 2026, `candle_study.py`)
+27 checklist items (before the open / first candle / by the decision time / footprints), read in each stock's direction
+so far at 09:30-11:00. Server: 6 months of Dhan 1-minute candles -> 3 / 5 / 15 minutes, every night (bots.run_research).
+First local run (Yahoo 5-min, 39 days, 24 usable after the 21-day history):
+- The visible items (already >= 1 ATR, top 10 movers now, 3x volume, gap its way, top 2 of its sector) identify the day's
+  toppers well - checklist top 2 at 10:30 are toppers 81% of the time on the test days - but by then the move is mostly
+  done: rest of the day only +0.06%.
+- The footprint items (trap the other way first, absorption, strong closes, opened against then turned, volume on the
+  candles going its way, rejection wicks) are what predicts the REST of the day. 5-min at 10:00, >= 4 footprints:
+  +0.51% (train +0.47 / test +0.54, every month positive, ~5 a day); top 2 a day by footprints +0.55% (train +0.58 / test
+  +0.51, 65% win, 67% of days positive), long +0.48% and short +0.54% (not a market-direction effect).
+  Added as paper "Footprint top 2 10:00" (momentum_paper.footprint_picks uses candle_study.stock_rows itself).
+- To confirm on the 6-month server run (and 3-min); the in-app table shows it per timeframe and month.
+Also added: ironfly.py - paper weekly Nifty iron fly on the recorder's real option prices (bid / ask), marked every cycle.
