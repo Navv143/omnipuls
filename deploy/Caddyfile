@@ -1,5 +1,6 @@
 # HTTPS for the Omnipuls cloud server. Caddy gets and renews a free Let's Encrypt certificate for $DOMAIN by itself.
-{$DOMAIN} {
+# the server's DOMAIN (deploy/.env) and omnipuls.cloud, both served (the old address keeps working)
+{$DOMAIN}, omnipuls.cloud {
 	encode gzip
 	# live ticks: the browser's secure WebSocket (wss://DOMAIN/ticks) goes to the app's tick relay
 	handle /ticks* {
@@ -16,7 +17,7 @@
 	}
 }
 
-# www.<domain> -> <domain> (needs a www record pointing here; Hostinger adds it as a CNAME to the main domain)
-www.{$DOMAIN} {
-	redir https://{$DOMAIN}{uri} permanent
+# www.omnipuls.cloud -> omnipuls.cloud (the www record is a CNAME to the main domain)
+www.omnipuls.cloud {
+	redir https://omnipuls.cloud{uri} permanent
 }
