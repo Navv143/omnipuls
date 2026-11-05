@@ -72,7 +72,7 @@ def signals(x: pd.DataFrame, partner: pd.DataFrame | None, htf=30, n_range=6, wi
             ext = max(ext, h[m]) if s < 0 else min(ext, l[m])
             if (s < 0 and c[m] < lvl) or (s > 0 and c[m] > lvl):
                 st = ext
-                if s * (c[m] - st) >= 0:
+                if s * (c[m] - st) <= 0:
                     break
                 side[m], stop[m] = s, st
                 tgt[m] = c[m] + s * rr * abs(c[m] - st) if target == "rr" else (Rl[k] if s < 0 else Rh[k])
