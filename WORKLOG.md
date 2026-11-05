@@ -385,3 +385,11 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - The server's funnel picks feed the master bot (source "Momentum funnel", same 4 balance checks) and show on
   Market View ("Momentum Funnel picks"). Snapshots now store step 5 too.
 - Real data check (5 Nov): 235 → 26 → 22 → 18 → 12 → 5.
+
+## 5 Nov 2026: Index funnel
+
+- `index_funnel.py`: Nifty 50, Bank Nifty, Fin Nifty, Sensex, Midcap Select with the funnel's steps: ATR active, range
+  expanding, index money (its stocks' weighted money flow with the move and growing), breadth ≥ 60% of the weight with
+  the move (India VIX shown, not a step). Live cards on Momentum Funnel → Indices with today's first signal; backtest
+  nightly on the server (Dhan year) → <data>/bot/index_funnel.json.
+- First test (Yahoo, 52 days): index money is the step that adds the edge; Nifty +0.25% a signal (t 2.6), Bank Nifty ~0.

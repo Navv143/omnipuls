@@ -683,6 +683,8 @@ def run_research():
     try:  # then the momentum study on the same cached year of candles
         m = subprocess.run([sys.executable, str(paths.HERE / "momentum_study.py")], cwd=str(paths.HERE), timeout=3 * 3600)
         log(f"momentum study: finished (exit {m.returncode})")
+        x = subprocess.run([sys.executable, str(paths.HERE / "index_funnel.py")], cwd=str(paths.HERE), timeout=3600)
+        log(f"index funnel backtest: finished (exit {x.returncode})")
     except Exception as e:
         log(f"momentum study: {e}")
     if r.returncode != 0 and not (B.BOT_DIR / "latest.json").exists():

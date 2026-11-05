@@ -697,3 +697,22 @@ def watch_cards(rows: list[dict], show_why: bool = False, empty: str = "No stock
     if not rows:
         return f"<div class='mx-quiet'>{_e(empty)}</div>"
     return "<div class='wl'>" + "".join(watch_card(r, show_why) for r in rows) + "</div>"
+
+
+def index_card(r: dict, weak: bool = False) -> str:
+    c = UP if r["side"] > 0 else DOWN if r["side"] < 0 else NEUTRAL
+    labels = [("ATR", f"{r['day_x']:.2f}× / {r['now_x']:.2f}×"), ("Range", f"{r['range_x']:.2f}×"),
+              ("Money", f"{r['buy_share']:.0f}% buy" if r.get("buy_share") is not None else "—"),
+              ("Breadth", f"{r['breadth']:.0f}% with" if r.get("breadth") is not None else "—")]
+    chips = "".join(f"<span style='--v:{UP if ok else DOWN}'>{i + 1} {n} {'✓' if ok else '✗'} · {v}</span>"
+                    for i, ((n, v), ok) in enumerate(zip(labels, r["steps"][:4])))
+    sig = r.get("signal")
+    badge = (f"<span class='sd' style='--c:{UP if sig['side'] == 'LONG' else DOWN}'>{sig['side']} {sig['time']}</span>" if sig
+             else "<span class='sd' style='--c:var(--om-neutral)'>NO SIGNAL</span>")
+    vix = f" · VIX {r['vix_chg']:+.1f}%" if r.get("vix_chg") is not None else ""
+    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['name'])}"
+            + (" <span class='mx-mini'>weak in tests</span>" if weak else "") + f"</span>{badge}</div>"
+            f"<div class='px'>{_num(r['price'])} · {_sgn(r['move_pct'])} from open · {_e(r['time'])}{vix}</div>"
+            f"<div class='votes' style='display:flex;flex-direction:column;gap:4px;margin-top:8px'>{chips}</div>"
+            + (f"<div class='px' style='margin-top:6px'>Signal at {sig['time']} @ {_num(sig['price'])} · exit 15:15</div>" if sig else "")
+            + "</div>")
