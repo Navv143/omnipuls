@@ -1202,6 +1202,8 @@ def run_research():
         log(f"momentum study: finished (exit {m.returncode})")
         x = subprocess.run([sys.executable, str(paths.HERE / "index_funnel.py")], cwd=str(paths.HERE), timeout=3600)
         log(f"index funnel backtest: finished (exit {x.returncode})")
+        nz = subprocess.run([sys.executable, str(paths.HERE / "noise_research.py")], cwd=str(paths.HERE), timeout=3600)
+        log(f"noise band research: finished (exit {nz.returncode})")
     except Exception as e:
         log(f"momentum study: {e}")
     if r.returncode != 0 and not (B.BOT_DIR / "latest.json").exists():

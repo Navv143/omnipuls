@@ -7202,6 +7202,51 @@ def _signal_record(source_filter: str | None = None):
                                 "% after costs": st.column_config.NumberColumn(format="%+.2f"), "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
 
 
+def _noise_band_results():
+    """Nightly noise-band research (noise_research.py on the server's year of 5-minute candles)."""
+    try:
+        nb = json.loads((PATHS.DATA / "bot" / "noise_band.json").read_text())
+    except Exception:
+        nb = None
+    st.markdown(MX.section("Noise band (Zarattini et al. 2024)", "the paper's intraday momentum strategy on 5-min "
+                           "candles, and the band as a filter on the momentum bot · re-run every night"), unsafe_allow_html=True)
+    if not nb:
+        st.caption("Runs on the server after 16:30 on the year of Dhan 5-minute candles; the first result appears after "
+                   "tonight's run. Hourly 2023-26 test: Nifty +9% before realistic costs, about zero after.")
+        return
+    rows, frows = [], []
+    for k, v in (nb.get("indices") or {}).items():
+        g = pd.DataFrame(v.get("grid") or [])
+        if not g.empty:
+            for cost in (0.02, 0.04):
+                gg = g[g["cost"] == cost].dropna(subset=["total_pct"])
+                if gg.empty:
+                    continue
+                best = gg.sort_values("total_pct").iloc[-1]
+                d14 = gg[(gg["lookback"] == 14) & (gg["band"] == 1.0)]
+                rows.append({"Index": IF.INDEXES.get(k, k), "Cost": f"{cost:.2f}%", "Days": v.get("days"),
+                             "Paper default (14 d, 1x) %": float(d14["total_pct"].iloc[0]) if len(d14) else None,
+                             "Cells positive": f"{int((gg['total_pct'] > 0).sum())}/{len(gg)}",
+                             "Best cell": f"{int(best['lookback'])} d × {best['band']}x", "Best %": best["total_pct"],
+                             "Best Sharpe": best.get("sharpe")})
+        f = v.get("filter") or {}
+        if f.get("outside"):
+            frows.append({"Index": IF.INDEXES.get(k, k), "Bursts": f["all"]["n"],
+                          "Outside band: n": f["outside"]["n"], "Outside: % to close": f["outside"]["to_close"],
+                          "Outside win %": f["outside"]["win"], "Inside band: n": f["inside"]["n"],
+                          "Inside: % to close": f["inside"]["to_close"], "Inside win %": f["inside"]["win"]})
+    if rows:
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
+                     column_config={"Paper default (14 d, 1x) %": st.column_config.NumberColumn(format="%+.2f"),
+                                    "Best %": st.column_config.NumberColumn(format="%+.2f")})
+    if frows:
+        st.markdown("**As a filter on the momentum bot's bursts** (result to 15:15 after 0.04% cost)")
+        st.dataframe(pd.DataFrame(frows), hide_index=True, width="stretch",
+                     column_config={c: st.column_config.NumberColumn(format="%+.3f") for c in
+                                    ("Outside: % to close", "Inside: % to close")})
+    st.caption(f"{nb.get('source', '')} · run {nb.get('run_at', '')[:16]} · total % = sum of daily returns, unlevered.")
+
+
 def index_funnel_body():
     svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
     idx = index_defs()
@@ -7280,6 +7325,7 @@ def index_funnel_body():
         st.caption("First test on 52 days of Yahoo data (steps 1-4, 0.02% costs, exit 15:15): all indices together "
                    "+0.11% a signal by day (t 1.5); ATR alone +0.03%, adding index money +0.12%. Promising, not proven: the "
                    "server re-runs it every night on a year of Dhan data and this table switches to that result.")
+    _noise_band_results()
     _signal_record("Gap & go")
     _signal_record("Index funnel")
     _signal_record("Bank Nifty")
