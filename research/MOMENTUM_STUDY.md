@@ -254,3 +254,14 @@ before -0.3 ATR (0.7% of moments). Gradient-boosted model trained on 25 days, ju
 - Conclusion: from price and volume alone, intraday direction after the open is close to a coin flip in F&O stocks;
   volatility is predictable. Next: test the volatility edge with options (buy ATM straddle on a predicted big move)
   once the recorder has 2-3 weeks of option chains, and add OI / futures-OI readings to the panel (24 Nov study).
+
+## Nifty leg + leaders, up and down (5 Nov 2026, `research/nifty_leaders_study.py`)
+Idea from 5 Nov (8 quiet leaders moved together when Nifty made a second leg at 11:40-12:45). Trigger: Nifty 5-min close
+beyond its last 60 (or 30) minutes' high / low, 11:00-14:00, first per side and day; buy (short) the top 3 stocks
+already >= 0.5 ATR the same way, beyond VWAP, quiet (last 30 min <= 0.35 ATR) and near the day's extreme, strongest
+sector first. 32 days, ~25-30 triggers per side.
+- Up side: every version loses (-0.01% to -0.31% a trade). Down side: about 0 (-0.17% to +0.06%, halves mixed).
+- Why: Nifty itself does not follow through after a midday breakout. After an up breakout of the last hour (47 days, 60
+  days of data) Nifty is higher 60 minutes later only 40% of the time (avg -0.06%); after a strong one (> 0.1% beyond the
+  range, 11 days) only 18% (-0.15%). Down breakouts: 41% (avg -0.03%). Midday breakouts mostly fade; 5 Nov was the
+  exception, not the rule. (A fade of strong midday up breakouts is a possible idea, only 11 cases so far.)
