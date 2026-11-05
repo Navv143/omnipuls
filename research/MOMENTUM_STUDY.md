@@ -44,3 +44,19 @@ extreme** (+0.30% to +0.38% a trade on unseen days, 58-66% wins, t 1.8-2.3 over 
 
 This agrees with the earlier research (research/intraday/README.md): chasing stocks that already moved does not
 pay; the edges come from the market's direction, compression → expansion, and the open (gap fade).
+
+## Index funnel (5 Nov 2026, `index_funnel.py`)
+
+Nifty 50, Bank Nifty, Fin Nifty, Sensex, Midcap Select on Yahoo 5-minute candles (52 days, 11 Aug - 4 Nov 2026);
+index money and breadth from their stocks (weighted). Signal = first candle 9:30-14:00 where the steps pass, trade to
+15:15, 0.02% costs.
+| Steps | Signals | %/signal | Win % |
+|---|---|---|---|
+| 1 ATR active | 170 | +0.03 | 52 |
+| + 2 range | 143 | +0.06 | 51 |
+| + 3 index money with the move and growing | 139 | +0.12 | 55 |
+| + 4 breadth ≥ 60% | 134 | +0.12 | 55 |
+| + VIX not against | 127 | +0.10 | 53 (dropped: no help) |
+By day (all indices) +0.11% (t 1.5); Nifty alone +0.25% a signal, 61% wins, t 2.6, both halves positive; Bank
+Nifty about zero (fading it also loses). Most signals fire at 9:30-9:35. Promising, not proven: the server re-runs it
+nightly on a year of Dhan data.

@@ -53,6 +53,7 @@ import market_view as MV
 import mv_ui as MX
 import desk_agents as DA
 import funnel as FN
+import index_funnel as IF
 import bot as BOT
 import paths as PATHS
 import cryptocom as CC
@@ -6557,12 +6558,61 @@ def page_agents():
 # ---------------------------------------------------------------- Momentum funnel: simple step-by-step watchlist
 
 
+def index_funnel_body():
+    svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
+    idx = index_defs()
+    svc.set_universe(tuple(sorted(set(scan_universe("All F&O stocks")) | {m for d in idx.values() for m in d["w"]})))
+    svc.set_indices({**{k: d["id"] for k, d in idx.items()}, "INDIAVIX": 21})
+    svc.touch()
+    bars, _ = svc.bars()
+    ib = svc.idx_bars()
+    rows = IF.live(ib, bars, {k: d.get("w", {}) for k, d in idx.items()}, ib.get("INDIAVIX"))
+    if not rows:
+        st.info("Loading index and constituent candles…", icon=":material/hourglass_top:")
+        return
+    st.markdown(MX.section("Index funnel now", "1 ATR active · 2 range expanding · 3 index money (its stocks, weighted) "
+                           "with the move and growing · 4 breadth ≥ 60% of the weight with the move"), unsafe_allow_html=True)
+    st.markdown("<div class='wl'>" + "".join(MX.index_card(r, weak=r["key"] == "BANKNIFTY") for r in rows) + "</div>",
+                unsafe_allow_html=True)
+    st.caption("Signal = the first 5-minute candle of the day (9:30-14:00) where all four steps pass; trade it in the "
+               "move's direction (futures), exit at 15:15. India VIX is shown but not a step (it did not help in the test).")
+    try:
+        bt = json.loads((PATHS.DATA / "bot" / "index_funnel.json").read_text())
+    except Exception:
+        bt = None
+    st.markdown(MX.section("Backtest", (bt or {}).get("source", "first test: Yahoo, 52 days (11 Aug - 4 Nov 2026)")),
+                unsafe_allow_html=True)
+    if bt:
+        st.dataframe(pd.DataFrame([{"Index": IF.INDEXES.get(k, k), "Days": v.get("days"),
+                                    **{f"Step {i} %/trade": (v.get(f"step{i}") or {}).get("ret") for i in (1, 2, 3, 4)},
+                                    "Signals": (v.get("step4") or {}).get("n"), "Win %": (v.get("step4") or {}).get("win"),
+                                    "t": (v.get("step4") or {}).get("t")} for k, v in bt["indices"].items()]),
+                     hide_index=True, width="stretch")
+        st.caption("Each step's signals after 0.02% costs, held to 15:15. Step 3 (index money) adds the most.")
+    else:
+        st.dataframe(pd.DataFrame([
+            {"Index": "Nifty 50", "Signals": 28, "%/trade": 0.252, "Win %": 61, "t": 2.6, "1st half": 0.146, "2nd half": 0.358},
+            {"Index": "Sensex", "Signals": 27, "%/trade": 0.08, "Win %": 52, "t": None, "1st half": None, "2nd half": None},
+            {"Index": "Midcap Select", "Signals": 22, "%/trade": 0.197, "Win %": 59, "t": None, "1st half": None, "2nd half": None},
+            {"Index": "Fin Nifty", "Signals": 26, "%/trade": 0.047, "Win %": 46, "t": None, "1st half": None, "2nd half": None},
+            {"Index": "Bank Nifty", "Signals": 27, "%/trade": -0.002, "Win %": 46, "t": 0.0, "1st half": 0.082, "2nd half": -0.080},
+        ]), hide_index=True, width="stretch")
+        st.caption("First test on 52 days of Yahoo data (steps 1-4, 0.02% costs, exit 15:15): all indices together "
+                   "+0.11% a signal by day (t 1.5); ATR alone +0.03%, adding index money +0.12%. Promising, not proven: the "
+                   "server re-runs it every night on a year of Dhan data and this table switches to that result.")
+
+
 def page_funnel():
     status_strip()
     st.header("Momentum Funnel")
-    st.markdown(MX.CSS + MX.FUNNEL_CSS, unsafe_allow_html=True)
+    st.markdown(MX.CSS + MX.FUNNEL_CSS + MX.DESK_CSS, unsafe_allow_html=True)
     if not DHAN_DATA:
         need_dhan()
+        return
+    view = st.segmented_control("Funnel", ["F&O stocks", "Indices"], default="F&O stocks", key="fn_view",
+                                label_visibility="collapsed") or "F&O stocks"
+    if view == "Indices":
+        index_funnel_body()
         return
     with st.expander("Settings", icon=":material/tune:"):
         c1, c2, c3, c4 = st.columns(4)
