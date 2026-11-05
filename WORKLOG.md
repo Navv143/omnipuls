@@ -544,3 +544,12 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - New page "Auto Trader" (Today menu): the six agents as a pipeline with today's counts, account KPIs, position cards
   (qty, entry, stop, targets, R, P&L, exit), equity curve, every decision with its reason, daily record and the rules.
 - Replay on 5 Nov's real signals: 8 trades, +₹3,770 (index trades won, funnel stocks lost). No real orders.
+
+## 5 Nov 2026: BTC sniper paper trade
+- `btc_sniper.py`: the best lead of research/SNIPER_STUDY.md (BTC NY-session trend pullback to VWAP: 1-hour trend,
+  13:30-18:00 London, trigger candle, stop beyond the last 6 candles 0.3-0.8%, target 3R, exit 21:00 London, one trade
+  a day). Replayed on Jun-Aug 2025 it gives the backtest's 31 trades exactly.
+- `agents.py` (24/7) checks it every minute 13:25-21:15 London on Crypto.com candles: state to
+  `<data>/crypto_paper/btc_state.json`, trades to `record.json` and Supabase `crypto_paper`.
+- Auto Trader page: "BTC sniper · paper" section (today's state or trade with entry time in IST, stop, target, R now,
+  the record and its stats vs the tested +0.09R / 36%).

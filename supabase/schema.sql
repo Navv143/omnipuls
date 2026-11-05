@@ -164,3 +164,14 @@ create table if not exists public.auto_trades (
   unique (day, source, symbol)
 );
 alter table public.auto_trades enable row level security;
+
+-- Crypto paper trades (btc_sniper.py via agents.py): one row per day and setup, with the result
+create table if not exists public.crypto_paper (
+  id bigint generated always as identity primary key,
+  day date not null, setup text not null, symbol text, side smallint, signal_at text, entry_at text, entry_at_ist text,
+  entry double precision, sl double precision, tp double precision, stop_pct double precision,
+  result text, exit_at text, exit_px double precision, r double precision, pct double precision,
+  updated_at timestamptz not null default now(),
+  unique (day, setup)
+);
+alter table public.crypto_paper enable row level security;

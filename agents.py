@@ -165,16 +165,67 @@ def save(state: dict):
     os.replace(tmp, OUT / "state.json")
 
 
+CP_DIR = paths.DATA / "crypto_paper"
+
+
+def btc_tick():
+    """BTC NY trend pullback (btc_sniper.py), paper: checked every minute 13:25-21:15 London; the day's state to
+    <data>/crypto_paper/btc_state.json, the trade (once it triggers) to record.json and Supabase crypto_paper."""
+    import btc_sniper as BS
+    import cryptocom as CC
+    from datetime import datetime as _dt
+    lt = _dt.now(BS.LDN)
+    m = lt.hour * 60 + lt.minute
+    if not (13 * 60 + 25 <= m <= 21 * 60 + 15):
+        return
+    m5, h1 = CC.candles("BTC-USD", "5m", 300), CC.candles("BTC-USD", "1h", 300)
+    if m5 is None or h1 is None or m5.empty or h1.empty:
+        return
+    r = BS.evaluate(m5, h1)
+    r["checked"] = lt.strftime("%Y-%m-%d %H:%M")
+    CP_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = CP_DIR / "btc_state.json.tmp"
+    tmp.write_text(json.dumps(r, default=str))
+    os.replace(tmp, CP_DIR / "btc_state.json")
+    if not r.get("signal"):
+        return
+    f = CP_DIR / "record.json"
+    try:
+        rec = json.loads(f.read_text())
+    except Exception:
+        rec = []
+    row = {"day": r["day"], "setup": BS.NAME, "symbol": "BTCUSDT", **r["signal"], "result": r["result"],
+           "exit_at": r.get("exit_at"), "exit_px": r.get("exit_px"), "r": r["r"], "pct": r["pct"]}
+    old = next((x for x in rec if x["day"] == row["day"] and x["setup"] == row["setup"]), None)
+    if old == row:
+        return
+    rec = [x for x in rec if not (x["day"] == row["day"] and x["setup"] == row["setup"])] + [row]
+    f.write_text(json.dumps(rec, default=str))
+    try:
+        _cloud().upsert_rows("crypto_paper", [row], "day,setup")
+    except Exception as e:
+        log(f"crypto_paper: {e}")
+    if old is None:
+        log(f"BTC paper trade: {'LONG' if row['side'] > 0 else 'SHORT'} {row['entry']} stop {row['sl']} target {row['tp']}")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
+    last = 0.0
     while True:
+        if time.time() - last >= EVERY:
+            last = time.time()
+            try:
+                st = cycle()
+                save(st)
+                log(f"{len(st['rows'])} markets, calls {st['calls']} in {st['seconds']}s")
+            except Exception as e:
+                log(f"error: {e}")
         try:
-            st = cycle()
-            save(st)
-            log(f"{len(st['rows'])} markets, calls {st['calls']} in {st['seconds']}s")
+            btc_tick()
         except Exception as e:
-            log(f"error: {e}")
-        time.sleep(EVERY)
+            log(f"btc sniper: {e}")
+        time.sleep(60)
 
 
 if __name__ == "__main__":
