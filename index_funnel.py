@@ -391,9 +391,11 @@ def gap_go(ix: pd.DataFrame, stocks: dict, weights: dict) -> dict | None:
 
 
 MOM = {"window": 3, "move_atr": 0.15, "breadth": 65.0, "now_x": 1.0, "gap_min": 60}
+MOM_EARLY = {"window": 2, "move_atr": 0.12}  # 10-minute window: ~5 min earlier; first test +0.06% a trade, both halves +
 
 
-def momentum_table(ix: pd.DataFrame, stocks: dict, weights: dict, today_only: bool = True) -> pd.DataFrame:
+def momentum_table(ix: pd.DataFrame, stocks: dict, weights: dict, today_only: bool = True, window: int | None = None,
+                   move_atr: float | None = None) -> pd.DataFrame:
     """Every candle: over the last 15 minutes, the change in price, the index stocks' net money, breadth vs yesterday
     (share of the weight up) and ATR (last 15 minutes vs usual)."""
     t = index_table(ix, stocks, weights, None)
@@ -415,14 +417,14 @@ def momentum_table(ix: pd.DataFrame, stocks: dict, weights: dict, today_only: bo
     pc = dd["c"].shift(1)
     tr = pd.concat([dd["h"] - dd["l"], (dd["h"] - pc).abs(), (dd["l"] - pc).abs()], axis=1).max(axis=1)
     t["atr14"] = t["day"].map(tr.rolling(14).mean().shift(1))
-    g, k = t.groupby("day"), MOM["window"]
+    g, k = t.groupby("day"), (window or MOM["window"])
     t["d_px"] = t["Close"] - g["Close"].shift(k)
     t["d_net"] = t["net"] - g["net"].shift(k)
     t["d_br"] = t["br_y"] - g["br_y"].shift(k)
     t["d_atr"] = t["now_x"] - g["now_x"].shift(k)
     t["msd"] = np.sign(t["d_px"].fillna(0)).astype(int)
     brw = np.where(t["msd"] > 0, t["br_y"], 100 - t["br_y"])
-    pmove = t["d_px"].abs() >= MOM["move_atr"] * t["atr14"]
+    pmove = t["d_px"].abs() >= (move_atr or MOM["move_atr"]) * t["atr14"]
     # money increasing, breadth (vs yesterday) high and not falling, ATR at least usual and rising
     t["momentum"] = (pmove & (np.sign(t["d_net"]) == t["msd"]) & (t["msd"] * t["d_br"] >= 0) & (brw >= MOM["breadth"])
                      & (t["now_x"] >= MOM["now_x"]) & (t["d_atr"] > 0)).fillna(False)
@@ -479,10 +481,13 @@ def momentum_now(ix: pd.DataFrame, stocks: dict, weights: dict, name: str = "", 
     t = momentum_table(ix, stocks, weights)
     if t.empty:
         return None
+    te = momentum_table(ix, stocks, weights, window=MOM_EARLY["window"], move_atr=MOM_EARLY["move_atr"])
     mode = mode or ("fade_normal" if fade else "with")
-    sigs, last_ts = [], None
-    for ts, r in t[t["momentum"] & (t["m"] + 5 >= 570) & (t["m"] + 5 <= 840)].iterrows():
-        if last_ts is not None and (ts - last_ts) < pd.Timedelta(minutes=MOM["gap_min"]):
+    cands = [(ts, r, "CONFIRMED") for ts, r in t[t["momentum"] & (t["m"] + 5 >= 570) & (t["m"] + 5 <= 840)].iterrows()]
+    cands += [(ts, r, "EARLY") for ts, r in te[te["momentum"] & (te["m"] + 5 >= 570) & (te["m"] + 5 <= 840)].iterrows()]
+    sigs, last_ts = [], {}
+    for ts, r, stage in sorted(cands, key=lambda x: x[0]):
+        if stage in last_ts and (ts - last_ts[stage]) < pd.Timedelta(minutes=MOM["gap_min"]):
             continue
         if mode == "watch" or (mode == "trend_only" and r["trend_dir"] != r["msd"]) or (mode == "fade_normal" and r["trend_day"]):
             continue
@@ -492,11 +497,11 @@ def momentum_now(ix: pd.DataFrame, stocks: dict, weights: dict, name: str = "", 
         if p:
             oi = _oi_at(fut, ts + pd.Timedelta(minutes=4), int(r["msd"]))  # OI behind the BURST (new positions its way?)
             sigs.append({"time": (ts + pd.Timedelta(minutes=5)).strftime("%H:%M"), "side": p["side"], "price": float(r["Close"]),
-                         "plan": p, "fade": fade, "oi": oi,
+                         "plan": p, "fade": fade, "oi": oi, "stage": stage,
                          "why": ("FADE: Bank Nifty bursts usually reverse (stop hunt) · " if fade else "")
-                                + f"15 min: price {r['d_px']:+,.0f}, money ₹{r['d_net']:+,.0f} Cr, breadth {r['br_y']:.0f}% up "
+                                + f"{'10' if stage == 'EARLY' else '15'} min: price {r['d_px']:+,.0f}, money ₹{r['d_net']:+,.0f} Cr, breadth {r['br_y']:.0f}% up "
                                   f"({r['d_br']:+.0f}), ATR {r['now_x']:.1f}x usual and rising"})
-            last_ts = ts
+            last_ts[stage] = ts
     r = t.iloc[-1]
     state = ("MOMENTUM " + ("UP" if r["msd"] > 0 else "DOWN")) if r["momentum"] else \
         ("TRAP? price " + ("up" if r["msd"] > 0 else "down") + " but money and breadth the other way") if r["trap"] else "no confirmation"

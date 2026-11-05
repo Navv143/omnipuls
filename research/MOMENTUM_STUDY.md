@@ -111,3 +111,13 @@ Trend day = 1+ ATR from yesterday's close with 75%+ breadth the same way.
 - Net volume / cumulative delta: little extra (moves with RSI, MACD, breaks: all measure momentum; stock-level net
   money adds ~nothing beyond the price move). The bot's money condition already covers it.
 - Order-book buy / sell quantity: no evidence yet; recorded every minute by the recorder, to be tested later.
+
+## Momentum bot window: 5 / 10 / 15 minutes (5 Nov 2026)
+Same rules, all indices with their per-index modes, 45 days:
+| Window | Trades | %/trade | Win % | halves | t (days) |
+|---|---|---|---|---|---|
+| 5 min (move ≥ 0.08-0.10 ATR) | 144-182 | +0.05-0.06 | 57-58 | +0.04 / -0.01 to +0.02 | 0.4-1.0 |
+| 10 min (move ≥ 0.12 ATR) | 160 | +0.06 | 57 | +0.05 / +0.09 | 2.4 |
+| 15 min (move ≥ 0.15 ATR) | 141 | +0.10 | 60 | +0.06 / +0.14 | 3.0 |
+The 10-minute signal comes a median 5 minutes before the 15-minute one, ~0.11% earlier in price on average, but with more
+false starts. Both are live: EARLY (10 min) and CONFIRMED (15 min), recorded as separate sources.

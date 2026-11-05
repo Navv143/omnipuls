@@ -710,7 +710,8 @@ def collect_signals(mkt: "Market", fun: dict) -> list:
             for g in mo.get("signals", []):
                 p = g["plan"]
                 o = g.get("oi") or {}
-                out.append({"source": "Index momentum bot", "symbol": f"{k} {g['time']}", "side": 1 if g["side"] == "LONG" else -1,
+                out.append({"source": "Index momentum bot" + (" (early)" if g.get("stage") == "EARLY" else ""),
+                            "symbol": f"{k} {g['time']}", "side": 1 if g["side"] == "LONG" else -1,
                             "time": g["time"], **{kk: p[kk] for kk in ("entry", "sl", "tp1", "tp2", "risk_pct")}, "score": None,
                             "note": (f"OI {'confirms' if o.get('oi_ok') else 'does not confirm'}: 15 min {o.get('oi_15m') or '-'}, "
                                      f"day {o.get('oi_day') or '-'} ({o.get('oi_chg_pct')}%)") if o else "OI n/a"})
