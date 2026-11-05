@@ -109,3 +109,28 @@ and the next 1-7 candles (entry at the next open, costs in):
 - 60 days of oil, gold futures, EURUSD, GBPUSD, USDJPY, USDINR and Nasdaq futures: forex and USDINR bursts do not run
   (run-on 30-40%); oil mixed; Nasdaq up-bursts 6x+ ran on 77% (13 events: watch); too little data for more.
 - Paper-traded live as "BTC / ETH / SOL burst momentum" (crash_buy.py, reproduces the backtest trades exactly).
+
+## Algo lab: levels, sweeps, volume profile, EMA / VWAP, HTF bias (5 Nov 2026, `research/algo_lab.py`)
+
+56 rule variants on BTC, ETH, SOL and gold (5-min, 2023-2026), max 2 trades a day, flat by 20:00 London, costs in.
+Full table: `research/algo_results.csv` (after costs) and `research/algo_gross.csv` (no costs, BTC and gold).
+Runner: `research/algo_run.py <data dir>`.
+
+Families (each as fade / break, with and without the 4H bias):
+- Session sweeps: Asia range (00-07 London) in London and in New York; London range (07-12) in New York.
+- Previous day high / low; previous 4H candle and previous 1H candle high / low.
+- Volume profile (fixed range): previous day POC / VAH / VAL fade to the POC, the 80% rule; Asia-session profile
+  traded in London / NY.
+- EMA 9/21 and 20/50 crosses on 5 and 15 min; EMA cross on the VWAP side; VWAP cross with EMA9 > EMA21.
+- HTF bias (4H EMA20/50 + 1H vs EMA50) with a 5-min EMA20 pullback and trigger candle.
+
+Result: all 56 lose after costs on all four markets (average -0.04 to -0.56R; EMA crosses on 15 min worst because
+the swing stop is often very close), and none is positive in both halves on any market. Before costs the best is
+about +0.04% a trade on BTC (Asia range break in London with the 4H bias; Asia range fade to the other side with
+the 4H bias, +0.04% BTC / +0.01% gold, positive both halves on both): smaller than the cost of one round trip.
+Volume-profile fades lose the most (-0.46 to -0.56R): value-area edges on 5-min are run through, not respected.
+
+Conclusion for algo trading: plain level, sweep, profile and crossover rules carry no edge on these 5-min markets;
+the only edges found are event-driven (crash buy, giant up-burst momentum, BTC NY trend pullback) and are being
+paper-traded. New ideas should be added as a function in algo_lab.py and a line in algo_run.py, and judged the same
+way (after costs, both halves, several markets).
