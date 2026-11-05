@@ -176,3 +176,15 @@ trail 1 ATR, exit 15:20, 0.12% costs).
   49 trades (~1 a day), 57% wins, +0.59% a trade after costs, halves +0.61 / +0.56. Chosen on the same data: to be
   confirmed live. Lodha (3 Nov) ranked 4 and broke out at 10:00, BHEL (4 Nov) ranked 7, Motilal (5 Nov) ranked 2;
   4 Nov's first qualifying breakout was INOXWIND (+3.0%); on 3 Nov the rank-1 pick HFCL lost -3.2%.
+
+### V3 by breakout candle and the volume / Nifty filters (5 Nov 2026, same data)
+- The 9:30 candle is the best: 109 top-10 breakouts, +0.31% (halves +0.17 / +0.45); 9:35 -0.06%, 9:40 +0.26%,
+  9:45 +0.12%, after 9:45 -0.15% (both halves negative).
+- The filters help only for breakouts after the first candle: 9:35-9:45 with volume ≥1.5x +0.17% vs -0.07% without;
+  at 9:30 almost every breakout passes (81 of 109) and the few that fail did no worse; after 9:45 they do not help.
+- V3's own pool (rank 1-2) breaking out at 9:30: 17 trades, +0.61%, but halves -0.25 / +1.37 (too few).
+- Early pick changed to: the day's first top-10 breakout on the 9:30 candle, or 9:35-9:45 with volume ≥1.5x; no
+  block deal; not gapped 0-1% the trade's way: 47 trades, 57% wins, +0.58%, halves +0.60 / +0.56 (same as before:
+  most days the first qualifying breakout is the 9:30 candle).
+- Live 5 Nov (Dhan): Motilal ranked 1, broke out at 9:30 with volume 5.2x → traded by V3 and the early pick;
+  PI Industries (rank 4) a block deal (85x) → skipped (it lost 1.7%).

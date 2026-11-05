@@ -3963,8 +3963,9 @@ def scanner_body(svc, uni):
             diag, early = SC.v3_diagnose(S, N)
         except Exception:
             diag, early = pd.DataFrame(), None
-        st.markdown("**★ V3 early pick** (testing next to V3: the day's first top-10 breakout by 9:45, no block deal, "
-                    "not gapped 0-1% the trade's way · 54 days: 57% wins, +0.59% a trade after costs, to be confirmed live)")
+        st.markdown("**★ V3 early pick** (testing next to V3: the day's first top-10 breakout on the 9:30 candle, or "
+                    "9:35-9:45 with volume ≥1.5x · no block deal · not gapped 0-1% the trade's way · 54 days: 57% wins, "
+                    "+0.58% a trade after costs, to be confirmed live)")
         if early:
             data_table(pd.DataFrame([early]), "scan_v3_early", signed=signed, name_col="Stock", height=110)
         else:
@@ -7699,7 +7700,7 @@ def _btc_paper_section():
                 else "open")})
     except Exception:
         pass
-    tested = {"V3 early pick": ("+0.59% a trade", "57%"), "V3 (top 2, filters)": ("-0.05% (54 days)", "48%"),
+    tested = {"V3 early pick": ("+0.58% a trade", "57%"), "V3 (top 2, filters)": ("-0.05% (54 days)", "48%"),
               "Bank Nifty EBP 1h (overnight)": ("+0.40R", "27%"), "BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%"),
               "BTC burst momentum": ("+0.15R (+0.21%)", ""), "ETH burst momentum": ("+0.13R (+0.36%)", ""),
               "SOL burst momentum": ("+0.24R (+0.61%)", "")}
