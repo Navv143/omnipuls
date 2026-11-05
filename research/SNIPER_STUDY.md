@@ -63,3 +63,32 @@ range projection; exit 14:00 (end of the 4H candle). 18 variants (with / without
 - Gold: no edge even before costs; the 10:00 ET 4H candle is not where gold's stop hunts reverse.
 - PO3 is taught on Nasdaq futures (NQ); only 60 days of 5-min NQ data are free, too few to test. The 1-minute
   inverse-FVG entry was not tested (5-min confirmation used); a 1-minute entry shrinks the risk but raises costs in R.
+
+## Strategy lab: GitHub, YouTube and paper setups (5 Nov 2026, `research/strategy_lab.py`)
+
+Same honest rules. 11 strategies, BTC and gold (PAXG), 5-min and 15-min:
+
+| Strategy (source) | BTC avg R | Gold avg R |
+|---|---|---|
+| ICT Silver Bullet 3-4 / 10-11 / 2-3 NY (YouTube) | -0.08 to -0.25 | -0.10 to -0.39 |
+| BinHV45 (freqtrade GitHub) | +0.13 to +0.42 but only 22 trades in 4 years | 1 trade |
+| ClucMay72018 (freqtrade) | < 10 trades | 1 trade |
+| EMA200 + MACD (YouTube) | -0.86 to -1.03 | -0.32 to -0.58 |
+| Supertrend + Stoch RSI + EMA200 (viral video) | -0.28 to -0.39 | -0.06 to -0.16 |
+| RSI(2) Connors | -0.07 to -0.24 | -0.06 to +0.01 |
+| EMA 9/21 + VWAP | -0.11 to -0.13 | -0.22 to -0.24 |
+| Bollinger squeeze breakout | -0.18 to -0.19 | -0.21 to -0.27 |
+| Donchian 20 breakout | -0.13 to -0.27 | -0.05 to -0.17 |
+| First 30 min after the open predicts the day (papers) | +0.01 | -0.11 to -0.18 |
+| Gold 10 AM long bias (vendor) | - | +0.01 |
+
+### The one that holds: crash-candle buy (the idea inside BinHV45)
+A 5-min close-to-close drop of Z x the 20-day standard deviation of 5-min returns → buy the next open, fixed
+target / stop, exit after 4 hours. Long only (fading spikes loses).
+- BTC Z=9, target 1.5%, stop 1.0%: 104 trades (0.5 a week), 54% wins, +0.21R (t 1.9), tuning +0.19 / test +0.23,
+  positive all 4 years; at double costs +0.16R. Neighbourhood (Z 8-10, target 1.5%, stop 1-1.5%) all positive with
+  both halves positive.
+- Gold Z=4, target 0.4%, stop 0.4%: 592 trades (3 a week), 60% wins, +0.12R (t 3.2), positive all 4 years and 12 of
+  16 quarters; +0.07R at double costs. PAXG crash candles are real gold moves (5-min correlation with COMEX GC 0.95,
+  gold fell 0.3-0.6% in the same candles). Last 60 days were negative on both PAXG (-0.12R) and GC (small sample).
+- Paper-traded live from 5 Nov 2026 (`crash_buy.py`, agents.py every minute; reproduces the backtest trades).

@@ -209,6 +209,94 @@ def btc_tick():
         log(f"BTC paper trade: {'LONG' if row['side'] > 0 else 'SHORT'} {row['entry']} stop {row['sl']} target {row['tp']}")
 
 
+def _cc_5m(inst: str, end_ms: int | None = None) -> pd.DataFrame:
+    import cryptocom as CC
+    params = {"instrument_name": inst, "timeframe": "5m", "count": 300}
+    if end_ms:
+        params["end_ts"] = end_ms
+    return CC._parse(CC._get("get-candlestick", params).get("data") or [])
+
+
+def crash_tick():
+    """Crash-candle buys (crash_buy.py), paper, every minute: keeps ~25 days of 5-min candles per market in
+    <data>/crypto_paper/hist_<KEY>.parquet, writes crash_state.json and new / updated trades to record.json and
+    Supabase crypto_paper (setup = '<name> HH:MM' New York time of the signal)."""
+    import crash_buy as CB
+    CP_DIR.mkdir(parents=True, exist_ok=True)
+    now = pd.Timestamp.utcnow().tz_localize(None)
+    try:
+        state = json.loads((CP_DIR / "crash_state.json").read_text())
+    except Exception:
+        state = {}
+    for key, cfg in CB.SETUPS.items():
+        f = CP_DIR / f"hist_{key}.parquet"
+        try:
+            hist = pd.read_parquet(f)
+        except Exception:
+            hist = pd.DataFrame()
+        if len(hist) < CB.WINDOW // 2:          # first run: page back ~21 days
+            parts, end = [], int(now.timestamp() * 1000)
+            for _ in range(22):
+                d = _cc_5m(cfg["inst"], end)
+                if d.empty:
+                    break
+                parts.append(d)
+                end = int(d.index[0].timestamp() * 1000) - 1
+                time.sleep(0.3)
+            hist = pd.concat(parts) if parts else hist
+        new = _cc_5m(cfg["inst"])
+        hist = pd.concat([hist, new]) if not new.empty else hist
+        if hist.empty:
+            continue
+        hist = hist[~hist.index.duplicated(keep="last")].sort_index()
+        hist = hist[hist.index >= now - pd.Timedelta(days=26)]
+        hist.to_parquet(f)
+        done = hist[hist.index + pd.Timedelta(minutes=5) <= now]      # finished candles only
+        x = CB.signals(done, cfg)
+        st = state.setdefault(key, {})
+        st.setdefault("since", str(now.floor("5min")))                   # paper trades count from the first run
+        last = x.iloc[-1]
+        st.update(name=cfg["name"], price=float(last["Close"]), ret=float(last["ret"]) if last["ret"] == last["ret"] else None,
+                  sigma=float(last["sd"]) if last["sd"] == last["sd"] else None, z=cfg["z"],
+                  trigger_pct=(-cfg["z"] * float(last["sd"])) if last["sd"] == last["sd"] else None,
+                  as_of=str(x.index[-1] + pd.Timedelta(minutes=5)), checked=str(now))
+        tr = CB.trades(x, cfg, since=pd.Timestamp(st["since"]))
+        st["pending"] = next((t for t in tr if t.get("status") == "entry next candle"), None)
+        rows = []
+        for t in tr:
+            if t.get("status") == "entry next candle":
+                continue
+            ny = t["signal_at"].tz_localize("UTC").tz_convert("America/New_York")
+            ist = t["entry_at"].tz_localize("UTC").tz_convert("Asia/Kolkata")
+            rows.append({"day": ny.strftime("%Y-%m-%d"), "setup": f"{cfg['name']} {ny:%H:%M}", "symbol": cfg["inst"], "side": 1,
+                         "signal_at": ny.strftime("%H:%M"), "entry_at": f"{ny + pd.Timedelta(minutes=5):%H:%M}",
+                         "entry_at_ist": ist.strftime("%d %b %H:%M"), "entry": t["entry"], "sl": t["sl"], "tp": t["tp"],
+                         "stop_pct": cfg["sl"], "result": t["status"],
+                         "exit_at": (t["exit_at"].tz_localize("UTC").tz_convert("Asia/Kolkata").strftime("%H:%M IST") if t["exit_at"] is not None else None),
+                         "exit_px": t["exit_px"], "r": t["r"], "pct": t["pct"]})
+        if rows:
+            fr = CP_DIR / "record.json"
+            try:
+                rec = json.loads(fr.read_text())
+            except Exception:
+                rec = []
+            have = {(x_["day"], x_["setup"]): x_ for x_ in rec}
+            changed = [r_ for r_ in rows if have.get((r_["day"], r_["setup"])) != r_]
+            if changed:
+                for r_ in changed:
+                    if (r_["day"], r_["setup"]) not in have:
+                        log(f"crash buy paper trade: {r_['setup']} entry {r_['entry']} stop {r_['sl']} target {r_['tp']}")
+                    have[(r_["day"], r_["setup"])] = r_
+                fr.write_text(json.dumps(list(have.values()), default=str))
+                try:
+                    _cloud().upsert_rows("crypto_paper", changed, "day,setup")
+                except Exception as e:
+                    log(f"crypto_paper: {e}")
+    tmp = CP_DIR / "crash_state.json.tmp"
+    tmp.write_text(json.dumps(state, default=str))
+    os.replace(tmp, CP_DIR / "crash_state.json")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     last = 0.0
@@ -225,6 +313,10 @@ def main():
             btc_tick()
         except Exception as e:
             log(f"btc sniper: {e}")
+        try:
+            crash_tick()
+        except Exception as e:
+            log(f"crash buy: {e}")
         time.sleep(60)
 
 
