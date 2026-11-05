@@ -1403,7 +1403,7 @@ HOWTO = {  # one line under each page's status bar: what the page is for and how
     "view": "Start here. Trade only what the top box calls a tested signal; the rest helps you pick the side.",
     "dashboard": "The full desk: mood, index plans and focus lists. Today's plan card lists the tested setups.",
     "scanners": "Each tab is one setup with today's signals. Follow entry, stop and exit exactly as shown.",
-    "funnel": "ATR active → range expanding → sector money → stock money growing = watchlist; suggested = with the market, ranked by score.",
+    "funnel": "ATR active → range expanding → sector money → stock money growing → with the market = watchlist, ranked by score.",
     "agents": "Six agents read every market (indices, stocks, crypto, gold, commodities, forex). TRADE only when all agree and risk passes; paper-track first.",
     "bot": "Live radar of every F&O stock: sudden changes vs its own usual, with past-days odds. Tested = trade; good odds = paper-trade first.",
     "options": "Pick an index and expiry. Most puts written = support, most calls written = resistance.",
@@ -6338,6 +6338,10 @@ def market_view_body(svc, t: pd.DataFrame):
     try:
         bs2 = _bots_state()
         ev = (((bs2 or {}).get("bots") or {}).get("radar") or {}).get("events") or [] if bs2 and not bs2.get("stale") else []
+        fp = ((bs2 or {}).get("funnel") or {}).get("top") or [] if bs2 and not bs2.get("stale") else []
+        if fp:
+            st.markdown(MX.FUNNEL_CSS + MX.section("Momentum Funnel picks", "all 5 steps · ranked by score · details on Momentum Funnel")
+                        + MX.watch_cards(fp[:4], show_why=True), unsafe_allow_html=True)
         if ev:
             st.markdown(MX.section("Sudden changes", f"radar bot · updated {bs2.get('updated', '')[11:16]} · full list on Bots")
                         + MX.event_cards(ev, 6), unsafe_allow_html=True)
@@ -6582,8 +6586,9 @@ def page_funnel():
     if t.empty:
         st.info("Not enough candles yet: the funnel starts after the first few minutes.", icon=":material/hourglass_top:")
         return
-    n1, n2, n3, n4 = (int(t[f"step{i}"].sum()) for i in (1, 2, 3, 4))
-    sug = t[t["suggest"]].sort_values("score", ascending=False)
+    n1, n2, n3, n4, n5 = (int(t[f"step{i}"].sum()) for i in (1, 2, 3, 4, 5))
+    sug = t[t["step5"]].sort_values("score", ascending=False)
+    mk = float(t["mkt_move"].iloc[0])
     left, right = st.columns([1, 1.6]) if not MOBILE else (st.container(), st.container())
     with left:
         st.markdown(MX.funnel([
@@ -6592,19 +6597,20 @@ def page_funnel():
             ("Step 2 · range expanding", n2, f"range 9:15→now ≥ {rng_x:.2f}× usual"),
             ("Step 3 · sector money", n3, "sector net money in the move's direction"),
             ("Step 4 · stock money", n4, "stock net money with the move and still growing"),
+            ("Step 5 · with the market", n5, f"market {mk:+.2f}% from the open · no wide day yesterday"),
         ]), unsafe_allow_html=True)
-        mk = float(t["mkt_move"].iloc[0])
-        st.caption(f"Market (average F&O move from the open): {mk:+.2f}% → suggestions are "
-                   f"{'longs' if mk > 0 else 'shorts' if mk < 0 else 'none'} only.")
     with right:
-        st.markdown(MX.section("Suggested: best to trade now", "watchlist + market the same way, ranked by score"),
+        st.markdown(MX.section("Watchlist: best to trade now", f"all 5 steps · ranked by score · "
+                               f"{int((sug['side'] > 0).sum())} long · {int((sug['side'] < 0).sum())} short"),
                     unsafe_allow_html=True)
-        st.markdown(MX.watch_cards(sug.head(6).to_dict("records"), show_why=True,
-                                   empty="No suggestion: no watchlist stock is moving with the market."), unsafe_allow_html=True)
-    wl = t[t["step4"]]
-    st.markdown(MX.section("Watchlist", f"all 4 steps · {int((wl['side'] > 0).sum())} long · {int((wl['side'] < 0).sum())} short"),
-                unsafe_allow_html=True)
-    st.markdown(MX.watch_cards(wl.to_dict("records")), unsafe_allow_html=True)
+        st.markdown(MX.watch_cards(sug.to_dict("records"), show_why=True,
+                                   empty="No stock passes all 5 steps right now."), unsafe_allow_html=True)
+    wl = sug
+    onw = t[t["step4"] & ~t["step5"]]
+    if not onw.empty:
+        with st.expander(f"On watch: {len(onw)} passed steps 1-4 but not step 5", icon=":material/visibility:"):
+            st.caption("Moving against the market, or the day after a wide day: in the momentum study these lost.")
+            st.markdown(MX.watch_cards(onw.to_dict("records"), show_why=True), unsafe_allow_html=True)
     if not wl.empty and st.button("Add these to Watchlist & Alerts", icon=":material/playlist_add:", key="fn_add"):
         syms = [U.fno_yahoo(s_) for s_ in wl["Stock"]]
         store["watchlist"] = list(dict.fromkeys(store.get("watchlist", []) + syms))
@@ -6627,7 +6633,8 @@ def page_funnel():
         "Range ×usual": v["range_x"], "2 Range": v["step2"].map(ok),
         "Sector": v["Sector"], "Sector net ₹Cr": v["sec_net"], "3 Sector": v["step3"].map(ok),
         "Stock net ₹Cr": v["net"], "Net 15m ago": v["net_before"], "Buying %": v.get("buy_share"),
-        "4 Stock": v["step4"].map(ok), "Watchlist": v["Watch"], "With market": v["mkt_with"].map(ok),
+        "4 Stock": v["step4"].map(ok), "With market": v["mkt_with"].map(ok), "Calm yesterday": v["calm_yday"].map(ok),
+        "5 Market": v["step5"].map(ok), "Watchlist": v["Watch"],
         "Room to 20d ATR": v["room_atr"], "Score": v["score"], "Why": v["why"]}), hide_index=True, width="stretch", height=520,
         column_config={"Price": st.column_config.NumberColumn(format="%.2f"),
                        "From open %": st.column_config.NumberColumn(format="%+.2f"),
@@ -6646,8 +6653,8 @@ def page_funnel():
          "and the last 3 candles vs the same 15 minutes on those days. Side = up or down from today's open. Step 2: "
          "high-low from 9:15 to now vs the usual high-low of that window. Step 3: the sector's net money (turnover split "
          "by where each candle closed) is in the same direction. Step 4: the stock's net money is in that direction and "
-         "beyond its value 15 minutes ago. Suggested = watchlist stocks moving with the market (against it lost at every "
-         "time in the momentum study), ranked by a score: ATR 20, range 15, last 15 min 10, money share 20, sector share "
+         "beyond its value 15 minutes ago. Step 5: moving with the market (against it lost at every time in the momentum "
+         "study) and not the day after a wide day (yesterday's range ≥ 1.25 ATR). Watchlist ranked by a score: ATR 20, range 15, last 15 min 10, money share 20, sector share "
          "10, with market 15, room to the 20-day high/low 5, quiet yesterday 5 (wide yesterday -10). The server stores "
          "a snapshot every 5 minutes for testing. A watchlist, not a tested signal yet.")
 
