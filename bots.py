@@ -581,6 +581,41 @@ def _odds_check() -> list:
     except Exception:
         return []
 
+
+FUNNEL_COLS = ["Stock", "Sector", "side", "price", "move_pct", "chg_pct", "gap_pct", "day_x", "now_x", "range_x",
+               "room_atr", "prev_rng_atr", "net", "net_before", "inflow", "outflow", "sec_net", "sec_net_before",
+               "mkt_move", "flow_with", "sec_with", "score", "step1", "step2", "step3", "step4", "suggest"]
+
+
+def funnel_snapshot(mkt: "Market", now: datetime) -> dict:
+    """The Momentum Funnel for every F&O stock, stored every cycle (<data>/funnel/<day>/<HHMM>.parquet, and the rows
+    that pass step 1 in Supabase funnel_log) so the funnel's rules can be tested on what was known at each moment."""
+    import funnel as FN
+    import universe as U
+    bars = mkt.stock_bars()
+    t, _ = FN.build(bars, {s: FN.flow_from_bars(b) for s, b in bars.items()}, U.FNO_SECTOR_OF)
+    if t.empty:
+        return {}
+    snap = t[[c for c in FUNNEL_COLS if c in t]].copy()
+    snap.insert(0, "time", t["time"].max())
+    d = OUT.parent / "funnel" / now.strftime("%Y-%m-%d")
+    d.mkdir(parents=True, exist_ok=True)
+    snap.to_parquet(d / f"{now:%H%M}.parquet", index=False)
+    rows = [{"day": now.strftime("%Y-%m-%d"), "time": r["time"], "stock": r["Stock"], "side": int(r["side"]),
+             "price": float(r["price"]), "day_x": _f(r["day_x"], 3), "now_x": _f(r["now_x"], 3), "range_x": _f(r["range_x"], 3),
+             "sec_net": _f(r["sec_net"], 2), "net": _f(r["net"], 2), "net_before": _f(r["net_before"], 2),
+             "mkt_move": _f(r["mkt_move"], 3), "room_atr": _f(r["room_atr"], 2), "prev_rng_atr": _f(r["prev_rng_atr"], 2),
+             "score": _f(r["score"], 0), "step": int(r["step1"]) + int(r["step2"]) + int(r["step3"]) + int(r["step4"]),
+             "suggest": bool(r["suggest"])} for _, r in snap[snap["step1"]].iterrows()]
+    try:
+        if rows:
+            _cloud().upsert_rows("funnel_log", rows, "day,time,stock")
+    except Exception as e:
+        log(f"funnel_log: {e}")
+    return {"time": snap["time"].iloc[0], "stocks": int(len(snap)),
+            "steps": [int(snap[f"step{i}"].sum()) for i in (1, 2, 3, 4)], "suggest": int(snap["suggest"].sum()),
+            "top": t[t["suggest"]].head(8)[["Stock", "side", "score", "why"]].to_dict("records")}
+
 # ---------------------------------------------------------------- loop
 
 
@@ -602,13 +637,17 @@ def cycle(mkt: Market) -> dict:
     radar = radar_bot(L, mkt, oi) if not L.empty else {"name": "Radar", "rows": [], "events": []}
     update_feed(mkt, radar, now)
     master = master_bot(L, idx, sec, mov, unu, vix_chg, radar)
+    try:
+        fun = funnel_snapshot(mkt, now)
+    except Exception as e:
+        fun = {"error": str(e)[:200]}
     last_bar = max((b.index.max() for b in mkt.today.values() if b is not None and not b.empty), default=None)
     health = {"stocks_live": int(len(L)), "last_candle": str(last_bar)[11:16] if last_bar is not None else None,
               "oi_from_recorder": int(len(oi)), "odds_days": mkt.odds.get("days"), "odds_built": mkt.odds.get("built"),
               "research_run": (research or {}).get("run_at"), "errors": STATUS["errors"][-3:]}
     return {"updated": now.isoformat(timespec="seconds"), "health": health, "feed": mkt.feed[:120],
             "bots": {"index": idx, "sector": sec, "movers": mov, "unusual": unu, "radar": radar, "master": master},
-            "odds_check": _odds_check()}
+            "odds_check": _odds_check(), "funnel": fun}
 
 
 def save(state: dict):

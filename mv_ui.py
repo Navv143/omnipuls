@@ -676,7 +676,7 @@ def funnel(steps: list[tuple[str, int, str]]) -> str:
     return "<div class='fn'>" + "".join(out) + "</div>"
 
 
-def watch_card(r: dict) -> str:
+def watch_card(r: dict, show_why: bool = False) -> str:
     c = UP if r["side"] > 0 else DOWN
     rising = "▲" if r["net"] > r["net_before"] else "▼"  # direction of the change in the last 15 minutes
     return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['Stock'])}</span>"
@@ -685,11 +685,15 @@ def watch_card(r: dict) -> str:
             f"{sparkline(r.get('net_series') or [], c, 0.0)}"
             f"<div class='g'><div><small>ATR 9:15→now</small><b>{r['day_x']:.2f}× usual</b></div>"
             f"<div><small>ATR last 15 min</small><b>{r['now_x']:.2f}× usual</b></div>"
+            f"<div><small>Range 9:15→now</small><b>{r.get('range_x', float('nan')):.2f}× usual</b></div>"
+            f"<div><small>Score</small><b style='color:{c}'>{r.get('score', 0):.0f} / 100</b></div>"
             f"<div><small>Sector net</small><b style='color:{tone_color(r['sec_net'])}'>₹{r['sec_net']:+,.0f} Cr</b></div>"
-            f"<div><small>Stock net</small><b style='color:{tone_color(r['net'])}'>₹{r['net']:+,.1f} Cr {rising}</b></div></div></div>")
+            f"<div><small>Stock net</small><b style='color:{tone_color(r['net'])}'>₹{r['net']:+,.1f} Cr {rising}</b></div></div>"
+            + (f"<div class='px' style='margin-top:7px;font-family:Inter,sans-serif;font-size:var(--fs-xs)'>{_e(r['why'])}</div>"
+               if r.get("why") and show_why else "") + "</div>")
 
 
-def watch_cards(rows: list[dict]) -> str:
+def watch_cards(rows: list[dict], show_why: bool = False, empty: str = "No stock passes all the steps right now.") -> str:
     if not rows:
-        return "<div class='mx-quiet'>No stock passes all three steps right now.</div>"
-    return "<div class='wl'>" + "".join(watch_card(r) for r in rows) + "</div>"
+        return f"<div class='mx-quiet'>{_e(empty)}</div>"
+    return "<div class='wl'>" + "".join(watch_card(r, show_why) for r in rows) + "</div>"
