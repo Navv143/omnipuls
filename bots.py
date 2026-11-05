@@ -758,8 +758,13 @@ def track_trades(mkt: "Market", day: str, signals: list, final: bool = False):
         res = FN.simulate(t["side"], t["entry"], t["sl"], t["tp1"], t["tp2"], after)
         if not res:
             continue
+        mg = FN.manage(t["side"], t["entry"], t["sl"], t["tp1"], t["tp2"], after)  # live state + managed exits
+        live = {"ltp": mg.get("ltp"), "r_now": mg.get("r_now"), "best_r": mg.get("best_r"), "worst_r": mg.get("worst_r"),
+                "advice": mg.get("advice"), "stop_now": mg.get("stop_now"), "as_of": mg.get("as_of"),
+                "m_exit": (f"{mg['exit_how']} {mg['exit_at']}" if mg.get("closed") else None),
+                "m_r": mg.get("exit_r"), "m_pct": mg.get("exit_pct")} if mg else {}
         done = final or res["outcome"] in ("stop", "TP2", "TP1 then stop at entry")
-        upd = {**res, "status": "closed" if done else "open", "last": float(b["Close"].iloc[-1])}
+        upd = {**res, **live, "status": "closed" if done else "open", "last": float(b["Close"].iloc[-1])}
         if any(t.get(k) != v for k, v in upd.items()):
             t.update(upd)
             changed.append(t)
@@ -768,7 +773,9 @@ def track_trades(mkt: "Market", day: str, signals: list, final: bool = False):
         rows = [{"day": day, "time": t["time"], "source": t["source"], "symbol": t["symbol"], "side": int(t["side"]),
                  "entry": t["entry"], "sl": t["sl"], "tp1": t["tp1"], "tp2": t["tp2"], "risk_pct": t["risk_pct"],
                  "score": t.get("score"), "note": t.get("note"), "status": t.get("status"), "outcome": t.get("outcome"), "r": t.get("r"),
-                 "pct": t.get("pct")} for t in {id(x): x for x in changed}.values()]
+                 "pct": t.get("pct"), "ltp": t.get("ltp"), "r_now": t.get("r_now"), "best_r": t.get("best_r"),
+                 "worst_r": t.get("worst_r"), "advice": t.get("advice"), "m_exit": t.get("m_exit"), "m_r": t.get("m_r"),
+                 "m_pct": t.get("m_pct")} for t in {id(x): x for x in changed}.values()]
         try:
             _cloud().upsert_rows("trade_signals", rows, "day,source,symbol")
         except Exception as e:

@@ -6095,6 +6095,15 @@ def page_bot():
         ]), unsafe_allow_html=True)
 
         mom = s.get("momentum") or {}
+        _recs = {(t.get("source", "").split(" (")[0], t.get("symbol")): t for t in (s.get("trades") or [])}
+        for _k, _mo in mom.items():
+            for g in (_mo or {}).get("signals", []):
+                g["live"] = _rec_live(_recs.get(("Index momentum bot", f"{_k} {g['time']}")))
+        for _i in ideas:
+            _t = next((t for t in (s.get("trades") or []) if t.get("symbol") == _i["stock"] and t.get("source", "").startswith("Master bot")), None)
+            if _t:
+                _i["plan"] = _plan_of(_t)
+                _i["live"] = _rec_live(_t)
         if mom:
             st.markdown(MX.section("Index momentum bot", "price + money + breadth + ATR rising together = trade · Bank Nifty: "
                                    "bursts are faded · price against money and breadth = trap"), unsafe_allow_html=True)
@@ -6471,6 +6480,7 @@ def market_view_body(svc, t: pd.DataFrame):
     for _k, (_dt, _gg) in gaps.items():
         g = (_gg or {}).get("signal")
         if g:
+            g["live"] = _sig_live(_k, g["side"], g.get("plan"), g["time"], svc)
             pl = g.get("plan") or {}
             bot_rows.append({"Signal": f"Gap & go: {IF.INDEXES[_k]} {g['side']}", "Status": "● SIGNAL", "Evidence": "Small edge",
                              "Details": f"broke the first hour's {'high' if g['side'] == 'LONG' else 'low'} at {g['time']} @ "
@@ -6487,12 +6497,18 @@ def market_view_body(svc, t: pd.DataFrame):
         print(f"market view momentum bot: {e}", flush=True)
     for _k, _mo in moms.items():
         for g in (_mo or {}).get("signals", []):
+            g["live"] = _sig_live(_k, g["side"], g["plan"], g["time"], svc)
             pl = g["plan"]
             bot_rows.append({"Signal": f"Index momentum bot ({g.get('stage', 'CONFIRMED').lower()}): {IF.INDEXES[_k]} {g['side']}",
                              "Status": "● SIGNAL",
                              "Evidence": "Small edge",
                              "Details": f"{g['time']} @ {g['price']:,.0f} · stop {pl['sl']:,.0f} · targets {pl['tp1']:,.0f} / "
                                         f"{pl['tp2']:,.0f} · {g['why']}"})
+    for r in ix_rows:
+        if r.get("signal"):
+            r["signal"]["live"] = _sig_live(r["key"], r["signal"]["side"], r["signal"].get("plan"), r["signal"]["time"], svc)
+    if bn_fb and bn_fb.get("signal"):
+        bn_fb["signal"]["live"] = _sig_live("BANKNIFTY", bn_fb["signal"]["side"], bn_fb["signal"].get("plan"), bn_fb["signal"]["time"], svc)
     ix_edge = {"NIFTY": "Small edge", "MIDCPNIFTY": "Small edge"}  # best in the first test (Nifty +0.25%, 61% wins)
     for r in ix_rows:
         if r.get("signal"):
@@ -6560,7 +6576,8 @@ def market_view_body(svc, t: pd.DataFrame):
             g = bn_fb.get("signal")
             pl = (g or {}).get("plan") or {}
             fb_txt = (f"Bank Nifty failed-break fade: <b>{g['side']}</b> at {g['time']} @ {g['price']:,.0f}"
-                      + (f" · stop {pl['sl']:,.0f} · targets {pl['tp1']:,.0f} / {pl['tp2']:,.0f}" if pl else "") if g else
+                      + (f" · stop {pl['sl']:,.0f} · targets {pl['tp1']:,.0f} / {pl['tp2']:,.0f}" if pl else "")
+                      + MX.live_html(g.get("live")) if g else
                       f"Bank Nifty failed-break fade: waiting (yesterday {bn_fb['pdl']:,.0f} – {bn_fb['pdh']:,.0f})")
         st.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
         st.markdown(MX.DESK_CSS, unsafe_allow_html=True)
@@ -6576,6 +6593,12 @@ def market_view_body(svc, t: pd.DataFrame):
         ev = (((bs2 or {}).get("bots") or {}).get("radar") or {}).get("events") or [] if bs2 and not bs2.get("stale") else []
         fp = ((bs2 or {}).get("funnel") or {}).get("top") or [] if bs2 and not bs2.get("stale") else []
         if fp:
+            _tr = {t["symbol"]: t for t in _today_trades() if t.get("source") == "Momentum funnel"}
+            for _f in fp:
+                _t = _tr.get(_f["Stock"])
+                if _t:
+                    _f.update({k: _t[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")})
+                    _f["live"] = _sig_live(_f["Stock"], _t["side"], _plan_of(_t), _t["time"], svc) or _rec_live(_t)
             st.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
             st.markdown(MX.section("Momentum Funnel picks", "all 5 steps · ranked by score · details on Momentum Funnel")
                         + MX.watch_cards(fp[:4], show_why=True), unsafe_allow_html=True)
@@ -6777,10 +6800,19 @@ def page_agents():
         ]), unsafe_allow_html=True)
         rc = s.get("recent_calls") or []
         if rc:
+            px_now = {r["symbol"]: r["price"] for r in rows}
+            def _rnow(c):
+                p_ = px_now.get(c["symbol"])
+                risk = abs(c["entry"] - c["stop"])
+                return round(c["side"] * (p_ - c["entry"]) / risk, 2) if p_ and risk else None
             st.dataframe(pd.DataFrame([{"Time": c["time"][:16].replace("T", " "), "Market": c["name"],
-                                        "Side": "LONG" if c["side"] > 0 else "SHORT", "Entry": c["entry"], "Stop": c["stop"],
-                                        "Target": c["target"], "R/R": c["rr"], "Result": c.get("result") or "open",
-                                        "R": c.get("r")} for c in rc]), hide_index=True, width="stretch")
+                                        "Side": "LONG" if c["side"] > 0 else "SHORT", "Entry": c["entry"],
+                                        "Now": px_now.get(c["symbol"]), "R now": None if c.get("result") else _rnow(c),
+                                        "Stop": c["stop"], "Target": c["target"], "R/R": c["rr"],
+                                        "Result": c.get("result") or "open", "R": c.get("r"),
+                                        "TradingView": MX.tv_url(c["symbol"])} for c in rc]), hide_index=True, width="stretch",
+                         column_config={"R now": st.column_config.NumberColumn(format="%+.2f"),
+                                        "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
     else:
         st.caption("The record starts with the first TRADE call on the server.")
     note("ATLAS: Nifty and Bank Nifty vs their 50-day average, India VIX level and 5-day change, the rupee (USD/INR) "
@@ -6948,6 +6980,58 @@ def _index_detail(key: str, sid: int, ib: dict, fb: dict, bars: dict, weights: d
             st.plotly_chart(_fut_oi_fig(fo["per"]), width="stretch", key=f"ixf_{key}", config={"displayModeBar": False})
 
 
+# ---------------------------------------------------------------- live state of running signals
+
+
+def _today_bars(key: str, svc) -> pd.DataFrame:
+    """Today's 5-minute bars for an index key or an F&O stock name (live, from the scan service)."""
+    if svc is None:
+        return pd.DataFrame()
+    try:
+        b = svc.idx_bars().get(key)
+        if b is None:
+            b = svc.bars()[0].get(key)
+    except Exception:
+        return pd.DataFrame()
+    if b is None or b.empty:
+        return pd.DataFrame()
+    b = b[~b.index.duplicated(keep="last")].sort_index()
+    return b[b.index.normalize() == b.index.normalize().max()]
+
+
+def _sig_live(key: str, side, plan: dict | None, time_: str, svc) -> dict | None:
+    """Live price, move since the signal, best / worst, stop now and the exit advice (funnel.manage)."""
+    if not plan or not time_:
+        return None
+    b = _today_bars(key, svc)
+    if b.empty:
+        return None
+    after = b[b.index.strftime("%H:%M") >= time_]
+    s = side if isinstance(side, int) else (1 if str(side).upper() in ("LONG", "BUY") else -1)
+    return FN.manage(s, float(plan["entry"]), float(plan["sl"]), float(plan["tp1"]), float(plan["tp2"]), after) or None
+
+
+def _today_trades() -> list:
+    try:
+        return json.loads((PATHS.DATA / "bots" / "trades" / f"{datetime.now(IST):%Y-%m-%d}.json").read_text())
+    except Exception:
+        return []
+
+
+def _rec_live(t: dict | None) -> dict | None:
+    """Live block from a server trade record (updated every 5 minutes by the bots)."""
+    if not t or t.get("ltp") is None:
+        return None
+    s = int(t["side"])
+    return {"ltp": t["ltp"], "move_pts": s * (t["ltp"] - t["entry"]), "move_pct": s * (t["ltp"] / t["entry"] - 1) * 100,
+            "r_now": t.get("r_now"), "best_r": t.get("best_r"), "worst_r": t.get("worst_r"), "stop_now": t.get("stop_now"),
+            "advice": t.get("advice"), "as_of": t.get("as_of", ""), "exit_r": t.get("m_r")}
+
+
+def _plan_of(t: dict) -> dict:
+    return {k: t[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}
+
+
 def _signal_record(source_filter: str | None = None):
     """Today's signals with entry / stop / targets and their result so far, and the record of all past days (the
     server's bots log every signal and score it at the close)."""
@@ -6987,10 +7071,16 @@ def _signal_record(source_filter: str | None = None):
     st.dataframe(pd.DataFrame({"Day": tv["day"], "Time": tv["time"], "Setup": tv["source"], "Symbol": tv["symbol"],
                                "Side": np.where(tv["side"] > 0, "LONG", "SHORT"), "Entry": tv["entry"], "Stop": tv["sl"],
                                "Target 1": tv["tp1"], "Target 2": tv["tp2"], "Status": tv.get("status"),
-                               "Outcome": tv.get("outcome"), "R": tv.get("r"), "% after costs": tv.get("pct"),
+                               "LTP": tv.get("ltp"), "R now": tv.get("r_now"), "Best R": tv.get("best_r"),
+                               "Advice": tv.get("advice"), "Managed exit": tv.get("m_exit"), "Managed R": tv.get("m_r"),
+                               "Outcome (target/stop)": tv.get("outcome"), "R": tv.get("r"), "% after costs": tv.get("pct"),
                                "TradingView": tv["symbol"].map(MX.tv_url)}),
                  hide_index=True, width="stretch", height=360,
                  column_config={"R": st.column_config.NumberColumn(format="%+.2f"),
+                                "R now": st.column_config.NumberColumn(format="%+.2f"),
+                                "Best R": st.column_config.NumberColumn(format="%+.2f"),
+                                "Managed R": st.column_config.NumberColumn(format="%+.2f"),
+                                "Advice": st.column_config.TextColumn(width="large"),
                                 "% after costs": st.column_config.NumberColumn(format="%+.2f"), "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
 
 
@@ -7009,11 +7099,16 @@ def index_funnel_body():
         return
     st.markdown(MX.section("Index funnel now", "1 ATR active · 2 range expanding · 3 index money (its stocks, weighted) "
                            "with the move and growing · 4 breadth ≥ 60% of the weight with the move"), unsafe_allow_html=True)
+    for r in rows:
+        if r.get("signal"):
+            r["signal"]["live"] = _sig_live(r["key"], r["signal"]["side"], r["signal"].get("plan"), r["signal"]["time"], svc)
     st.markdown("<div class='wl'>" + "".join(MX.index_card(r, weak=r["key"] == "BANKNIFTY") for r in rows) + "</div>",
                 unsafe_allow_html=True)
     for k in ("NIFTY", "BANKNIFTY"):
         try:
             dt_, gg_ = IF.day_trend(ib.get(k), bars, w_all.get(k, {})), IF.gap_go(ib.get(k), bars, w_all.get(k, {}))
+            if (gg_ or {}).get("signal"):
+                gg_["signal"]["live"] = _sig_live(k, gg_["signal"]["side"], gg_["signal"].get("plan"), gg_["signal"]["time"], svc)
             st.markdown(MX.trend_banner(IF.INDEXES[k], dt_, gg_, k), unsafe_allow_html=True)
         except Exception:
             pass
@@ -7107,7 +7202,18 @@ def page_funnel():
         st.info("Not enough candles yet: the funnel starts after the first few minutes.", icon=":material/hourglass_top:")
         return
     n1, n2, n3, n4, n5 = (int(t[f"step{i}"].sum()) for i in (1, 2, 3, 4, 5))
-    sug = t[t["step5"]].sort_values("score", ascending=False)
+    sug = t[t["step5"]].sort_values("score", ascending=False).copy()
+    _tr = {x["symbol"]: x for x in _today_trades() if x.get("source") == "Momentum funnel"}
+    if len(sug):
+        lives, cols = [], {k: [] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}
+        for _, r_ in sug.iterrows():
+            _t = _tr.get(r_["Stock"])
+            for k in cols:
+                cols[k].append(_t[k] if _t else r_[k])
+            lives.append((_sig_live(r_["Stock"], _t["side"], _plan_of(_t), _t["time"], svc) or _rec_live(_t)) if _t else None)
+        for k, v in cols.items():
+            sug[k] = v
+        sug["live"] = lives
     mk = float(t["mkt_move"].iloc[0])
     left, right = st.columns([1, 1.6]) if not MOBILE else (st.container(), st.container())
     with left:
