@@ -427,3 +427,10 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - New landing / sign-in page: aurora background with grid, top bar with live NSE status and IST time, gradient headline,
   stats strip, frosted sign-in card, feature tape, live product preview (sample data, labelled), feature cards, how it
   works, honesty strip, footer; phone layout stacks with sign-in right after the headline.
+
+## 5 Nov 2026: Landing page without setup details
+
+- The sign-in page no longer describes any setup or method (no steps, indicators, rules, test method or data source):
+  generic feature names (Market View, Smart watchlist, Index intelligence, Bots, AI Desk, Sectors), a generic
+  preview (stocks covered → shortlisted → watchlist; signals without their rules) and a generic "how it works".
+  Setup details stay inside the app, behind sign-in.
