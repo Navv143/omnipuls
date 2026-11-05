@@ -30,7 +30,7 @@ def _reload_changed_modules():
         seen = bootstrap._mtimes = {}
     base = os.path.dirname(os.path.abspath(__file__))
     for name in ("mv_ui", "funnel", "index_funnel", "index_levels", "desk_agents", "agents", "market_view", "bot",
-                 "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex", "autotrader", "closing"):
+                 "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex", "autotrader", "closing", "btc_sniper"):
         try:
             m = os.stat(os.path.join(base, name + ".py")).st_mtime
         except OSError:
@@ -7512,6 +7512,57 @@ def page_closing():
                "here to be tested on the live record before you trust them. Overnight positions carry gap risk.")
 
 
+def _btc_paper_section():
+    """BTC NY trend pullback (btc_sniper.py, run by the server's agents every minute 13:25-21:15 London), paper."""
+    import btc_sniper as BS
+    d_ = PATHS.DATA / "crypto_paper"
+    try:
+        stt = json.loads((d_ / "btc_state.json").read_text())
+    except Exception:
+        stt = {}
+    try:
+        rec = json.loads((d_ / "record.json").read_text())
+    except Exception:
+        rec = []
+    _d = datetime.now(BS.LDN).replace(second=0, microsecond=0)
+    _ist = lambda h, m: _d.replace(hour=h, minute=m).astimezone(IST).strftime("%H:%M")  # noqa: E731
+    st.markdown(MX.section("BTC sniper · paper", f"NY-session trend pullback · 1 trade a day at most · checked every minute "
+                           f"{_ist(13, 30)}-{_ist(18, 0)} IST (13:30-18:00 London) · research lead, not proven"),
+                unsafe_allow_html=True)
+    g = stt.get("signal")
+    today = stt.get("day") == datetime.now(BS.LDN).strftime("%Y-%m-%d")
+    if g and today:
+        c = MX.UP if g["side"] > 0 else MX.DOWN
+        r_ = stt.get("r") or 0
+        body = (f"<b style='color:{c}'>{'BUY' if g['side'] > 0 else 'SELL'} BTC</b> at {g['entry']:,.2f} · ⏱ {g['entry_at_ist']} IST "
+                f"({g['entry_at']} London) · stop {g['sl']:,.2f} ({g['stop_pct']:.2f}%) · target {g['tp']:,.2f} (3R) · exit by "
+                f"{_ist(21, 0)} IST (21:00 London) if neither<br>Now {stt.get('price', 0):,.2f} · <b style='color:{MX.tone_color(r_)}'>{r_:+.2f}R</b> "
+                f"({stt.get('pct', 0):+.2f}%) · {stt.get('state', '')}"
+                + (f" at {stt['exit_at']} London" if stt.get("exit_at") else "") + f" · checked {stt.get('checked', '')[11:]} London")
+    else:
+        tr = {1: "1-hour trend up", -1: "1-hour trend down", 0: "no 1-hour trend"}.get(stt.get("trend"), "")
+        body = (f"<b>{_md_inline(stt.get('state', 'starts at 13:25 London (18:55 IST) on the server'))}</b>"
+                + (f" · BTC {stt['price']:,.2f} · VWAP {stt['vwap']:,.2f} · {tr} · as of {stt.get('as_of_ist', '')} IST"
+                   if today and stt.get("price") else ""))
+    st.markdown(f"<div class='mx-idea' style='--c:var(--om-accent);margin:6px 0'>{body}</div>", unsafe_allow_html=True)
+    done = [x for x in rec if x.get("result") in ("stop", "target", "time")]
+    if done:
+        rs = [x["r"] for x in done]
+        st.markdown(MX.kpis([
+            MX.kpi("BTC trades", f"{len(done)}", f"{sum(1 for x in rec if x.get('result') == 'open')} open"),
+            MX.kpi("Win rate", f"{sum(r > 0 for r in rs) / len(rs) * 100:.0f}%", "tested: 36%"),
+            MX.kpi("Average", f"{np.mean(rs):+.2f}R", "tested: +0.09R", MX.tone_color(np.mean(rs))),
+            MX.kpi("Total", f"{sum(rs):+.1f}R", f"≈ ₹{sum(rs) * 1000:+,.0f} at ₹1,000 risk a trade", MX.tone_color(sum(rs))),
+        ]), unsafe_allow_html=True)
+    if rec:
+        with st.expander(f"BTC paper record ({len(rec)} trades)", icon=":material/currency_bitcoin:"):
+            st.dataframe(pd.DataFrame(rec[::-1])[["day", "side", "entry_at_ist", "entry", "sl", "tp", "stop_pct", "result",
+                                                   "exit_at", "r", "pct"]].rename(columns={
+                "day": "Day", "side": "Side", "entry_at_ist": "Entry (IST)", "entry": "Entry", "sl": "Stop", "tp": "Target",
+                "stop_pct": "Stop %", "result": "Result", "exit_at": "Exit (London)", "r": "R", "pct": "% move"}),
+                hide_index=True, width="stretch")
+
+
 def page_auto():
     """Auto Trader (paper): six agents turn the bots' signals into sized paper trades (server: bots.py + autotrader.py)."""
     import autotrader as AT
@@ -7560,6 +7611,7 @@ def page_auto():
     st.markdown(MX.section("Positions", f"{sum(1 for x in taken if not (x.get('mark') or {}).get('closed'))} open · "
                            f"{len(taken)} today · marked every 5 minutes"), unsafe_allow_html=True)
     st.markdown(MX.position_cards(taken), unsafe_allow_html=True)
+    _btc_paper_section()
     # equity curve over the days
     if closed_days:
         import plotly.graph_objects as go
