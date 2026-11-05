@@ -2282,8 +2282,12 @@ def _github_cfg() -> dict:
 
 def _log_paper(svc, idx_b: dict, og, now: datetime):
     """Paper trades of the tested setups: the opening setups once a day after 9:20, Bank Nifty 5-STAR when it fires
-    and again with its result after 15:15."""
-    done = _memo("desk_log").setdefault("paper", set())
+    and again with its result after 15:15. Checked at most every 5 minutes (it recomputes 5-STAR and gold flow, ~2.5 s)."""
+    memo = _memo("desk_log")
+    if time.time() - memo.get("paper_at", 0) < 300:
+        return
+    memo["paper_at"] = time.time()
+    done = memo.setdefault("paper", set())
     day = now.strftime("%Y-%m-%d")
     rows = []
     if og is not None and now.strftime("%H:%M") >= "09:20" and (day, "setups") not in done:
@@ -6418,9 +6422,53 @@ def money_rotation_fig(secflow: pd.DataFrame, height: int = 380):
     return fig
 
 
-@st.cache_data(ttl=120, show_spinner=False)
+_CHAIN_COLS = ["Strike"] + [f"{s} {c}" for s in ("CE", "PE") for c in
+                             ("LTP", "Prev", "OI", "Prev OI", "Volume", "IV", "Delta", "Theta", "Gamma", "Vega", "Bid", "Ask",
+                              "Bid Qty", "Ask Qty", "ID", "Chg OI", "Chg")]
+_CHAIN_BACK = {c.lower().replace(" ", "_"): c for c in _CHAIN_COLS}
+_CHAIN_NAME = {13: "NIFTY", 25: "BANKNIFTY", 27: "FINNIFTY", 442: "MIDCPNIFTY", 51: "SENSEX"}
+
+
+def _recorder_chain(sid: int, max_age_min: int = 5):
+    """The recorder's latest saved chain for an index (nearest expiry, ±25 strikes, saved every minute), if fresh:
+    no Dhan call (Dhan's chain API allows one call every 3 seconds, which made the Market View wait ~9 s)."""
+    name = _CHAIN_NAME.get(int(sid))
+    d = PATHS.DATA / "option_chain" / "parts" / datetime.now(IST).strftime("%Y-%m-%d")
+    files = sorted(d.glob("*.parquet")) if name and d.exists() else []
+    for f in reversed(files[-3:]):
+        try:
+            c = pd.read_parquet(f)
+        except Exception:
+            continue
+        c = c[c["index"] == name]
+        if c.empty:
+            continue
+        t = pd.Timestamp(c["time"].max())
+        if datetime.now(IST).replace(tzinfo=None) - t.to_pydatetime() > pd.Timedelta(minutes=max_age_min):
+            return None
+        c = c[(c["time"] == c["time"].max())]
+        c = c[c["expiry"] == c["expiry"].min()]
+        spot = float(c["spot"].iloc[0])
+        ch = c.rename(columns=_CHAIN_BACK)[[k for k in _CHAIN_COLS if k in c.rename(columns=_CHAIN_BACK)]]
+        ch = ch.sort_values("Strike").reset_index(drop=True)
+        return spot, ch, D.max_pain(ch)
+    return None
+
+
 def _mv_chain(sid: int, seg: str):
-    """Nearest-expiry chain for the Market View, reused for 2 minutes (the recorder also calls Dhan's chain API)."""
+    """Nearest-expiry chain for the Market View: the recorder's saved chain when fresh, else Dhan (cached 2 min)."""
+    try:
+        r = _recorder_chain(sid)
+        if r is not None and not r[1].empty:
+            return r
+    except Exception:
+        pass
+    return _mv_chain_api(sid, seg)
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _mv_chain_api(sid: int, seg: str):
+    """Nearest-expiry chain from Dhan, reused for 2 minutes."""
     exps = [e for e in oc_expiries(sid, seg) if str(e) >= datetime.now(IST).strftime("%Y-%m-%d")]
     if not exps:
         return 0.0, pd.DataFrame(), None

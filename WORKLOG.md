@@ -587,3 +587,9 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - Momentum Funnel → Indices: "Noise band" section (paper default, best cell, cells positive per index and cost; the
   filter table). First 60-day check (Yahoo): strategy negative at 0.04%; Bank Nifty bursts inside the band -0.22% vs
   outside -0.04% (37% vs 61% wins), Nifty no difference; the server's year decides.
+
+## 5 Nov 2026: Market View speed from the timing log
+- app_perf showed Market View loads of 15-19 s: option chains 9.4 s (two Dhan chain calls, 3-second rate limit, cache
+  expiring every 2 minutes) and the desk / paper log 2.5 s. Now the chains come from the recorder's saved parts
+  (every minute, ±25 strikes, `_recorder_chain`) when fresher than 5 minutes, Dhan only as a fallback; the paper
+  logger runs at most every 5 minutes.
