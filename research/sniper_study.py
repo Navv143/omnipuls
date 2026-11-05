@@ -432,3 +432,66 @@ def orb_daily(x, D, cost, or_start, or_mins, end_hm, dtr, rr=2.0, stop_mode="opp
                         "stop_pct": abs(e - stop) / e * 100})
             break
     return pd.DataFrame(out)
+
+
+def po3(x, D, cost, rr=2.0, pda=True, bias_mode="4h+day", acc=(570, 600), man_end=690, conf_end=720, end_hm=840,
+        target="rr", bos=3, min_stop=0.0, max_stop=9.0):
+    """ICT Power of 3 on the 10:00 New York 4-hour candle (x in America/New_York time):
+    bias = previous 4H candle (6-10) and today's candle from midnight both up (or both down); optional HTF PDA tap =
+    before 10:00 price traded in yesterday's discount (long) / premium (short) half; accumulation = range acc;
+    manipulation = after 10:00 (until man_end) a sweep beyond the accumulation against the bias; confirmation = a 5-min
+    close beyond the last `bos` candles' high (low) before conf_end; entry next open, stop beyond the manipulation
+    extreme, target rr x risk or the far side of the accumulation range plus its height ('acc'); exit end_hm."""
+    o, h, l, c, hm = (x[k].to_numpy() for k in ("Open", "High", "Low", "Close", "hm"))
+    out, prev = [], None
+    for day, ix in D.items():
+        m = hm[ix]
+        if prev is None or len(ix) < 150:
+            prev = (h[ix].max(), l[ix].min()) if len(ix) else prev
+            continue
+        phi, plo = prev
+        prev = (h[ix].max(), l[ix].min())
+        pre4 = ix[(m >= 360) & (m < 600)]
+        before = ix[m < 600]
+        a_ix = ix[(m >= acc[0]) & (m < acc[1])]
+        w_ix = ix[(m >= 600) & (m < conf_end)]
+        e_ix = ix[(m >= 600) & (m < end_hm)]
+        if len(pre4) < 40 or len(a_ix) < 3 or len(w_ix) < 6:
+            continue
+        b4 = np.sign(c[pre4[-1]] - o[pre4[0]])
+        bd = np.sign(c[before[-1]] - o[before[0]])
+        bias = int(b4) if bias_mode == "4h" else int(bd) if bias_mode == "day" else (int(b4) if b4 == bd else 0)
+        if not bias:
+            continue
+        if pda:
+            mid = (phi + plo) / 2
+            if bias > 0 and not (l[before].min() <= mid):
+                continue
+            if bias < 0 and not (h[before].max() >= mid):
+                continue
+        ahi, alo = h[a_ix].max(), l[a_ix].min()
+        last = e_ix[-1]
+        swept, ext = False, None
+        for k in w_ix[:-1]:
+            if not swept:
+                if m[np.searchsorted(ix, k)] >= man_end:
+                    break
+                if (bias > 0 and l[k] < alo) or (bias < 0 and h[k] > ahi):
+                    swept, ext = True, (l[k] if bias > 0 else h[k])
+                continue
+            ext = min(ext, l[k]) if bias > 0 else max(ext, h[k])
+            ref = h[k - bos:k].max() if bias > 0 else l[k - bos:k].min()
+            if (bias > 0 and c[k] > ref) or (bias < 0 and c[k] < ref):
+                i = k + 1
+                e = o[i]
+                stop = ext
+                sp = abs(e - stop) / e * 100
+                if bias * (e - stop) <= 0 or not (min_stop <= sp <= max_stop):
+                    break
+                tgt = e + bias * rr * abs(e - stop) if target == "rr" else (ahi + (ahi - alo) if bias > 0 else alo - (ahi - alo))
+                if bias * (tgt - e) <= 0:
+                    break
+                xp, how, _ = run_trade(o, h, l, c, i, bias, stop, tgt, last)
+                out.append({"day": day, "side": bias, "r": result(bias, e, stop, xp, cost), "how": how, "stop_pct": sp})
+                break
+    return pd.DataFrame(out)
