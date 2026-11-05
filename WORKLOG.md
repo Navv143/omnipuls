@@ -500,3 +500,15 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   (enableStaticServing): apple-touch-icon 180 px, icon-192 / icon-512 and manifest.json, rendered from the brand SVG as
   a full square; the page head gets the icon / manifest / app-name tags; Caddy also serves /apple-touch-icon*.png at
   the site root (after a Caddy restart).
+
+## 5 Nov 2026: Live price and exit management on every signal
+- `funnel.manage`: re-checked every 5-minute candle after a signal: stop → exit; target 1 → book half, stop to entry,
+  then trail 1R behind the best close; target 2 → exit the rest; before target 1, momentum slowing (0.5R+ in profit,
+  two candles against and a close through the 5-min EMA 9) → exit; 15:15 → exit what is left. Returns LTP, move in
+  points / % / R, best / worst R, the stop now and the advice (HOLD / TIGHTEN / CAUTION / CLOSED).
+- Live block (LTP · move · R · best / worst · stop now · advice) on index cards, trend / Gap & go banners, momentum
+  cards, the Bank Nifty fade line, funnel watchlist cards (recorded signal), funnel picks on Market View and the Bots
+  page ideas / momentum cards; Signal record gains LTP, R now, best R, advice, managed exit and managed R; AI Desk paper
+  calls gain the current price and R now.
+- Server records the managed exit next to the plain target / stop result (trade_signals m_exit / m_r / m_pct, ltp,
+  r_now, best_r, worst_r, advice) so the two exits can be compared.

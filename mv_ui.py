@@ -671,6 +671,12 @@ FUNNEL_CSS = """<style>
 .plan div{border-radius:8px;padding:4px 7px;border:1px solid var(--om-border-soft);background:var(--om-sunken)}
 .plan small{display:block;font-size:.56rem;letter-spacing:.07em;text-transform:uppercase;color:var(--om-faint)}
 .plan b{font-family:var(--font-num);font-size:var(--fs-xs)}
+.live{margin-top:7px;border-radius:9px;padding:7px 9px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);
+  background:color-mix(in srgb,var(--c) 10%,transparent)}
+.live .l1{display:flex;justify-content:space-between;gap:8px;font-family:var(--font-num);font-size:var(--fs-sm)}
+.live .l1 b{color:var(--c)}
+.live .l2{font-size:var(--fs-2xs);color:var(--om-text-3);margin-top:2px;font-family:var(--font-num)}
+.live .adv{font-size:var(--fs-xs);font-weight:700;margin-top:4px;color:var(--c)}
 </style>"""
 
 
@@ -699,7 +705,7 @@ def watch_card(r: dict, show_why: bool = False) -> str:
             f"<div><small>Score</small><b style='color:{c}'>{r.get('score', 0):.0f} / 100</b></div>"
             f"<div><small>Sector net</small><b style='color:{tone_color(r['sec_net'])}'>₹{r['sec_net']:+,.0f} Cr</b></div>"
             f"<div><small>Stock net</small><b style='color:{tone_color(r['net'])}'>₹{r['net']:+,.1f} Cr {rising}</b></div></div>"
-            + (plan_html({k: r[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")})
+            + (plan_html({k: r[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}, r.get("live"))
                if r.get("entry") == r.get("entry") and r.get("entry") is not None and r.get("sl") == r.get("sl") else "")
             + (f"<div class='px' style='margin-top:7px;font-family:Inter,sans-serif;font-size:var(--fs-xs)'>{_e(r['why'])}</div>"
                if r.get("why") and show_why else "") + "</div>")
@@ -727,7 +733,7 @@ def index_card(r: dict, weak: bool = False) -> str:
             f"<div class='px'>{_num(r['price'])} · {_sgn(r['move_pct'])} from open · {_e(r['time'])}{vix}</div>"
             f"<div class='votes' style='display:flex;flex-direction:column;gap:4px;margin-top:8px'>{chips}</div>"
             + (f"<div class='px' style='margin-top:6px'>Signal at {sig['time']} @ {_num(sig['price'])}</div>" if sig else "")
-            + (plan_html(sig.get("plan")) if sig else "")
+            + (plan_html(sig.get("plan"), sig.get("live")) if sig else "")
             + "</div>")
 
 
@@ -763,8 +769,8 @@ def level_ladder(levels: list, spot: float, sup: dict | None, res: dict | None) 
     return f"<div class='ld'><div class='lg'>{legend}</div>{''.join(rows)}</div>"
 
 
-def plan_html(p: dict | None) -> str:
-    """Entry / stop / targets block for a card."""
+def plan_html(p: dict | None, live: dict | None = None) -> str:
+    """Entry / stop / targets block for a card, with the live state under it when the signal is running."""
     if not p:
         return ""
     return (f"<div class='plan'><div><small>Entry</small><b>{_num(p['entry'])}</b></div>"
@@ -772,7 +778,7 @@ def plan_html(p: dict | None) -> str:
             f"<div><small>Target 1</small><b style='color:var(--om-up)'>{_num(p['tp1'])}</b></div>"
             f"<div><small>Target 2</small><b style='color:var(--om-up)'>{_num(p['tp2'])}</b></div></div>"
             f"<div class='px' style='font-size:var(--fs-2xs);margin-top:4px'>risk {p['risk_pct']:.2f}% · half off at target 1, "
-            f"stop to entry · exit {p.get('exit', '15:15')}</div>")
+            f"then trail 1R · exit early if momentum slows · 15:15 at the latest</div>" + live_html(live))
 
 
 def idea_card(i: dict) -> str:
@@ -789,7 +795,7 @@ def idea_card(i: dict) -> str:
             f"<div class='px'>{_e(i.get('sector', ''))} · since {_e(i.get('time', ''))} · checks {_e(i.get('agree', ''))}</div>"
             f"<div style='font-weight:700;margin-top:8px;color:{c}'>{where}</div>"
             f"<div class='px' style='font-family:Inter,sans-serif;font-size:var(--fs-xs);margin-top:3px'>{_e(i.get('source', ''))}</div>"
-            + plan_html(p) + f"<div class='votes' style='margin-top:8px'>{checks}</div></div>")
+            + plan_html(p, i.get("live")) + f"<div class='votes' style='margin-top:8px'>{checks}</div></div>")
 
 
 def idea_cards(ideas: list) -> str:
@@ -812,7 +818,7 @@ def trend_banner(name: str, dt: dict, gg: dict | None, key: str = "") -> str:
             f"<h3 style='margin:.1rem 0 .3rem'>{_sgn(dt['chg_pct'])} · {dt['chg_atr']:+.1f} ATR · breadth {dt['breadth_with']:.0f}% "
             f"{'up' if dt['side'] > 0 else 'down'}</h3><div class='px' style='color:var(--om-text-3)'>gap {_sgn(dt['gap_pct'])} · "
             f"from the open {_sgn(dt['from_open_pct'])} · {act}</div>"
-            + (plan_html(sig.get("plan")) if sig else "") + "</div>")
+            + (plan_html(sig.get("plan"), sig.get("live")) if sig else "") + "</div>")
 
 
 def momentum_card(key: str, mo: dict) -> str:
@@ -841,7 +847,7 @@ def momentum_card(key: str, mo: dict) -> str:
     body = "".join(f"<div style='margin-top:8px;font-weight:700;color:{UP if g['side'] == 'LONG' else DOWN}'>"
                    f"<span class='mx-mini' style='margin-right:6px'>{_e(g.get('stage', 'CONFIRMED'))}</span>{g['side']} at "
                    f"{g['time']} @ {_num(g['price'])}</div><div class='px' style='font-family:Inter,sans-serif;"
-                   f"font-size:var(--fs-2xs)'>{_e(g['why'])}</div>{_oi(g)}{plan_html(g['plan'])}" for g in sigs[-3:])
+                   f"font-size:var(--fs-2xs)'>{_e(g['why'])}</div>{_oi(g)}{plan_html(g['plan'], g.get('live'))}" for g in sigs[-3:])
     tag = f" <span class='mx-mini'>{_e(mo.get('rule', ''))}</span>" + (" <span class='mx-mini'>trend day</span>" if mo.get("trend_day") else "")
     badge = ("MOMENTUM ▲" if st_.startswith("MOMENTUM UP") else "MOMENTUM ▼" if st_.startswith("MOMENTUM DOWN")
              else "TRAP?" if mo.get("trap") else "WAITING")
@@ -897,3 +903,21 @@ def tv_link(sym: str, label: str = "TradingView ↗") -> str:
     return (f"<a href='{u}' target='_blank' rel='noopener' style='font-size:var(--fs-2xs);color:var(--om-accent);"
             f"text-decoration:none;border:1px solid color-mix(in srgb,var(--om-accent) 45%,transparent);border-radius:6px;"
             f"padding:1px 7px;margin-left:6px;white-space:nowrap'>{label}</a>") if u else ""
+
+
+def live_html(m: dict | None) -> str:
+    """Where the trade is now: live price, the move since the signal (points / % / R), best and worst so far, the stop
+    now and what to do (re-checked every 5-minute candle)."""
+    if not m:
+        return ""
+    r = m.get("r_now")
+    c = UP if (r or 0) > 0.05 else DOWN if (r or 0) < -0.05 else NEUTRAL
+    adv = m.get("advice") or ""
+    if adv.startswith("CLOSED"):
+        c = UP if (m.get("exit_r") or 0) > 0 else DOWN
+    elif adv.startswith("TIGHTEN") or adv.startswith("CAUTION"):
+        c = WARN
+    return (f"<div class='live' style='--c:{c}'><div class='l1'><span>LTP {_num(m.get('ltp'))} · {m.get('as_of', '')}</span>"
+            f"<b>{(m.get('move_pts') or 0):+,.2f} ({(m.get('move_pct') or 0):+.2f}%) · {(r or 0):+.2f}R</b></div>"
+            f"<div class='l2'>best {(m.get('best_r') or 0):+.2f}R · worst {(m.get('worst_r') or 0):+.2f}R · stop now "
+            f"{_num(m.get('stop_now'))}</div><div class='adv'>{_e(adv)}</div></div>")

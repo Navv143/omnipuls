@@ -228,3 +228,73 @@ def simulate(side: int, entry: float, sl: float, tp1: float, tp2: float, after: 
     outcome = ("stop" if done == sl and half is None else "TP2" if done == tp2 else
                "TP1 then stop at entry" if half is not None and done == entry else "TP1 then 15:15" if half is not None else "15:15")
     return {"r": round(r, 2), "pct": round(pct, 3), "outcome": outcome}
+
+
+def manage(side: int, entry: float, sl: float, tp1: float, tp2: float, after: pd.DataFrame, cost_pct: float = 0.12) -> dict:
+    """Live management after a signal, re-checked on every 5-minute candle:
+    - stop hit -> exit;  target 1 -> book half, stop to entry, then TRAIL (stop = the best close minus 1R, never below
+      entry);  target 2 -> book the rest;
+    - momentum slowing (before target 1): once 0.5R+ in profit, two candles in a row closing against the trade AND a
+      close back through the 5-minute EMA 9 -> exit; after target 1 the rest rides the 1R trailing stop;
+    - 15:15 -> exit whatever is left (no position is carried overnight).
+    Returns the latest price, the move in points / % / R, the best and worst R so far, the current stop, the advice
+    for now, and the result of these exits (r / pct after costs) once closed."""
+    risk = abs(entry - sl)
+    if after is None or after.empty or not risk or not np.isfinite(risk):
+        return {}
+    a = after[(after.index.hour * 60 + after.index.minute) <= 915]
+    if a.empty:
+        a = after.iloc[:1]
+    ema9 = after["Close"].ewm(span=9, adjust=False).mean()
+    stop, half, best, worst = sl, None, 0.0, 0.0
+    done, how, when, against = None, "", "", 0
+    for ts, b in a.iterrows():
+        hi, lo, cl = float(b["High"]), float(b["Low"]), float(b["Close"])
+        fav = (hi - entry) if side > 0 else (entry - lo)
+        adv = (lo - entry) if side > 0 else (entry - hi)
+        best, worst = max(best, fav / risk), min(worst, adv / risk)
+        if (lo <= stop) if side > 0 else (hi >= stop):
+            done, how = stop, ("trailing stop" if half is not None and stop != entry else "stop at entry" if half is not None else "stop")
+            when = ts
+            break
+        if half is None and ((hi >= tp1) if side > 0 else (lo <= tp1)):
+            half, stop = tp1, entry
+        if half is not None and ((hi >= tp2) if side > 0 else (lo <= tp2)):
+            done, how, when = tp2, "target 2", ts
+            break
+        if half is not None:  # trail: keep 1R below the best close, never below entry
+            trail = (cl - risk) if side > 0 else (cl + risk)
+            stop = max(stop, trail) if side > 0 else min(stop, trail)
+        against = against + 1 if side * (cl - float(b["Open"])) < 0 else 0
+        if half is None and best >= 0.5 and against >= 2 and side * (cl - float(ema9.loc[ts])) < 0:  # before target 1 only
+            done, how, when = cl, "momentum slowed", ts
+            break
+    last = a.iloc[-1]
+    ltp = float(after["Close"].iloc[-1])
+    end_of_day = (a.index[-1].hour * 60 + a.index[-1].minute) >= 915
+    if done is None and end_of_day:
+        done, how, when = float(last["Close"]), "15:15 exit", a.index[-1]
+    r_now = side * (ltp - entry) / risk
+    out = {"ltp": ltp, "move_pts": side * (ltp - entry), "move_pct": side * (ltp / entry - 1) * 100, "r_now": round(r_now, 2),
+           "best_r": round(best, 2), "worst_r": round(worst, 2), "stop_now": round(stop, 2), "half_booked": half is not None,
+           "as_of": (after.index[-1] + pd.Timedelta(minutes=5)).strftime("%H:%M")}
+    if done is not None:
+        exit_px = done if half is None else (half + done) / 2
+        out.update(closed=True, exit_how=how,
+                   exit_at=("15:15" if how == "15:15 exit" else (when + pd.Timedelta(minutes=5)).strftime("%H:%M")) if hasattr(when, "strftime") else "",
+                   exit_r=round(side * (exit_px - entry) / risk, 2), exit_pct=round(side * (exit_px / entry - 1) * 100 - cost_pct, 3))
+        out["advice"] = (f"CLOSED · {how} · {out['exit_r']:+.2f}R" if how == "15:15 exit" else
+                         f"CLOSED · {how} at {out['exit_at']} · {out['exit_r']:+.2f}R")
+    else:
+        out["closed"] = False
+        recent = after["Close"].iloc[-3:]
+        slowing = len(recent) >= 3 and side * (recent.iloc[-1] - recent.iloc[0]) < 0 and r_now > 0
+        if half is not None:
+            out["advice"] = f"HOLD rest · half booked at target 1 · trail stop {stop:,.2f}"
+        elif r_now >= 0.5 and slowing:
+            out["advice"] = f"TIGHTEN · {r_now:+.1f}R but the last 15 min turned against: lock profit (stop to entry)"
+        elif r_now <= -0.7:
+            out["advice"] = f"CAUTION · near the stop {stop:,.2f} ({r_now:+.1f}R)"
+        else:
+            out["advice"] = f"HOLD · stop {stop:,.2f} · target 1 {tp1:,.2f}"
+    return out
