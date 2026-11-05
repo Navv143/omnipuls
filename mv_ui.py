@@ -807,3 +807,31 @@ def trend_banner(name: str, dt: dict, gg: dict | None) -> str:
             f"{'up' if dt['side'] > 0 else 'down'}</h3><div class='px' style='color:var(--om-text-3)'>gap {_sgn(dt['gap_pct'])} · "
             f"from the open {_sgn(dt['from_open_pct'])} · {act}</div>"
             + (plan_html(sig.get("plan")) if sig else "") + "</div>")
+
+
+def momentum_card(key: str, mo: dict) -> str:
+    """Index momentum bot: the live state (momentum / trap / no confirmation), the 15-minute readings and today's trades."""
+    if not mo:
+        return ""
+    st_ = mo.get("state", "")
+    c = UP if st_.startswith("MOMENTUM UP") else DOWN if st_.startswith("MOMENTUM DOWN") else WARN if mo.get("trap") else NEUTRAL
+    rd = []
+    if mo.get("d_px") is not None:
+        rd.append(f"price {mo['d_px']:+,.0f}")
+    if mo.get("d_net") is not None:
+        rd.append(f"money ₹{mo['d_net']:+,.0f} Cr")
+    if mo.get("breadth") is not None:
+        rd.append(f"breadth {mo['breadth']:.0f}% up ({(mo.get('d_br') or 0):+.0f})")
+    if mo.get("now_x") is not None:
+        rd.append(f"ATR {mo['now_x']:.1f}x")
+    sigs = mo.get("signals") or []
+    body = "".join(f"<div style='margin-top:8px;font-weight:700;color:{UP if g['side'] == 'LONG' else DOWN}'>{g['side']} at "
+                   f"{g['time']} @ {_num(g['price'])}</div><div class='px' style='font-family:Inter,sans-serif;"
+                   f"font-size:var(--fs-2xs)'>{_e(g['why'])}</div>{plan_html(g['plan'])}" for g in sigs[-2:])
+    tag = f" <span class='mx-mini'>{_e(mo.get('rule', ''))}</span>" + (" <span class='mx-mini'>trend day</span>" if mo.get("trend_day") else "")
+    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(mo.get('name', key))}{tag}</span>"
+            f"<span class='sd' style='--c:{c}'>{_e(st_.split(' but')[0][:22])}</span></div>"
+            f"<div class='px'>{_num(mo.get('price'))} · last 15 min ({_e(mo.get('time', ''))}): {_e(' · '.join(rd))}</div>"
+            + (f"<div class='px' style='color:var(--om-warn);margin-top:4px'>⚠ {_e(st_)}: likely stop hunt, no trade</div>" if mo.get("trap") else "")
+            + (body or "<div class='mx-quiet'>No confirmed burst today yet.</div>")
+            + (f"<div class='mx-quiet'>{len(sigs)} signals today</div>" if len(sigs) > 2 else "") + "</div>")

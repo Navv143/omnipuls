@@ -388,3 +388,102 @@ def gap_go(ix: pd.DataFrame, stocks: dict, weights: dict) -> dict | None:
     plan = FN.trade_plan(s, px, dt["atr14"], float(upto["Low"].min()), float(upto["High"].max()))
     out["signal"] = {"time": (t0 + pd.Timedelta(minutes=5)).strftime("%H:%M"), "side": out["side"], "price": px, "plan": plan}
     return out
+
+
+MOM = {"window": 3, "move_atr": 0.15, "breadth": 65.0, "now_x": 1.0, "gap_min": 60}
+
+
+def momentum_table(ix: pd.DataFrame, stocks: dict, weights: dict, today_only: bool = True) -> pd.DataFrame:
+    """Every candle: over the last 15 minutes, the change in price, the index stocks' net money, breadth vs yesterday
+    (share of the weight up) and ATR (last 15 minutes vs usual)."""
+    t = index_table(ix, stocks, weights, None)
+    if t.empty:
+        return t
+    up, tot = pd.Series(0.0, index=t.index), 0.0
+    for s, wt in (weights or {}).items():
+        b = _clean(stocks.get(s))
+        if b.empty:
+            continue
+        bd = b.index.normalize()
+        pcs = b.groupby(bd)["Close"].last().shift(1)
+        ch = b["Close"] / pcs.reindex(bd).to_numpy() - 1
+        ch = ch.reindex(t.index).ffill(limit=6)  # a missing latest candle must not count as 'down'
+        up = up.add((ch > 0).astype(float) * wt, fill_value=0)
+        tot += wt
+    t["br_y"] = up / tot * 100 if tot else np.nan
+    dd = t.groupby("day").agg(h=("High", "max"), l=("Low", "min"), c=("Close", "last"))
+    pc = dd["c"].shift(1)
+    tr = pd.concat([dd["h"] - dd["l"], (dd["h"] - pc).abs(), (dd["l"] - pc).abs()], axis=1).max(axis=1)
+    t["atr14"] = t["day"].map(tr.rolling(14).mean().shift(1))
+    g, k = t.groupby("day"), MOM["window"]
+    t["d_px"] = t["Close"] - g["Close"].shift(k)
+    t["d_net"] = t["net"] - g["net"].shift(k)
+    t["d_br"] = t["br_y"] - g["br_y"].shift(k)
+    t["d_atr"] = t["now_x"] - g["now_x"].shift(k)
+    t["msd"] = np.sign(t["d_px"].fillna(0)).astype(int)
+    brw = np.where(t["msd"] > 0, t["br_y"], 100 - t["br_y"])
+    pmove = t["d_px"].abs() >= MOM["move_atr"] * t["atr14"]
+    # money increasing, breadth (vs yesterday) high and not falling, ATR at least usual and rising
+    t["momentum"] = (pmove & (np.sign(t["d_net"]) == t["msd"]) & (t["msd"] * t["d_br"] >= 0) & (brw >= MOM["breadth"])
+                     & (t["now_x"] >= MOM["now_x"]) & (t["d_atr"] > 0)).fillna(False)
+    t["trap"] = (pmove & (np.sign(t["d_net"]) == -t["msd"]) & (np.sign(t["d_br"]) == -t["msd"])).fillna(False)
+    # trend day (vs yesterday's close): 1+ ATR away with 75%+ of the weight the same way
+    pcl = t["day"].map(t.groupby("day")["Close"].last().shift(1))
+    t["chg_atr"] = (t["Close"] - pcl) / t["atr14"]
+    br_dir = np.where(t["chg_atr"] > 0, t["br_y"], 100 - t["br_y"])  # breadth the day's way
+    t["trend_day"] = ((t["chg_atr"].abs() >= 1.0) & (br_dir >= 75)).fillna(False)
+    t["trend_dir"] = np.where(t["trend_day"], np.sign(t["chg_atr"].fillna(0)), 0).astype(int)
+    t["swl"] = g["Low"].transform(lambda x: x.rolling(6, min_periods=1).min())
+    t["swh"] = g["High"].transform(lambda x: x.rolling(6, min_periods=1).max())
+    if today_only:
+        t = t[t["day"] == t["day"].max()]
+    return t
+
+
+MOM_FADE = {"BANKNIFTY"}  # Bank Nifty's bursts usually reverse (45 days: with -0.15%, faded +0.05%, both halves +)
+# What each index does with a confirmed burst (first test, 45 days of 5-minute data, research/index_momentum_test.py):
+MOM_MODE = {"NIFTY": "trend_only",       # with it, only on trend days (+0.25%, 8 trades); ~0 on normal days
+            "BANKNIFTY": "fade_normal",  # fade on normal days (+0.08%, 60% wins); no trade on trend days
+            "MIDCPNIFTY": "with", "SENSEX": "with",  # with it, any day (+0.11% / +0.07%)
+            "FINNIFTY": "watch"}         # lost either way: readings only, no trades
+
+
+def momentum_now(ix: pd.DataFrame, stocks: dict, weights: dict, name: str = "", fade: bool = False,
+                 mode: str | None = None) -> dict | None:
+    """Index momentum bot: today's signals (price + net money + breadth + ATR all rising together, 9:30-14:00, at
+    least an hour apart, each with the plan), the latest reading and any trap warning (price moving while money and
+    breadth go the other way: likely a stop hunt, no trade). First tests: small edge on Nifty (3 years hourly
+    +0.03% a trade vs +0.01% unconfirmed, both halves +), none on Bank Nifty."""
+    import funnel as FN
+    t = momentum_table(ix, stocks, weights)
+    if t.empty:
+        return None
+    mode = mode or ("fade_normal" if fade else "with")
+    sigs, last_ts = [], None
+    for ts, r in t[t["momentum"] & (t["m"] + 5 >= 570) & (t["m"] + 5 <= 840)].iterrows():
+        if last_ts is not None and (ts - last_ts) < pd.Timedelta(minutes=MOM["gap_min"]):
+            continue
+        if mode == "watch" or (mode == "trend_only" and r["trend_dir"] != r["msd"]) or (mode == "fade_normal" and r["trend_day"]):
+            continue
+        fade = mode == "fade_normal"
+        sd = -int(r["msd"]) if fade else int(r["msd"])
+        p = FN.trade_plan(sd, float(r["Close"]), float(r["atr14"]), float(r["swl"]), float(r["swh"]))
+        if p:
+            sigs.append({"time": (ts + pd.Timedelta(minutes=5)).strftime("%H:%M"), "side": p["side"], "price": float(r["Close"]),
+                         "plan": p, "fade": fade,
+                         "why": ("FADE: Bank Nifty bursts usually reverse (stop hunt) · " if fade else "")
+                                + f"15 min: price {r['d_px']:+,.0f}, money ₹{r['d_net']:+,.0f} Cr, breadth {r['br_y']:.0f}% up "
+                                  f"({r['d_br']:+.0f}), ATR {r['now_x']:.1f}x usual and rising"})
+            last_ts = ts
+    r = t.iloc[-1]
+    state = ("MOMENTUM " + ("UP" if r["msd"] > 0 else "DOWN")) if r["momentum"] else \
+        ("TRAP? price " + ("up" if r["msd"] > 0 else "down") + " but money and breadth the other way") if r["trap"] else "no confirmation"
+    rule = {"trend_only": "trades bursts on trend days only", "fade_normal": "fades bursts (not on trend days)",
+            "with": "trades bursts", "watch": "watch only (no edge yet)"}[mode]
+    return {"name": name, "rule": rule, "trend_day": bool(r["trend_day"]), "time": (t.index[-1] + pd.Timedelta(minutes=5)).strftime("%H:%M"), "price": float(r["Close"]),
+            "state": state, "momentum": bool(r["momentum"]), "trap": bool(r["trap"]),
+            "d_px": float(r["d_px"]) if r["d_px"] == r["d_px"] else None,
+            "d_net": float(r["d_net"]) if r["d_net"] == r["d_net"] else None,
+            "breadth": float(r["br_y"]) if r["br_y"] == r["br_y"] else None,
+            "d_br": float(r["d_br"]) if r["d_br"] == r["d_br"] else None,
+            "now_x": float(r["now_x"]) if r["now_x"] == r["now_x"] else None, "signals": sigs}

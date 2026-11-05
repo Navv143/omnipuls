@@ -6034,6 +6034,12 @@ def page_bot():
                    f"{chk.get('day', '')}: 55%+ odds events" if good else "after the first close", MX.WARN),
         ]), unsafe_allow_html=True)
 
+        mom = s.get("momentum") or {}
+        if mom:
+            st.markdown(MX.section("Index momentum bot", "price + money + breadth + ATR rising together = trade · Bank Nifty: "
+                                   "bursts are faded · price against money and breadth = trap"), unsafe_allow_html=True)
+            st.markdown("<div class='wl'>" + "".join(MX.momentum_card(k, v) for k, v in mom.items()) + "</div>",
+                        unsafe_allow_html=True)
         st.markdown(MX.section("Master bot: ideas", master.get("note", "")), unsafe_allow_html=True)
         if ideas:
             st.markdown(MX.idea_cards(ideas[:12]), unsafe_allow_html=True)
@@ -6410,6 +6416,21 @@ def market_view_body(svc, t: pd.DataFrame):
                              "Details": f"broke the first hour's {'high' if g['side'] == 'LONG' else 'low'} at {g['time']} @ "
                                         f"{g['price']:,.0f} with breadth {_gg['breadth']:.0f}% vs yesterday"
                                         + (f" · stop {pl['sl']:,.0f} · targets {pl['tp1']:,.0f} / {pl['tp2']:,.0f}" if pl else "")})
+    moms = {}
+    try:
+        _w2 = {k: d.get("w", {}) for k, d in index_defs().items()}
+        _sb2 = svc.bars()[0]
+        for _k, _nm in IF.INDEXES.items():
+            moms[_k] = IF.momentum_now(idx_b.get(_k), _sb2, _w2.get(_k, {}), _nm, mode=IF.MOM_MODE.get(_k))
+    except Exception as e:
+        print(f"market view momentum bot: {e}", flush=True)
+    for _k, _mo in moms.items():
+        for g in (_mo or {}).get("signals", []):
+            pl = g["plan"]
+            bot_rows.append({"Signal": f"Index momentum bot: {IF.INDEXES[_k]} {g['side']}", "Status": "● SIGNAL",
+                             "Evidence": "Small edge",
+                             "Details": f"{g['time']} @ {g['price']:,.0f} · stop {pl['sl']:,.0f} · targets {pl['tp1']:,.0f} / "
+                                        f"{pl['tp2']:,.0f} · {g['why']}"})
     ix_edge = {"NIFTY": "Small edge", "MIDCPNIFTY": "Small edge"}  # best in the first test (Nifty +0.25%, 61% wins)
     for r in ix_rows:
         if r.get("signal"):
@@ -6457,6 +6478,12 @@ def market_view_body(svc, t: pd.DataFrame):
     for _k, (_dt, _gg) in gaps.items():
         if _dt and (_dt["trend_day"] or (_gg or {}).get("signal") or abs(_dt.get("gap_atr") or 0) >= 0.3):
             st.markdown(MX.trend_banner(IF.INDEXES[_k], _dt, _gg), unsafe_allow_html=True)
+    if any(moms.values()):
+        st.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
+        st.markdown(MX.section("Index momentum bot", "price + money + breadth + ATR rising together · trap = price against "
+                               "money and breadth · details on Bots"), unsafe_allow_html=True)
+        st.markdown("<div class='wl'>" + "".join(MX.momentum_card(k, v) for k, v in moms.items() if v) + "</div>",
+                    unsafe_allow_html=True)
     # ---- index setups: the funnel for each index + the Bank Nifty fade
     if ix_rows:
         fb_txt = ""
