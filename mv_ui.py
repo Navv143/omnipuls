@@ -428,3 +428,105 @@ def feed(items: list, limit: int = 80) -> str:
         rows.append(f"<div class='mx-f' style='--c:{c}'><span class='t'>{_e(e['time'])}</span><span class='s'>{_e(e['stock'])}</span>"
                     f"<span>{_e(e['text'])}</span><span class='w'>{_e(w)}</span></div>")
     return "<div class='mx-feed'>" + "".join(rows) + "</div>"
+
+
+# ---------------------------------------------------------------- sector cards
+
+SECTOR_CSS = """<style>
+.sx-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:12px}
+@media (max-width:640px){.sx-grid{grid-template-columns:1fr}}
+.sx-card{border:1px solid var(--om-border);border-radius:var(--r-lg);overflow:hidden;background:var(--om-surface);
+  display:flex;flex-direction:column}
+.sx-card.sel{border-color:var(--om-accent);box-shadow:0 0 0 1px var(--om-accent)}
+.sx-head{padding:12px 14px 10px;background:linear-gradient(135deg,color-mix(in srgb,var(--c) 18%,transparent),transparent 70%);
+  border-bottom:1px solid var(--om-border-soft)}
+.sx-head .row1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sx-head .nm{font-family:Sora,Inter,sans-serif;font-weight:700;font-size:var(--fs-lg);color:var(--om-text)}
+.sx-head .chg{font-family:var(--font-num);font-weight:700;font-size:var(--fs-lg);color:var(--c)}
+.sx-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:9px}
+.sx-stats div{background:var(--om-sunken);border:1px solid var(--om-border-soft);border-radius:8px;padding:5px 8px}
+.sx-stats small{display:block;font-size:.6rem;letter-spacing:.07em;text-transform:uppercase;color:var(--om-faint)}
+.sx-stats b{font-family:var(--font-num);font-size:var(--fs-sm);color:var(--v,var(--om-text))}
+.sx-list{max-height:300px;overflow:auto}
+.sx-r,.sx-h{display:grid;grid-template-columns:1.5fr 1.15fr .9fr .85fr .6fr .7fr .75fr;gap:6px;align-items:center;
+  padding:5px 14px;font-size:var(--fs-xs)}
+.sx-h{position:sticky;top:0;background:var(--om-surface-2);color:var(--om-faint);font-size:.62rem;letter-spacing:.06em;
+  text-transform:uppercase;z-index:1}
+.sx-r{border-bottom:1px solid var(--om-border-soft)}
+.sx-r:hover{background:color-mix(in srgb,var(--om-accent) 8%,transparent)}
+.sx-r span{font-family:var(--font-num);text-align:right;color:var(--om-text-2)}
+.sx-r span:first-child{font-family:Inter,sans-serif;text-align:left;font-weight:600;color:var(--om-text)}
+.sx-h span{text-align:right}.sx-h span:first-child{text-align:left}
+.sx-pill{display:inline-block;min-width:34px;text-align:center;padding:0 5px;border-radius:5px;
+  background:color-mix(in srgb,var(--v) 18%,transparent);color:var(--v)}
+.sx-foot{margin-top:auto;padding:9px 14px 11px;border-top:1px solid var(--om-border-soft);background:var(--om-sunken)}
+.sx-foot .l1{display:flex;justify-content:space-between;font-size:var(--fs-xs);color:var(--om-text-3);gap:8px;flex-wrap:wrap}
+.sx-foot .l1 b{font-family:var(--font-num)}
+.sx-flow{display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:7px;background:var(--om-border-soft)}
+@media (max-width:640px){.sx-r,.sx-h{grid-template-columns:1.4fr 1.1fr .9fr .55fr .6fr .7fr;padding:5px 10px}
+  .sx-r span:nth-child(3),.sx-h span:nth-child(3){display:none}}
+</style>"""
+
+
+def _cv(x, good=0.0, bad=0.0) -> str:
+    if x is None or (isinstance(x, float) and not np.isfinite(x)):
+        return NEUTRAL
+    return UP if x > good else DOWN if x < bad else NEUTRAL
+
+
+def _n(x, nd=2, sign=False, suf="") -> str:
+    if x is None or (isinstance(x, float) and not np.isfinite(x)):
+        return "—"
+    return f"{x:+,.{nd}f}{suf}" if sign else f"{x:,.{nd}f}{suf}"
+
+
+def _rf_color(x) -> str:
+    return "var(--om-text-2)" if x is None or not np.isfinite(x) else UP if x >= 70 else WARN if x >= 40 else NEUTRAL
+
+
+def _act_color(x) -> str:
+    return "var(--om-text-2)" if x is None or not np.isfinite(x) else ACCENT if x >= 200 else UP if x >= 130 else NEUTRAL
+
+
+def sector_card(name: str, g: pd.DataFrame, flow: dict, selected: bool = False) -> str:
+    """One sector: header (name, average change, R-factor, smart score, activity), its stocks, then the count of
+    stocks up / down and the sector's money in / out / net."""
+    avg = float(g["Chg %"].mean()) if len(g) else np.nan
+    c = _cv(avg)
+    rf = float(g["R-factor"].mean()) if g["R-factor"].notna().any() else np.nan
+    sm = float(g["Smart"].mean()) if g["Smart"].notna().any() else np.nan
+    ac = float(g["Activity %"].mean()) if g["Activity %"].notna().any() else np.nan
+    stats = (f"<div style='--v:{_rf_color(rf)}'><small>R-factor</small><b>{_n(rf, 0)}</b></div>"
+             f"<div style='--v:{_cv(sm, 10, -10)}'><small>Smart score</small><b>{_n(sm, 0, True)}</b></div>"
+             f"<div style='--v:{_act_color(ac)}'><small>Activity</small><b>{_n(ac, 0, suf='%')}</b></div>"
+             f"<div><small>Stocks</small><b>{len(g)}</b></div>")
+    rows = []
+    for _, r in g.sort_values("Chg %", ascending=False).iterrows():
+        cc = _cv(r["Chg %"])
+        rows.append(f"<div class='sx-r' title='{_e(r.get('Buildup') or '')}'><span>{_e(r['Stock'])}</span>"
+                    f"<span>{_n(r['Price'])}</span><span style='color:{cc}'>{_n(r['Change'], 2, True)}</span>"
+                    f"<span style='color:{cc}'>{_n(r['Chg %'], 2, True, '%')}</span>"
+                    f"<span style='color:{_rf_color(r['R-factor'])};font-weight:600'>{_n(r['R-factor'], 0)}</span>"
+                    f"<span style='color:{_cv(r['Smart'], 10, -10)}'>{_n(r['Smart'], 0, True)}</span>"
+                    f"<span style='color:{_act_color(r['Activity %'])}'>{_n(r['Activity %'], 0, suf='%')}</span></div>")
+    head = ("<div class='sx-h'><span style='text-align:left'>Stock</span><span>Price</span><span>Chg</span><span>Chg %</span><span>R</span>"
+            "<span>Smart</span><span>Activity</span></div>")
+    up, dn = int((g["Chg %"] > 0).sum()), int((g["Chg %"] < 0).sum())
+    inf, outf = flow.get("Inflow Cr"), flow.get("Outflow Cr")
+    net = flow.get("Net Flow Cr")
+    bar = ""
+    if inf is not None and outf is not None and (inf + outf) > 0:
+        p = inf / (inf + outf) * 100
+        bar = (f"<div class='sx-flow' title='{p:.0f}% buying'><span style='width:{p:.1f}%;background:var(--om-up)'></span>"
+               f"<span style='width:{100 - p:.1f}%;background:var(--om-down)'></span></div>")
+    foot = (f"<div class='sx-foot'><div class='l1'><span>{len(g)} stocks · <b style='color:var(--om-up)'>{up} ▲</b> · "
+            f"<b style='color:var(--om-down)'>{dn} ▼</b></span><span>in <b style='color:var(--om-up)'>₹{_n(inf, 0)}</b> · "
+            f"out <b style='color:var(--om-down)'>₹{_n(outf, 0)}</b> · net <b style='color:{_cv(net)}'>₹{_n(net, 0, True)} Cr</b>"
+            f"</span></div>{bar}</div>")
+    return (f"<div class='sx-card{' sel' if selected else ''}' style='--c:{c}'><div class='sx-head'><div class='row1'>"
+            f"<span class='nm'>{_e(name)}</span><span class='chg'>{_n(avg, 2, True, '%')}</span></div>"
+            f"<div class='sx-stats'>{stats}</div></div><div class='sx-list'>{head}{''.join(rows)}</div>{foot}</div>")
+
+
+def sector_grid(cards: list[str]) -> str:
+    return "<div class='sx-grid'>" + "".join(cards) + "</div>"
