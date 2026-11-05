@@ -98,7 +98,8 @@ function build(a) {
   const overlays = a.lines.map(l => { const s = chart.addSeries(LW.LineSeries, lineOpts(l), 0); s.setData(pts(l.data)); return [l, s]; });
 
   for (const lv of a.levels) {
-    main.createPriceLine({price: lv.price, color: lv.color, lineWidth: 1, lineStyle: LW.LineStyle.Dashed,
+    main.createPriceLine({price: lv.price, color: lv.color, lineWidth: lv.width || 1,
+                          lineStyle: lv.solid ? LW.LineStyle.Solid : LW.LineStyle.Dashed,
                           axisLabelVisible: true, title: lv.name});
   }
 
@@ -137,7 +138,10 @@ function build(a) {
     const [t, o, h, l, cl, v] = a.bars[i];
     const prev = i > 0 ? a.bars[i - 1][4] : o;
     const ch = cl - prev, cp = prev ? ch / prev * 100 : 0, cls = ch >= 0 ? "up" : "down";
-    let html = `<div class="row"><span class="t">${a.title}</span>` +
+    const when = (typeof t === "number")
+      ? new Date(t * 1000).toISOString().replace("T", " ").slice(0, 16).replace(/^(\d{4})-(\d{2})-(\d{2})/, (m, y, mo, d) => `${d} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+mo - 1]} ${y}`)
+      : t;
+    let html = `<div class="row"><span class="t">${a.title}</span><span class="k">${when}</span>` +
       `<span class="k">O</span><span class="v ${cls}">${fmt(o, P)}</span>` +
       `<span class="k">H</span><span class="v ${cls}">${fmt(h, P)}</span>` +
       `<span class="k">L</span><span class="v ${cls}">${fmt(l, P)}</span>` +

@@ -1787,7 +1787,28 @@ def _tv_series(times: list, s) -> list:
     return [[t, None if pd.isna(v) else round(float(v), 6)] for t, v in zip(times, s)]
 
 
-def tv_chart(df: pd.DataFrame, sym: str, intraday: bool, overlays: list, piv: dict | None, tf_key: str):
+def _signal_levels(sym: str) -> list:
+    """Today's recorded signals for this symbol (server's bots): entry, stop and targets as chart lines."""
+    key = sym.replace(".NS", "")
+    key = {"^NSEI": "NIFTY", "^NSEBANK": "BANKNIFTY", "^BSESN": "SENSEX", "NIFTY_FIN_SERVICE.NS": "FINNIFTY",
+           "NIFTY_MID_SELECT.NS": "MIDCPNIFTY"}.get(sym, key)
+    try:
+        trades = json.loads((PATHS.DATA / "bots" / "trades" / f"{datetime.now(IST):%Y-%m-%d}.json").read_text())
+    except Exception:
+        return []
+    out = []
+    for t in trades:
+        if t.get("symbol", "").split(" ")[0] != key:
+            continue
+        tag = f"{t['source'].split(' (')[0].replace('Index momentum bot', 'Momentum')} {t['time']}"
+        out += [{"name": f"Entry {tag}", "price": float(t["entry"]), "color": "#3B82F6", "solid": True, "width": 2},
+                {"name": "Stop", "price": float(t["sl"]), "color": DOWN, "solid": True, "width": 2},
+                {"name": "TP1", "price": float(t["tp1"]), "color": UP}, {"name": "TP2", "price": float(t["tp2"]), "color": UP}]
+    return out[-12:]  # the latest 3 signals
+
+
+def tv_chart(df: pd.DataFrame, sym: str, intraday: bool, overlays: list, piv: dict | None, tf_key: str,
+             extra_levels: list | None = None):
     """Candles, overlays, RSI and MACD on a TradingView Lightweight Charts canvas. Gaps (nights, weekends) close up
     by themselves because the time axis is bar-indexed."""
     df = df[~df.index.duplicated(keep="last")].sort_index()
@@ -1820,6 +1841,7 @@ def tv_chart(df: pd.DataFrame, sym: str, intraday: bool, overlays: list, piv: di
     if piv and "Pivot levels" in overlays:
         levels = [{"name": k, "price": float(v), "color": GOLD if k == "Pivot" else (DOWN if k.startswith("R") else UP)}
                   for k, v in piv.items()]
+    levels += list(extra_levels or [])
     ml, ms, mh = ind.macd(c)
     _tv(bars=bars, lines=lines, levels=levels, vol=bool(has_vol), rsi=_tv_series(t, ind.rsi(c)),
         macd={"line": _tv_series(t, ml), "signal": _tv_series(t, ms), "hist": _tv_series(t, mh)},
@@ -3002,6 +3024,11 @@ def page_details():
         tf = st.segmented_control("Timeframe", list(TIMEFRAMES), default="15m", key="tf") or "1D"
     with top3:
         st.write("")
+        _tvu = MX.tv_url(sym, {"1m": "1", "3m": "3", "5m": "5", "10m": "10", "15m": "15", "25m": "30", "1h": "60",
+                               "1D": "D", "1W": "W", "1M": "M"}.get(tf, "5"))
+        if _tvu:
+            st.link_button("TradingView ↗", _tvu, width="stretch", help="Opens this chart on TradingView in a new tab: "
+                           "all of its indicators and drawing tools.")
         in_wl = sym in store["watchlist"]
         if st.button("★ Remove" if in_wl else "☆ Watch", width="stretch", key="wl_btn"):
             if in_wl:
@@ -3040,11 +3067,12 @@ def page_details():
         a, b, c, d = st.columns(4)
         a.metric("Open", fmt_price(m["Open"], sym))
         b.metric("Prev close", fmt_price(prev, sym))
-        c.metric("Day range", f"{fmt_price(m['Day Low'], sym)} – {fmt_price(m['Day High'], sym)}".replace("₹", ""))
+        _rf = lambda v: (f"{v:,.0f}" if v and v >= 1000 else fmt_price(v, sym).replace("₹", ""))  # noqa: E731
+        c.metric("Day range", f"{_rf(m['Day Low'])} – {_rf(m['Day High'])}")
         d.metric("Volume", fmt_vol(m["Volume"], sym),
                  f"{m['Vol x Avg']:.1f}× avg" if pd.notna(m["Vol x Avg"]) else None, delta_color="off")
         a, b, c, d = st.columns(4)
-        a.metric("52W range", f"{fmt_price(m['52W Low'], sym)} – {fmt_price(m['52W High'], sym)}".replace("₹", ""))
+        a.metric("52W range", f"{_rf(m['52W Low'])} – {_rf(m['52W High'])}")
         b.metric("RSI (14)", f"{m['RSI']:.1f}" if pd.notna(m["RSI"]) else "—")
         c.metric("ATR (14)", f"{m['ATR %']:.2f}%" if pd.notna(m["ATR %"]) else "—")
         d.metric("Technical rating", verdict(m["Score"]), f"{m['Score']:+d} / 5", delta_color="off")
@@ -3065,8 +3093,9 @@ def page_details():
                                      ltt=str(qq.get("last_trade_time") or "")[-8:])], key=f"q_{sym}")
 
     overlays = st.multiselect(
-        "Indicators", ["EMA 20", "EMA 50", "EMA 200", "Bollinger (20, 2)", "VWAP", "Supertrend (10, 3)", "Pivot levels"],
-        default=["EMA 20", "EMA 50", "VWAP", "Pivot levels"], key="overlays")
+        "Indicators", ["EMA 20", "EMA 50", "EMA 200", "Bollinger (20, 2)", "VWAP", "Supertrend (10, 3)", "Pivot levels",
+                       "Yesterday high / low", "Today's signal levels"],
+        default=["EMA 20", "EMA 50", "VWAP", "Pivot levels", "Yesterday high / low", "Today's signal levels"], key="overlays")
 
     period, interval = TIMEFRAMES[tf]
     intraday = interval not in ("1d", "1wk", "1mo")
@@ -3082,8 +3111,15 @@ def page_details():
     else:
         if intraday and tf in ("1m", "3m", "5m", "10m"):
             hdf = hdf[hdf.index >= hdf.index[-1] - pd.Timedelta(days={"1m": 2, "3m": 3, "5m": 5, "10m": 10}[tf])]
-        tv_chart(hdf, sym, intraday, overlays, piv if intraday or tf == "1D" else None, tf)
-        st.caption(f"Chart data: {csrc}. Times in IST.")
+        extra = []
+        if "Yesterday high / low" in overlays:
+            extra += [{"name": "Yesterday high", "price": float(base["High"]), "color": "#94A3B8"},
+                      {"name": "Yesterday low", "price": float(base["Low"]), "color": "#94A3B8"}]
+        sig_lv = _signal_levels(sym) if "Today's signal levels" in overlays else []
+        extra += sig_lv
+        tv_chart(hdf, sym, intraday, overlays, piv if intraday or tf == "1D" else None, tf, extra)
+        st.caption(f"Chart data: {csrc}. Times in IST (hover a candle: its date and time show in the legend)."
+                   + (f" Signal levels: {', '.join(sorted({x['name'].split(' ')[0] for x in sig_lv}))}." if sig_lv else ""))
 
     tabs = st.tabs(["Technical summary", "Levels", "Performance", "Fundamentals", "News"])
     with tabs[0]:
@@ -3462,6 +3498,7 @@ def page_sectors():
             "Inflow Cr", "Outflow Cr", "Net Flow Cr", "Gap %", "Vol x Avg", "RSI", "Trend", "O=H/L", "Lot size", "Symbol"]
     df = g[[c for c in cols if c in g]].copy()
     df["Chart"] = df["Symbol"].map(chart_link) if "Symbol" in df else None
+    df["TradingView"] = df["Stock"].map(MX.tv_url)
     st.dataframe(df.drop(columns=["Symbol"], errors="ignore"), hide_index=True, width="stretch",
                  height=min(42 + 35 * len(df), 620), column_config={
                      "Price": st.column_config.NumberColumn(format="%.2f"),
@@ -3478,7 +3515,8 @@ def page_sectors():
                      "Vol x Avg": st.column_config.NumberColumn("Vol × avg", format="%.2f×"),
                      "RSI": st.column_config.NumberColumn(format="%.0f"),
                      "Lot size": st.column_config.NumberColumn("Lot", format="%d"),
-                     "Chart": st.column_config.LinkColumn("Chart", display_text="Open")})
+                     "Chart": st.column_config.LinkColumn("Chart", display_text="Open"),
+                     "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
     st.caption("Live from Dhan. R-factor: how unusual today's volume, futures OI change, range and move are vs the "
                "same time on the last 20 sessions (0-100). Smart score: unusual-activity score (+ bullish, − bearish). "
                "Activity: volume so far vs the usual by this time (100% = normal). Money in / out: turnover split by "
@@ -5948,7 +5986,7 @@ def _radar_table(rows: list) -> pd.DataFrame:
         "Candle ×": r["candle_x"], "15m ATR": r["jump_atr"], "Buying %": r["buying"], "Net ₹ Cr": r["net_cr"],
         "OI chg %": r["oi_chg"], "OI ×usual": r["oi_x"], "Book buy %": r["book_buy"], "O=H/L": r["ohl"],
         "Odds kept %": (r.get("odds") or {}).get("win"), "Odds n": (r.get("odds") or {}).get("n"),
-        "Score": r["score"], "Flags": " · ".join(r["events"])} for r in rows])
+        "Score": r["score"], "Flags": " · ".join(r["events"]), "TradingView": MX.tv_url(r["stock"])} for r in rows])
 
 
 def _momentum_section():
@@ -6093,7 +6131,7 @@ def page_bot():
                 "Odds kept %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f%%"),
                 "Chg %": st.column_config.NumberColumn(format="%+.2f"), "Move ATR": st.column_config.NumberColumn(format="%+.2f"),
                 "OI chg %": st.column_config.NumberColumn(format="%+.2f"),
-                "Flags": st.column_config.TextColumn(width="large")})
+                "Flags": st.column_config.TextColumn(width="large"), "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
             st.caption("×usual = against the same stock's last 20 days at the same time of day. Range ×ATR = today's "
                        "range vs its 14-day ATR. 5m vol × / Candle × = the latest 5-minute candle vs the same slot. "
                        "OI from the recorder's futures quotes (near + next month). Book buy % = buy share of the "
@@ -6457,6 +6495,13 @@ def market_view_body(svc, t: pd.DataFrame):
     sig = _mv_signals(plan_rows, ce, pe, sc, picks, bot_rows)
     st.markdown(MX.CSS, unsafe_allow_html=True)
 
+    try:
+        _nb = idx_b.get("NIFTY")
+        asof = (pd.DatetimeIndex(_nb.index)[-1] + pd.Timedelta(minutes=5)).strftime("%H:%M") if _nb is not None and len(_nb) else "—"
+    except Exception:
+        asof = "—"
+    st.markdown(f"<div class='mx-quiet' style='margin:-6px 0 6px'>Live data as of <b>{asof} IST</b> · refreshes every "
+                "minute in market hours</div>", unsafe_allow_html=True)
     # ---- 1. pulse: the indices at a glance
     names = (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"), ("FINNIFTY", "Fin Nifty"), ("SENSEX", "Sensex"))
     read_of = {r["title"]: r for r in idx_reads if r}
@@ -6473,13 +6518,13 @@ def market_view_body(svc, t: pd.DataFrame):
 
     # ---- 3. signals as chips
     n_live = int((sig["Status"] == "● SIGNAL").sum()) if not sig.empty else 0
-    st.markdown(MX.section("Signals", f"{n_live} live · hover a card for details") + MX.signal_cards(sig),
+    st.markdown(MX.section("Signals", f"{n_live} live · as of {asof} · hover a card for details") + MX.signal_cards(sig),
                 unsafe_allow_html=True)
 
     # ---- trend-day banners (measured from yesterday's close: catches gap days)
     for _k, (_dt, _gg) in gaps.items():
         if _dt and (_dt["trend_day"] or (_gg or {}).get("signal") or abs(_dt.get("gap_atr") or 0) >= 0.3):
-            st.markdown(MX.trend_banner(IF.INDEXES[_k], _dt, _gg), unsafe_allow_html=True)
+            st.markdown(MX.trend_banner(IF.INDEXES[_k], _dt, _gg, _k), unsafe_allow_html=True)
     if any(moms.values()):
         st.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
         st.markdown(MX.section("Index momentum bot", "price + money + breadth + ATR rising together · trap = price against "
@@ -6541,13 +6586,13 @@ def market_view_body(svc, t: pd.DataFrame):
         parts.append(MX.meter_split("Unusual activity", nb, ns, f"{nb} bullish", f"{ns} bearish",
                                     f"{nb} ▲ · {ns} ▼", tip("Unusual activity")))
     if parts:
-        st.markdown(MX.section("Market internals", "green = buyers · red = sellers") + MX.meters(parts),
+        st.markdown(MX.section("Market internals", f"as of {asof} · green = buyers · red = sellers") + MX.meters(parts),
                     unsafe_allow_html=True)
 
     # ---- 5. where the money goes: sector heatmap, Nifty 50 flow candle by candle
     heat = MX.heatmap(secflow)
     if heat:
-        st.markdown(MX.section("Sector money", "size = turnover · colour = net money in / out") + heat,
+        st.markdown(MX.section("Sector money", f"as of {asof} · size = turnover · colour = net money in / out") + heat,
                     unsafe_allow_html=True)
         rot = money_rotation_fig(secflow, 300 if MOBILE else 340)
         if rot is not None:
@@ -6679,7 +6724,8 @@ def page_agents():
                     "20d %": r["chg_20d"], "Trend": {1: "▲ up", -1: "▼ down", 0: "sideways"}[r["trend"]],
                     "Last 60 days": r.get("spark") or [], "Setup": r["setup"] or "—",
                     "ATR ×avg": r["atr_x"], "Vol ×avg": r["vol_x"], "RSI": r["rsi"], "Support": r["support"],
-                    "Resistance": r["resistance"], "Crowd": r["luna"]["label"], "NOVA": r["nova"]["call"]} for r in xs]),
+                    "Resistance": r["resistance"], "Crowd": r["luna"]["label"], "NOVA": r["nova"]["call"],
+                    "TradingView": MX.tv_url(r["symbol"])} for r in xs]),
                     hide_index=True, width="stretch", column_config={
                         "Price": st.column_config.NumberColumn(format="%.4g"),
                         "1d %": st.column_config.NumberColumn(format="%+.2f"), "5d %": st.column_config.NumberColumn(format="%+.2f"),
@@ -6688,7 +6734,7 @@ def page_agents():
                         "ATR ×avg": st.column_config.NumberColumn(format="%.2f"), "Vol ×avg": st.column_config.NumberColumn(format="%.2f"),
                         "RSI": st.column_config.NumberColumn(format="%.0f"),
                         "Support": st.column_config.NumberColumn(format="%.4g"), "Resistance": st.column_config.NumberColumn(format="%.4g"),
-                        "Setup": st.column_config.TextColumn(width="medium")})
+                        "Setup": st.column_config.TextColumn(width="medium"), "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
     news_rows = [(r, h) for r in rows if r.get("orion") for h in r["orion"].get("headlines", [])]
     if news_rows:
         with st.expander("ORION: headlines behind the setups", icon=":material/newspaper:"):
@@ -6919,10 +6965,11 @@ def _signal_record(source_filter: str | None = None):
     st.dataframe(pd.DataFrame({"Day": tv["day"], "Time": tv["time"], "Setup": tv["source"], "Symbol": tv["symbol"],
                                "Side": np.where(tv["side"] > 0, "LONG", "SHORT"), "Entry": tv["entry"], "Stop": tv["sl"],
                                "Target 1": tv["tp1"], "Target 2": tv["tp2"], "Status": tv.get("status"),
-                               "Outcome": tv.get("outcome"), "R": tv.get("r"), "% after costs": tv.get("pct")}),
+                               "Outcome": tv.get("outcome"), "R": tv.get("r"), "% after costs": tv.get("pct"),
+                               "TradingView": tv["symbol"].map(MX.tv_url)}),
                  hide_index=True, width="stretch", height=360,
                  column_config={"R": st.column_config.NumberColumn(format="%+.2f"),
-                                "% after costs": st.column_config.NumberColumn(format="%+.2f")})
+                                "% after costs": st.column_config.NumberColumn(format="%+.2f"), "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
 
 
 def index_funnel_body():
@@ -6945,7 +6992,7 @@ def index_funnel_body():
     for k in ("NIFTY", "BANKNIFTY"):
         try:
             dt_, gg_ = IF.day_trend(ib.get(k), bars, w_all.get(k, {})), IF.gap_go(ib.get(k), bars, w_all.get(k, {}))
-            st.markdown(MX.trend_banner(IF.INDEXES[k], dt_, gg_), unsafe_allow_html=True)
+            st.markdown(MX.trend_banner(IF.INDEXES[k], dt_, gg_, k), unsafe_allow_html=True)
         except Exception:
             pass
     st.caption("Signal = the first 5-minute candle of the day (9:30-14:00) where all four steps pass; trade it in the "
@@ -7086,7 +7133,8 @@ def page_funnel():
         "Stock net ₹Cr": v["net"], "Net 15m ago": v["net_before"], "Buying %": v.get("buy_share"),
         "4 Stock": v["step4"].map(ok), "With market": v["mkt_with"].map(ok), "Calm yesterday": v["calm_yday"].map(ok),
         "5 Market": v["step5"].map(ok), "Watchlist": v["Watch"],
-        "Room to 20d ATR": v["room_atr"], "Score": v["score"], "Why": v["why"]}), hide_index=True, width="stretch", height=520,
+        "Room to 20d ATR": v["room_atr"], "Score": v["score"], "Why": v["why"], "TradingView": v["Stock"].map(MX.tv_url)}),
+        hide_index=True, width="stretch", height=520,
         column_config={"Price": st.column_config.NumberColumn(format="%.2f"),
                        "From open %": st.column_config.NumberColumn(format="%+.2f"),
                        "Chg %": st.column_config.NumberColumn(format="%+.2f"),
@@ -7095,7 +7143,7 @@ def page_funnel():
                        "Range ×usual": st.column_config.NumberColumn(format="%.2f×"),
                        "Room to 20d ATR": st.column_config.NumberColumn(format="%.1f"),
                        "Score": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%d"),
-                       "Why": st.column_config.TextColumn(width="large"),
+                       "Why": st.column_config.TextColumn(width="large"), "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗"),
                        "Sector net ₹Cr": st.column_config.NumberColumn(format="%+.0f"),
                        "Stock net ₹Cr": st.column_config.NumberColumn(format="%+.1f"),
                        "Net 15m ago": st.column_config.NumberColumn(format="%+.1f"),
