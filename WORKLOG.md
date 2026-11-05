@@ -553,3 +553,12 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   `<data>/crypto_paper/btc_state.json`, trades to `record.json` and Supabase `crypto_paper`.
 - Auto Trader page: "BTC sniper · paper" section (today's state or trade with entry time in IST, stop, target, R now,
   the record and its stats vs the tested +0.09R / 36%).
+
+## 5 Nov 2026: Strategy lab and crash-buy paper trades (BTC, gold)
+- `research/strategy_lab.py`: 11 popular setups (freqtrade BinHV45 / ClucMay, ICT Silver Bullet, EMA200+MACD,
+  Supertrend+StochRSI, RSI2, EMA9/21+VWAP, squeeze, Donchian, open momentum, gold time bias) on BTC and gold: all lose
+  or are flat after costs except the crash-candle buy (findings in research/SNIPER_STUDY.md).
+- `crash_buy.py` + `agents.crash_tick` (every minute, 24/7; gold weekdays): BTC Z=9 / +1.5% / -1.0% and gold (PAXG)
+  Z=4 / +0.4% / -0.4%, 4 h max, 2 a day max; 20-day history paged from Crypto.com; trades to record.json and
+  Supabase crypto_paper. Auto Trader page: "Crash buy · paper" panel (today's trigger level, signal, open trade) and a
+  per-setup record vs the tested numbers.

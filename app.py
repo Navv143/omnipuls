@@ -30,7 +30,7 @@ def _reload_changed_modules():
         seen = bootstrap._mtimes = {}
     base = os.path.dirname(os.path.abspath(__file__))
     for name in ("mv_ui", "funnel", "index_funnel", "index_levels", "desk_agents", "agents", "market_view", "bot",
-                 "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex", "autotrader", "closing", "btc_sniper"):
+                 "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex", "autotrader", "closing", "btc_sniper", "crash_buy"):
         try:
             m = os.stat(os.path.join(base, name + ".py")).st_mtime
         except OSError:
@@ -7545,21 +7545,48 @@ def _btc_paper_section():
                 + (f" · BTC {stt['price']:,.2f} · VWAP {stt['vwap']:,.2f} · {tr} · as of {stt.get('as_of_ist', '')} IST"
                    if today and stt.get("price") else ""))
     st.markdown(f"<div class='mx-idea' style='--c:var(--om-accent);margin:6px 0'>{body}</div>", unsafe_allow_html=True)
+    # crash-candle buys (crash_buy.py, every minute, 24/7; gold weekdays)
+    try:
+        cs = json.loads((d_ / "crash_state.json").read_text())
+    except Exception:
+        cs = {}
+    st.markdown(MX.section("Crash buy · paper", "BTC and gold: buy the next candle after a sudden 5-min crash (Z x the "
+                           "20-day normal move) · fixed target / stop · 4 h max · tested 2023-26, positive all 4 years"),
+                unsafe_allow_html=True)
+    tested = {"BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%")}
+    cards = []
+    for key, v in cs.items():
+        open_ = [x for x in rec if x["setup"].startswith(v.get("name", "?")) and x.get("result") == "open"]
+        trig = v.get("trigger_pct")
+        line = (f"buys if a 5-min candle falls ≥ <b>{abs(trig):.2f}%</b> (now {v.get('price', 0):,.2f}, last candle "
+                f"{(v.get('ret') or 0):+.2f}%)" if trig else "building the 20-day history")
+        if v.get("pending"):
+            line += " · <b>crash signal: buying at the next candle's open</b>"
+        for t_ in open_:
+            line += (f"<br><b style='color:{MX.UP}'>IN TRADE</b> bought {t_['entry']:,.2f} at {t_['entry_at_ist']} IST · stop "
+                     f"{t_['sl']:,.2f} · target {t_['tp']:,.2f} · {t_['r']:+.2f}R")
+        cards.append(f"<div class='mx-idea' style='--c:var(--om-accent);margin:6px 0'><b>{MX._e(v.get('name', key))}</b> · {line}"
+                     f" · checked {pd.Timestamp(v['checked']).tz_localize('UTC').tz_convert(IST):%H:%M} IST</div>" if v.get("checked") else "</div>")
+    st.markdown("".join(cards) or "<div class='mx-quiet'>Starts on the server within minutes.</div>", unsafe_allow_html=True)
     done = [x for x in rec if x.get("result") in ("stop", "target", "time")]
     if done:
-        rs = [x["r"] for x in done]
-        st.markdown(MX.kpis([
-            MX.kpi("BTC trades", f"{len(done)}", f"{sum(1 for x in rec if x.get('result') == 'open')} open"),
-            MX.kpi("Win rate", f"{sum(r > 0 for r in rs) / len(rs) * 100:.0f}%", "tested: 36%"),
-            MX.kpi("Average", f"{np.mean(rs):+.2f}R", "tested: +0.09R", MX.tone_color(np.mean(rs))),
-            MX.kpi("Total", f"{sum(rs):+.1f}R", f"≈ ₹{sum(rs) * 1000:+,.0f} at ₹1,000 risk a trade", MX.tone_color(sum(rs))),
-        ]), unsafe_allow_html=True)
+        fam = lambda s_: next((k for k in tested if s_.startswith(k)), s_)  # noqa: E731
+        g = pd.DataFrame(done).assign(Setup=lambda d: d["setup"].map(fam)).groupby("Setup")["r"].agg(
+            Trades="size", Win=lambda r: (r > 0).mean() * 100, AvgR="mean", TotalR="sum").reset_index()
+        g["Tested avg"] = g["Setup"].map(lambda k: tested.get(k, ("", ""))[0])
+        g["Tested win"] = g["Setup"].map(lambda k: tested.get(k, ("", ""))[1])
+        g["≈ ₹ at ₹1,000 a trade"] = g["TotalR"] * 1000
+        st.dataframe(g.rename(columns={"Win": "Win %", "AvgR": "Avg R", "TotalR": "Total R"}), hide_index=True, width="stretch",
+                     column_config={"Win %": st.column_config.NumberColumn(format="%.0f"),
+                                    "Avg R": st.column_config.NumberColumn(format="%+.2f"),
+                                    "Total R": st.column_config.NumberColumn(format="%+.1f"),
+                                    "≈ ₹ at ₹1,000 a trade": st.column_config.NumberColumn(format="%+,.0f")})
     if rec:
-        with st.expander(f"BTC paper record ({len(rec)} trades)", icon=":material/currency_bitcoin:"):
-            st.dataframe(pd.DataFrame(rec[::-1])[["day", "side", "entry_at_ist", "entry", "sl", "tp", "stop_pct", "result",
-                                                   "exit_at", "r", "pct"]].rename(columns={
-                "day": "Day", "side": "Side", "entry_at_ist": "Entry (IST)", "entry": "Entry", "sl": "Stop", "tp": "Target",
-                "stop_pct": "Stop %", "result": "Result", "exit_at": "Exit (London)", "r": "R", "pct": "% move"}),
+        with st.expander(f"Crypto & gold paper record ({len(rec)} trades)", icon=":material/currency_bitcoin:"):
+            st.dataframe(pd.DataFrame(rec[::-1]).reindex(columns=["day", "setup", "side", "entry_at_ist", "entry", "sl", "tp",
+                                                                  "result", "exit_at", "r", "pct"]).rename(columns={
+                "day": "Day", "setup": "Setup", "side": "Side", "entry_at_ist": "Entry (IST)", "entry": "Entry", "sl": "Stop",
+                "tp": "Target", "result": "Result", "exit_at": "Exit", "r": "R", "pct": "% move"}),
                 hide_index=True, width="stretch")
 
 
