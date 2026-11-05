@@ -216,3 +216,15 @@ Results: `research/noise_results.csv`, runner `research/noise_run.py`.
   drawdown; real but thin. QQQ similar. Bank Nifty ~0. Gold, oil and crypto lose.
 - 60 days of 5-min data with 30-minute checks: too short to judge (QQQ +3.3%, SPY +1.3%, Nifty +0.4%, Bank Nifty -3.3%).
 - To test properly on Nifty: years of 5-min Nifty candles with 30-minute checks (the server's Dhan history).
+
+### Noise band: lookback days x band width grid (5 Nov 2026, `research/noise_grid.py`, `research/noise_grid.csv`)
+Lookback 3 / 5 / 7 / 10 / 14 / 20 / 30 days x band 0.5 / 0.75 / 1.0 / 1.25 / 1.5 x, hourly 2023-26, same start date
+for every cell, 0.02% round-trip cost.
+- Nifty: all 35 cells positive (-0.8 to +12.4%), both halves positive in 26; best the small band with a short
+  lookback (3-5 days, 0.5x: +12%, Sharpe 0.75, ~720 trades) and the 10-14 days x 0.75-1.25x area (+6-9%).
+- Bank Nifty: small bands lose (0.5x: -11 to -17%); wide bands with long lookback ~+3%; no stable area.
+- SPY: negative almost everywhere. QQQ: positive with wider bands and longer lookback (20-30 days, 1.25-1.5x: +8-16%).
+- Gold and oil: negative almost everywhere.
+- Costs decide it on Nifty: at 0.03% round trip the best cells fall to +2-5% in ~3 years, at 0.04% (realistic for
+  Nifty futures with STT, charges and 1 point of slippage) every tested cell is negative. The Nifty effect is real but
+  thinner than trading costs.
