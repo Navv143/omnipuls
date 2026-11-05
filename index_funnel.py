@@ -72,7 +72,7 @@ def index_table(ix: pd.DataFrame, stocks: dict, weights: dict, vix: pd.DataFrame
     wsum = 0.0
     for s, w in (weights or {}).items():
         b = _clean(stocks.get(s))
-        if b.empty:
+        if b.empty or "Volume" not in b:
             continue
         b = b.reindex(t.index)
         bd = pd.Series(b.index.normalize(), index=b.index)

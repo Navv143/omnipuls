@@ -299,159 +299,205 @@ def lan_url() -> str | None:
 
 
 LANDING_CSS = """<style>
-[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl']{display:none}
-.block-container{padding-top:2.2rem}
-.om-hero .logo svg{width:min(300px,78vw);height:auto}
-.om-hero h1{font-size:clamp(1.7rem,3.4vw,2.6rem);line-height:1.15;margin:.9rem 0 .5rem;font-weight:700;
-  background:linear-gradient(90deg,#E6EDF7 0%,#9FD8FF 60%,#2EE6F6 100%);-webkit-background-clip:text;
-  background-clip:text;color:transparent}
-.om-hero .sub{font-size:var(--fs-md);color:var(--om-text-3);max-width:560px;line-height:1.55}
-.om-chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px}
-.om-chips span{font-size:var(--fs-xs);padding:4px 11px;border-radius:999px;border:1px solid var(--om-border-strong);
-  color:var(--om-text-2);background:var(--om-surface-2)}
-.om-slides{position:relative;height:250px;border:1px solid var(--om-border);border-radius:var(--r-lg);overflow:hidden;
-  background:radial-gradient(120% 120% at 0% 0%,rgba(46,230,246,.10),transparent 55%),var(--om-surface)}
-.om-slide{position:absolute;inset:0;padding:18px 20px;opacity:0;animation:om-fade 20s infinite}
-.om-slide:nth-child(2){animation-delay:5s}.om-slide:nth-child(3){animation-delay:10s}.om-slide:nth-child(4){animation-delay:15s}
-@keyframes om-fade{0%{opacity:0;transform:translateY(6px)}3%{opacity:1;transform:none}22%{opacity:1}25%{opacity:0}100%{opacity:0}}
-@media (prefers-reduced-motion:reduce){.om-slide{animation:none;position:relative;opacity:1}.om-slides{height:auto}}
-.om-slide .k{font-size:var(--fs-2xs);letter-spacing:.12em;text-transform:uppercase;color:#2EE6F6}
-.om-slide h3{margin:.25rem 0 .2rem;font-size:var(--fs-lg)}
-.om-slide p{margin:0 0 10px;font-size:var(--fs-sm);color:var(--om-text-3)}
-.om-bars{display:flex;align-items:center;gap:5px;height:110px}
-.om-bars i{flex:1;border-radius:3px}
-.om-row{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;margin-top:6px;border-radius:8px;
-  background:var(--om-sunken);border:1px solid var(--om-border-soft);font-size:var(--fs-sm)}
-.om-row b{font-family:var(--font-num)}
-.om-tag{font-size:var(--fs-2xs);padding:2px 8px;border-radius:999px}
-.om-feat{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
-.om-feat div{border:1px solid var(--om-border);border-radius:var(--r-md);padding:10px 12px;background:var(--om-surface);
-  font-size:var(--fs-xs);color:var(--om-text-3)}
-.om-feat b{display:block;color:var(--om-text);font-size:var(--fs-sm);margin-bottom:2px}
-@media (max-width:640px){.om-feat{grid-template-columns:1fr 1fr}.om-slides{height:270px}}
-.om-card{border:1px solid var(--om-border);border-radius:var(--r-lg);padding:22px 22px 8px;margin-top:8px;
-  background:linear-gradient(180deg,var(--om-surface),var(--om-sunken))}
-.om-card h3{margin:0 0 .2rem}.om-card .s{font-size:var(--fs-sm);color:var(--om-text-3);margin-bottom:.9rem}
-.om-foot{font-size:var(--fs-xs);color:var(--om-faint);margin-top:18px}
+[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],header[data-testid='stHeader']{display:none}
+.block-container{padding-top:1rem;max-width:1240px}
+.stApp{background:
+  radial-gradient(900px 520px at 8% -8%,rgba(46,230,246,.16),transparent 60%),
+  radial-gradient(800px 600px at 105% 10%,rgba(168,85,247,.14),transparent 60%),
+  radial-gradient(900px 700px at 50% 120%,rgba(59,130,246,.16),transparent 60%),#070C18 !important}
+.stApp:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.35;
+  background-image:linear-gradient(rgba(148,163,184,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(148,163,184,.06) 1px,transparent 1px);
+  background-size:44px 44px;mask-image:radial-gradient(ellipse at 50% 30%,#000 30%,transparent 75%)}
+.lp-nav{display:flex;justify-content:space-between;align-items:center;padding:6px 2px 14px;border-bottom:1px solid rgba(148,163,184,.10)}
+.lp-nav .brand svg{height:38px;width:auto}
+.lp-nav .r{display:flex;gap:10px;align-items:center;font-size:var(--fs-xs);color:var(--om-text-3)}
+.lp-pill{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;border:1px solid rgba(38,166,154,.5);
+  color:#5EEAD4;background:rgba(38,166,154,.10);font-size:var(--fs-xs)}
+.lp-pill i{width:7px;height:7px;border-radius:50%;background:#2DD4BF;box-shadow:0 0 10px #2DD4BF;animation:lpp 1.6s infinite}
+.lp-pill.off{border-color:rgba(148,163,184,.4);color:var(--om-text-3);background:rgba(148,163,184,.08)}
+.lp-pill.off i{background:#94A3B8;box-shadow:none;animation:none}
+@keyframes lpp{50%{opacity:.3}}
+.lp-hero{padding:34px 0 8px}
+.lp-eyebrow{display:inline-flex;gap:8px;align-items:center;font-size:var(--fs-xs);letter-spacing:.08em;text-transform:uppercase;
+  color:#9FD8FF;padding:5px 12px;border-radius:999px;border:1px solid rgba(46,230,246,.35);background:rgba(46,230,246,.07)}
+.lp-hero h1{font-size:clamp(2.1rem,4.6vw,3.6rem);line-height:1.04;letter-spacing:-.02em;margin:18px 0 14px;font-weight:800;
+  background:linear-gradient(100deg,#F8FAFC 0%,#C7E7FF 45%,#2EE6F6 75%,#A78BFA 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lp-hero .sub{font-size:1.06rem;line-height:1.6;color:var(--om-text-3);max-width:600px}
+.lp-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:26px 0 6px;max-width:640px}
+.lp-stats div{border:1px solid rgba(148,163,184,.14);border-radius:14px;padding:12px 14px;background:rgba(15,23,42,.55);backdrop-filter:blur(6px)}
+.lp-stats b{display:block;font-family:var(--font-num);font-size:1.5rem;color:#F1F5F9}
+.lp-stats span{font-size:var(--fs-xs);color:var(--om-faint)}
+.st-key-login_card{border:1px solid rgba(148,163,184,.22);border-radius:22px;padding:26px 24px 18px !important;margin-top:40px;
+  background:linear-gradient(160deg,rgba(30,41,59,.72),rgba(15,23,42,.62));backdrop-filter:blur(14px);
+  box-shadow:0 30px 80px -30px rgba(46,230,246,.35),inset 0 1px 0 rgba(255,255,255,.06)}
+.st-key-login_card input{background:rgba(2,6,23,.6) !important;border-radius:12px !important}
+.st-key-login_card button[kind="primary"],.st-key-login_card button[data-testid="stBaseButton-primary"],
+.st-key-login_card [data-testid="stFormSubmitButton"] button{background:linear-gradient(90deg,#2563EB,#06B6D4) !important;border:0 !important;
+  border-radius:12px !important;height:46px;font-weight:700;box-shadow:0 10px 30px -10px rgba(6,182,212,.6)}
+.lp-card-h h3{margin:0 0 4px;font-size:1.35rem}.lp-card-h p{margin:0 0 16px;color:var(--om-text-3);font-size:var(--fs-sm)}
+.lp-trust{display:flex;flex-direction:column;gap:7px;margin-top:14px;font-size:var(--fs-xs);color:var(--om-text-3)}
+.lp-trust span:before{content:"✓";color:#2DD4BF;font-weight:700;margin-right:8px}
+.lp-tape{overflow:hidden;white-space:nowrap;border-block:1px solid rgba(148,163,184,.12);margin:30px 0 8px;padding:10px 0;
+  mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.lp-tape div{display:inline-block;animation:lpt 40s linear infinite}
+.lp-tape span{margin:0 22px;font-size:var(--fs-sm);color:var(--om-text-3);letter-spacing:.04em}
+.lp-tape span b{color:#E2E8F0;margin-right:6px}
+@keyframes lpt{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.lp-tape div,.lp-pill i{animation:none}}
+.lp-sec{margin:46px 0 14px;text-align:center}
+.lp-sec .k{font-size:var(--fs-xs);letter-spacing:.14em;text-transform:uppercase;color:#2EE6F6}
+.lp-sec h2{font-size:clamp(1.5rem,2.6vw,2.1rem);margin:8px 0 6px;letter-spacing:-.01em}
+.lp-sec p{color:var(--om-text-3);max-width:640px;margin:0 auto}
+.lp-preview{position:relative;border:1px solid rgba(148,163,184,.18);border-radius:22px;padding:18px;margin-top:18px;
+  background:linear-gradient(180deg,rgba(15,23,42,.85),rgba(2,6,23,.85));box-shadow:0 40px 120px -40px rgba(59,130,246,.45)}
+.lp-preview .bar{display:flex;gap:6px;margin-bottom:12px}.lp-preview .bar i{width:10px;height:10px;border-radius:50%;background:#334155}
+.lp-preview .tag{position:absolute;top:14px;right:16px;font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--om-faint)}
+.lp-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:12px;margin-top:12px}
+.lp-preview .mx-pulse{grid-template-columns:repeat(3,1fr)}.lp-preview .mx-sig{grid-template-columns:repeat(3,1fr)}
+@media (max-width:900px){.lp-preview .mx-pulse{grid-template-columns:none}.lp-preview .mx-sig{grid-template-columns:1fr}}
+.lp-feat{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}
+.lp-f{border:1px solid rgba(148,163,184,.14);border-radius:18px;padding:18px;background:rgba(15,23,42,.6);transition:transform .2s,border-color .2s}
+.lp-f:hover{transform:translateY(-3px);border-color:rgba(46,230,246,.45)}
+.lp-f .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:20px;margin-bottom:12px;
+  background:color-mix(in srgb,var(--c) 18%,transparent);border:1px solid color-mix(in srgb,var(--c) 45%,transparent)}
+.lp-f h4{margin:0 0 6px;font-size:1.02rem}.lp-f p{margin:0;font-size:var(--fs-sm);color:var(--om-text-3);line-height:1.5}
+.lp-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}
+.lp-s{position:relative;border-radius:18px;padding:20px;border:1px solid rgba(148,163,184,.14);background:rgba(15,23,42,.5)}
+.lp-s b{font-family:var(--font-num);font-size:2rem;background:linear-gradient(90deg,#2EE6F6,#A78BFA);-webkit-background-clip:text;color:transparent}
+.lp-s h4{margin:6px 0}.lp-s p{margin:0;color:var(--om-text-3);font-size:var(--fs-sm);line-height:1.5}
+.lp-honest{margin:40px 0 10px;border-radius:20px;padding:22px 24px;border:1px solid rgba(250,204,21,.3);
+  background:linear-gradient(120deg,rgba(250,204,21,.08),rgba(15,23,42,.6));display:flex;gap:18px;align-items:center}
+.lp-honest .ic{font-size:30px}.lp-honest h4{margin:0 0 4px}.lp-honest p{margin:0;color:var(--om-text-3);font-size:var(--fs-sm)}
+.lp-foot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:34px 0 10px;padding-top:14px;
+  border-top:1px solid rgba(148,163,184,.10);font-size:var(--fs-xs);color:var(--om-faint)}
+@media (max-width:900px){.lp-feat,.lp-steps{grid-template-columns:1fr 1fr}.lp-grid{grid-template-columns:1fr}.lp-stats{grid-template-columns:1fr 1fr}
+  .st-key-login_card{margin-top:8px}.lp-hero{padding-top:18px}}
+@media (max-width:560px){.lp-feat,.lp-steps{grid-template-columns:1fr}.lp-nav .r .hide{display:none}}
 </style>"""
 
 
 def _landing_hero() -> tuple[str, str]:
-    """(top: logo, headline, summary; rest: chips, feature slides, tiles)."""
+    """(top: nav + headline + stats; rest: tape, product preview, features, how it works, honesty strip, footer)."""
     try:
         logo = (Path(__file__).resolve().parent / "brand" / "concept1_momentum_logo_dark_bg.svg").read_text()
     except Exception:
-        logo = ""
-    up, dn = "rgba(38,166,154,", "rgba(239,83,80,"
-    flow = [6, 9, 7, 4, 2, -1, -3, -6, -8, -5, -2, 1, 4, 7, 10, 8, 5]
-    flow_bars = "".join(f"<i style='height:{abs(v) * 5 + 6}px;background:{(up if v >= 0 else dn)}"
-                        f"{0.45 + abs(v) / 20:.2f});align-self:{'flex-end' if v >= 0 else 'flex-start'}'></i>"
-                        for v in flow)
-    oi = [(5, 2), (7, 3), (4, 6), (8, 2), (9, 1), (6, 4), (3, 7), (7, 2), (10, 1), (8, 3), (6, 2), (9, 2)]
-    oi_bars = "".join(f"<i style='display:flex;flex-direction:column;justify-content:center;gap:2px;background:none'>"
-                      f"<span style='height:{b * 5}px;background:#26A69A;border-radius:3px'></span>"
-                      f"<span style='height:{r * 5}px;background:#EF5350;border-radius:3px'></span></i>" for b, r in oi)
-    top = f"""<div class='om-hero'>
-  <div class='logo'>{logo}</div>
+        logo = "<b style='font-size:1.4rem'>omnipuls</b>"
+    now = datetime.now(IST)
+    live = now.weekday() < 5 and "09:15" <= now.strftime("%H:%M") <= "15:30"
+    pill = (f"<span class='lp-pill'><i></i>NSE live</span>" if live else "<span class='lp-pill off'><i></i>NSE closed</span>")
+    top = f"""<div class='lp-nav'><div class='brand'>{logo}</div>
+  <div class='r'>{pill}<span class='hide'>{now:%a %d %b · %H:%M} IST</span></div></div>
+<div class='lp-hero'>
+  <span class='lp-eyebrow'>● Live Dhan data · every F&amp;O stock · tested setups</span>
   <h1>See where the smart money moves, before the crowd.</h1>
-  <div class='sub'>Omnipuls reads live Dhan data for every F&amp;O stock and index: money flow, open interest, unusual
-  activity and option writers, and turns it into tested trade setups with entry, stop and target.</div></div>"""
-    return top, f"""
-<div class='om-hero'>
-  <div class='om-chips'><span>Live tick-by-tick</span><span>Money flow</span><span>OI build-up</span>
-  <span>Unusual activity</span><span>Option chain</span><span>Tested setups only</span></div>
-  <div class='om-slides'>
-    <div class='om-slide'><div class='k'>Money flow</div><h3>Money in and out, candle by candle</h3>
-      <p>Nifty 50 flow against price and MACD, and which sectors money leaves for which.</p>
-      <div class='om-bars'>{flow_bars}</div></div>
-    <div class='om-slide'><div class='k'>Index build-up</div><h3>Who is building positions</h3>
-      <p>Options and futures OI every 3 minutes, with what was carried from yesterday.</p>
-      <div class='om-bars'>{oi_bars}</div></div>
-    <div class='om-slide'><div class='k'>Unusual activity</div><h3>Stocks moving on 3× their usual volume</h3>
-      <p>Smart score from volume, range, OI and order book vs the same time on 20 days.</p>
-      <div class='om-row'><span>SBIN · long build-up</span><b style='color:#26A69A'>+62</b></div>
-      <div class='om-row'><span>TCS · short build-up</span><b style='color:#EF5350'>−48</b></div>
-      <div class='om-row'><span>HDFCBANK · 71% buying</span><b style='color:#26A69A'>+41</b></div></div>
-    <div class='om-slide'><div class='k'>Tested setups</div><h3>Only what made money after costs</h3>
-      <p>Each setup backtested on years of data; no signal means no trade.</p>
-      <div class='om-row'><span>Trend day + OI · Nifty CE</span><span class='om-tag' style='background:rgba(38,166,154,.18);color:#26A69A'>Signal</span></div>
-      <div class='om-row'><span>Bank Nifty failed-break fade</span><span class='om-tag' style='background:rgba(232,179,58,.16);color:#E8B33A'>Waiting</span></div>
-      <div class='om-row'><span>Gap fade at the open</span><span class='om-tag' style='background:rgba(148,163,184,.16);color:#94A3B8'>None today</span></div></div>
-  </div>
-  <div class='om-feat'>
-    <div><b>Market View</b>Every signal and reading on one page, with what it means.</div>
-    <div><b>Option chain</b>Support and resistance from where writers sit.</div>
-    <div><b>Scanners</b>Opening setups, breakouts, 5-STAR and more.</div>
-  </div>
+  <div class='sub'>Omnipuls reads money flow, open interest, volatility and order flow for every F&amp;O stock and index,
+  runs bots that test every idea on unseen days, and shows only what has an edge, with entry, stop and target.</div>
+  <div class='lp-stats'><div><b>235</b><span>F&amp;O stocks scanned</span></div><div><b>5</b><span>indices with OI levels</span></div>
+  <div><b>44</b><span>global markets</span></div><div><b>6</b><span>AI agents, 24/7</span></div></div>
 </div>"""
+    tape = "".join(f"<span><b>{a}</b>{b}</span>" for a, b in (
+        ("MARKET VIEW", "every signal on one page"), ("MOMENTUM FUNNEL", "ATR · range · sector & stock money"),
+        ("INDEX SETUPS", "Nifty · Bank Nifty · Fin Nifty · Sensex · Midcap"), ("OI LEVELS", "pivots · volume profile · option writers"),
+        ("RADAR", "sudden volume & OI changes with odds"), ("AI DESK", "crypto · gold · forex · global indices"),
+        ("SECTORS", "R-factor · smart score · money in / out")))
+    gauge = MX.gauge(46, "Bullish", 9, 4, 3)
+    tiles = MX.pulse([
+        MX.pulse_tile("Nifty 50", {"last": 24368.5, "chg": 0.62, "closes": pd.Series(np.cumsum(np.r_[0, np.sin(np.arange(40) / 5) * 6 + 2]) + 24200)}, None),
+        MX.pulse_tile("Bank Nifty", {"last": 55912.3, "chg": -0.21, "closes": pd.Series(55950 - np.cumsum(np.r_[0, np.cos(np.arange(40) / 4) * 9 + 1]))}, None),
+        MX.pulse_tile("India VIX", {"last": 12.84, "chg": -3.1, "closes": pd.Series(13.3 - np.arange(41) * 0.012)}, None, invert=True)])
+    funnel = MX.funnel([("F&O stocks", 235, "every 5 minutes"), ("ATR active", 26, "vs usual"), ("Range expanding", 22, ""),
+                        ("Sector money", 18, ""), ("Stock money", 12, ""), ("With the market", 5, "watchlist")])
+    sig = MX.signal_cards(pd.DataFrame([
+        {"Signal": "Index funnel: Nifty 50 LONG", "Status": "● SIGNAL", "Evidence": "Small edge", "Details": "ATR, range, index money, breadth passed at 09:35"},
+        {"Signal": "Bank Nifty failed-break fade: SHORT", "Status": "● SIGNAL", "Evidence": "Small edge", "Details": "broke yesterday's high, closed back inside"},
+        {"Signal": "Momentum Funnel: MARUTI LONG", "Status": "Watch", "Evidence": "Context", "Details": "score 71 · ATR 2.0x · range 2.7x · 65% buying"}]), 3)
+    feats = "".join(f"<div class='lp-f' style='--c:{c}'><div class='ic'>{i}</div><h4>{h}</h4><p>{p}</p></div>" for i, c, h, p in (
+        ("◎", "#3B82F6", "Market View", "Indices, mood, every live signal, sector money and option writers on one page."),
+        ("⧩", "#2EE6F6", "Momentum Funnel", "ATR and range vs usual, sector and stock money, with the market: a ranked watchlist."),
+        ("▲", "#26A69A", "Index setups & OI", "Index money from constituents, futures build-up, put/call writing, pivots and volume profile."),
+        ("⚡", "#F59E0B", "Bots & Radar", "Five bots watch all day; sudden volume, range and OI changes come with past-days odds."),
+        ("✦", "#A855F7", "AI Desk", "Six agents read crypto, gold, commodities, forex and world indices: TRADE, WAIT or REJECT."),
+        ("◫", "#EF5350", "Sectors", "Every sector as a card: R-factor, smart score, activity, money in / out and live stocks.")))
+    rest = f"""<div class='lp-tape'><div>{tape}{tape}</div></div>
+<div class='lp-sec'><div class='k'>Inside the app</div><h2>Everything that moves the market, in one place</h2>
+<p>A live preview of the main screens (sample data).</p></div>
+<div class='lp-preview'><div class='bar'><i></i><i></i><i></i></div><span class='tag'>Preview · sample data</span>
+  {tiles}<div class='lp-grid'><div>{gauge}</div><div>{funnel}</div></div><div style='margin-top:12px'>{sig}</div></div>
+<div class='lp-sec'><div class='k'>Features</div><h2>Built for intraday F&amp;O traders</h2></div>
+<div class='lp-feat'>{feats}</div>
+<div class='lp-sec'><div class='k'>How it works</div><h2>Data in, tested ideas out</h2></div>
+<div class='lp-steps'>
+  <div class='lp-s'><b>01</b><h4>Record everything</h4><p>Candles, OI, option chains and order book for every F&amp;O stock, every minute.</p></div>
+  <div class='lp-s'><b>02</b><h4>Test on unseen days</h4><p>Bots tune on the first 60% of days and judge on the last 40%, after costs.</p></div>
+  <div class='lp-s'><b>03</b><h4>Signal only with an edge</h4><p>Live signals with entry, stop and target; every call is logged and scored.</p></div>
+</div>
+<div class='lp-honest'><div class='ic'>⚖</div><div><h4>Honest by design</h4><p>No setup is called tested until it makes money on days it never saw.
+Untested ideas are labelled as context or small edge, and every call is paper-tracked.</p></div></div>
+<div class='lp-foot'><span>© Omnipuls · private app · data from Dhan</span><span>For information only, not investment advice.</span></div>"""
+    return top, rest
 
 
 def login_screen():
-    st.markdown(LANDING_CSS, unsafe_allow_html=True)
-    if MOBILE:
-        left, right = st.container(), st.container()
-    else:
-        left, _, right = st.columns([1.45, 0.08, 1])
+    for _c in (LANDING_CSS, MX.CSS, MX.FUNNEL_CSS):
+        st.markdown(_c, unsafe_allow_html=True)
     top, rest = _landing_hero()
+    left, right = (st.container(), st.container()) if MOBILE else st.columns([1.5, 1], gap="large")
     with left:
         st.markdown(top, unsafe_allow_html=True)
-        if not MOBILE:
-            st.markdown(rest, unsafe_allow_html=True)
     with right:
-        if not MOBILE:
-            st.markdown("<div style='height:7.5rem'></div>", unsafe_allow_html=True)
-        if not auth.has_users() and PUBLIC:
-            st.markdown("<div class='om-card'><h3>Set up the admin account</h3><div class='s'>This server is public, "
-                        "so accounts are added in the app's Secrets, not here.</div></div>", unsafe_allow_html=True)
-            st.code('[users.navneet]\nname = "Navneet"\nrole = "admin"\npassword = "choose-a-strong-password"',
-                    language="toml")
-            st.caption(f"Add it in {SECRETS_HELP}, save, and reload this page.")
-        elif not auth.has_users():
-            st.markdown("<div class='om-card'><h3>Create your admin account</h3><div class='s'>First start: the admin "
-                        "adds users, connects Dhan and sees the portfolio.</div></div>", unsafe_allow_html=True)
-            with st.form("setup_form"):
-                name = st.text_input("Your name", key="su_name")
-                uid = st.text_input("User ID", key="su_uid", placeholder="e.g. navneet")
-                pw = st.text_input("Password", type="password", key="su_pw",
-                                   help="At least 8 characters, mixing letters with numbers or symbols.")
-                pw2 = st.text_input("Confirm password", type="password", key="su_pw2")
-                ok = st.form_submit_button("Create account and sign in", type="primary", width="stretch")
-            if ok:
-                if pw != pw2:
-                    st.error("The two passwords don't match.")
-                else:
-                    err = auth.create(uid, pw, "admin", name)
-                    if err:
-                        st.error(err)
-                    else:
-                        st.session_state.user = auth.verify(uid, pw)
-                        st.rerun()
-        else:
-            st.markdown("<div class='om-card'><h3>Welcome back</h3><div class='s'>Sign in to open today's Market View."
-                        "</div></div>", unsafe_allow_html=True)
-            if not st.session_state.get("_show_login"):
-                if st.button("Sign in", type="primary", width="stretch", icon=":material/login:", key="show_login"):
-                    st.session_state["_show_login"] = True
-                    st.rerun()
-            else:
-                with st.form("login_form", border=False):
-                    uid = st.text_input("User ID", key="li_uid", autocomplete="username")
-                    pw = st.text_input("Password", type="password", key="li_pw", autocomplete="current-password")
-                    ok = st.form_submit_button("Sign in", type="primary", width="stretch", icon=":material/login:")
+        card = st.container(key="login_card")
+        with card:
+            if not auth.has_users() and PUBLIC:
+                st.markdown("<div class='lp-card-h'><h3>Set up the admin account</h3><p>This server is public, so accounts "
+                            "are added in the app's Secrets, not here.</p></div>", unsafe_allow_html=True)
+                st.code('[users.navneet]\nname = "Navneet"\nrole = "admin"\npassword = "choose-a-strong-password"',
+                        language="toml")
+                st.caption(f"Add it in {SECRETS_HELP}, save, and reload this page.")
+            elif not auth.has_users():
+                st.markdown("<div class='lp-card-h'><h3>Create your admin account</h3><p>First start: the admin adds users, "
+                            "connects Dhan and sees the portfolio.</p></div>", unsafe_allow_html=True)
+                with st.form("setup_form", border=False):
+                    name = st.text_input("Your name", key="su_name")
+                    uid = st.text_input("User ID", key="su_uid", placeholder="e.g. navneet")
+                    pw = st.text_input("Password", type="password", key="su_pw",
+                                       help="At least 8 characters, mixing letters with numbers or symbols.")
+                    pw2 = st.text_input("Confirm password", type="password", key="su_pw2")
+                    ok = st.form_submit_button("Create account and sign in", type="primary", width="stretch")
                 if ok:
-                    wait = auth.locked_for(uid)
-                    user = None if wait else auth.verify(uid, pw)
-                    if user:
-                        st.session_state.user = user
+                    if pw != pw2:
+                        st.error("The two passwords don't match.")
+                    else:
+                        err = auth.create(uid, pw, "admin", name)
+                        if err:
+                            st.error(err)
+                        else:
+                            st.session_state.user = auth.verify(uid, pw)
+                            st.rerun()
+            else:
+                st.markdown("<div class='lp-card-h'><h3>Welcome back 👋</h3><p>Sign in to open today's Market View, "
+                            "Momentum Funnel and bots.</p></div>", unsafe_allow_html=True)
+                if not st.session_state.get("_show_login"):
+                    if st.button("Sign in", type="primary", width="stretch", icon=":material/login:", key="show_login"):
+                        st.session_state["_show_login"] = True
                         st.rerun()
-                    wait = auth.locked_for(uid)
-                    st.error(f"Too many wrong passwords. Try again in {wait // 60 + 1} min." if wait
-                             else "Wrong user ID or password.")
-                st.caption("Forgot your password? Ask the admin to reset it under Account.")
-        if MOBILE:  # phones: sign in first, then the feature tour
-            st.markdown(rest, unsafe_allow_html=True)
-        st.markdown("<div class='om-foot'>Private app · data from Dhan · for information only, not investment advice."
-                    "</div>", unsafe_allow_html=True)
+                else:
+                    with st.form("login_form", border=False):
+                        uid = st.text_input("User ID", key="li_uid", autocomplete="username")
+                        pw = st.text_input("Password", type="password", key="li_pw", autocomplete="current-password")
+                        ok = st.form_submit_button("Sign in", type="primary", width="stretch", icon=":material/login:")
+                    if ok:
+                        wait = auth.locked_for(uid)
+                        user = None if wait else auth.verify(uid, pw)
+                        if user:
+                            st.session_state.user = user
+                            st.rerun()
+                        wait = auth.locked_for(uid)
+                        st.error(f"Too many wrong passwords. Try again in {wait // 60 + 1} min." if wait
+                                 else "Wrong user ID or password.")
+                    st.caption("Forgot your password? Ask the admin to reset it under Account.")
+                st.markdown("<div class='lp-trust'><span>Private: invite-only accounts</span><span>Live Dhan market data"
+                            "</span><span>Every signal logged and scored</span></div>", unsafe_allow_html=True)
+    st.markdown(rest, unsafe_allow_html=True)
 
 
 @st.cache_resource(show_spinner=False)
@@ -3328,7 +3374,8 @@ def _sector_data(t: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 def page_sectors():
     status_strip()
     st.header("Sectors")
-    st.markdown(MX.CSS + MX.SECTOR_CSS, unsafe_allow_html=True)
+    for _c in (MX.CSS, MX.SECTOR_CSS):
+        st.markdown(_c, unsafe_allow_html=True)
     with st.spinner("Loading F&O stocks…"):
         res, err = safe(fno_table)
     if res is None or res[0].empty:
@@ -6307,8 +6354,29 @@ def market_view_body(svc, t: pd.DataFrame):
                                  + f", checks {i['agree']} · {i['why']}"})
     except Exception:
         pass
+    # index funnel (all five indices) and the Bank Nifty failed-break fade
+    ix_rows, bn_fb = [], None
+    try:
+        ix_rows = IF.live(idx_b, svc.bars()[0], {k: d.get("w", {}) for k, d in index_defs().items()}, idx_b.get("INDIAVIX"))
+        bn_fb = LV.failed_break(idx_b.get("BANKNIFTY"))
+    except Exception as e:
+        print(f"market view index setups: {e}", flush=True)
+    ix_edge = {"NIFTY": "Small edge", "MIDCPNIFTY": "Small edge"}  # best in the first test (Nifty +0.25%, 61% wins)
+    for r in ix_rows:
+        if r.get("signal"):
+            g = r["signal"]
+            bot_rows.append({"Signal": f"Index funnel: {r['name']} {g['side']}", "Status": "● SIGNAL",
+                             "Evidence": ix_edge.get(r["key"], "Context"),
+                             "Details": f"all steps passed at {g['time']} @ {g['price']:,.0f} (ATR, range, index money, "
+                                        "breadth) · exit 15:15" + (" · weak on Bank Nifty: prefer the failed-break fade"
+                                                                   if r["key"] == "BANKNIFTY" else "")})
+    if bn_fb and bn_fb.get("signal") and not any(r.get("name") == "Bank Nifty failed-break fade" for r in plan_rows):
+        g = bn_fb["signal"]
+        bot_rows.append({"Signal": f"Bank Nifty failed-break fade: {g['side']}", "Status": "● SIGNAL", "Evidence": "Small edge",
+                         "Details": f"broke yesterday's {'high' if g['side'] == 'SHORT' else 'low'} {g['level']:,.0f} and closed "
+                                    f"back inside at {g['time']} @ {g['price']:,.0f} · exit 15:15 · first test +67 pts, 61% wins"})
     # ---- 1. the trade idea (master-bot passed ideas count as tested signals)
-    passed = [r for r in bot_rows if r["Status"] == "● SIGNAL"]
+    passed = [r for r in bot_rows if r["Status"] == "● SIGNAL" and r["Signal"].startswith("Master bot")]
     idea_rows = plan_rows + ([{"name": "Master bot (tested rule + balance agree)", "state": "fired", "where": "",
                                "text": "; ".join(r["Signal"].split(": ", 1)[1] + " (" + r["Details"].split(" · ")[0] + ")"
                                                  for r in passed)}] if passed else [])
@@ -6336,13 +6404,29 @@ def market_view_body(svc, t: pd.DataFrame):
     st.markdown(MX.section("Signals", f"{n_live} live · hover a card for details") + MX.signal_cards(sig),
                 unsafe_allow_html=True)
 
+    # ---- index setups: the funnel for each index + the Bank Nifty fade
+    if ix_rows:
+        fb_txt = ""
+        if bn_fb:
+            g = bn_fb.get("signal")
+            fb_txt = (f"Bank Nifty failed-break fade: <b>{g['side']}</b> at {g['time']} @ {g['price']:,.0f}" if g else
+                      f"Bank Nifty failed-break fade: waiting (yesterday {bn_fb['pdl']:,.0f} – {bn_fb['pdh']:,.0f})")
+        st.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
+        st.markdown(MX.DESK_CSS, unsafe_allow_html=True)
+        st.markdown(MX.section("Index setups", "funnel steps per index · details on "
+                    "Momentum Funnel → Indices") + "<div class='wl'>" + "".join(
+                        MX.index_card(r, weak=r["key"] == "BANKNIFTY") for r in ix_rows) + "</div>"
+                    + (f"<div class='mx-quiet' style='margin-top:8px;color:var(--om-text-3)'>{fb_txt}</div>" if fb_txt else ""),
+                    unsafe_allow_html=True)
+
     # ---- sudden changes from the radar bot (server)
     try:
         bs2 = _bots_state()
         ev = (((bs2 or {}).get("bots") or {}).get("radar") or {}).get("events") or [] if bs2 and not bs2.get("stale") else []
         fp = ((bs2 or {}).get("funnel") or {}).get("top") or [] if bs2 and not bs2.get("stale") else []
         if fp:
-            st.markdown(MX.FUNNEL_CSS + MX.section("Momentum Funnel picks", "all 5 steps · ranked by score · details on Momentum Funnel")
+            st.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
+            st.markdown(MX.section("Momentum Funnel picks", "all 5 steps · ranked by score · details on Momentum Funnel")
                         + MX.watch_cards(fp[:4], show_why=True), unsafe_allow_html=True)
         if ev:
             st.markdown(MX.section("Sudden changes", f"radar bot · updated {bs2.get('updated', '')[11:16]} · full list on Bots")
@@ -6463,7 +6547,8 @@ def _desk_state() -> dict | None:
 def page_agents():
     status_strip()
     st.header("AI Desk")
-    st.markdown(MX.CSS + MX.DESK_CSS, unsafe_allow_html=True)
+    for _c in (MX.CSS, MX.DESK_CSS):
+        st.markdown(_c, unsafe_allow_html=True)
     s = _desk_state()
     if not s:
         return
@@ -6692,7 +6777,8 @@ def _index_detail(key: str, sid: int, ib: dict, fb: dict, bars: dict, weights: d
         st.caption("Bottom: money into (green) / out of (red) the index's stocks per 5-minute candle, weighted by index "
                    "weight; gold line = running total.")
     with c2:
-        st.markdown(MX.LADDER_CSS + MX.level_ladder(lad["levels"], spot, lad["support"], lad["resistance"]), unsafe_allow_html=True)
+        st.markdown(MX.LADDER_CSS, unsafe_allow_html=True)
+        st.markdown(MX.level_ladder(lad["levels"], spot, lad["support"], lad["resistance"]), unsafe_allow_html=True)
     c3, c4 = st.columns(2) if not MOBILE else (st.container(), st.container())
     with c3:
         if co.get("near") is not None and not co["near"].empty:
@@ -6776,7 +6862,8 @@ def index_funnel_body():
 def page_funnel():
     status_strip()
     st.header("Momentum Funnel")
-    st.markdown(MX.CSS + MX.FUNNEL_CSS + MX.DESK_CSS, unsafe_allow_html=True)
+    for _c in (MX.CSS, MX.FUNNEL_CSS, MX.DESK_CSS):
+        st.markdown(_c, unsafe_allow_html=True)
     if not DHAN_DATA:
         need_dhan()
         return
