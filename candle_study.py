@@ -199,6 +199,7 @@ def stock_rows(sym: str, x: pd.DataFrame, tf: int, nifty_open: dict, nifty_at: d
             row = {
                 "entry": e, "entry_ts": g.index[n],
                 "day": d0, "sym": sym, "sector": sector, "tf": tf, "T": T, "sd": sd, "mv": mv, "A": A,
+                "gap_pct": (O / P - 1) * 100, "vwap_now": bool((ci - vw[n - 1]) * sd > 0),
                 "atr_pct": A / P * 100, "day_pct": day_pct, "day_atr": (C - P) / A,
                 "rest_pct": sd * (C / e - 1) * 100 - COST,
                 "gap_way": sd * (O - P) / A >= 0.5, "gap_against": sd * (O - P) / A <= -0.3,
@@ -244,6 +245,59 @@ def add_cross(t: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------- analysis
+
+# ---------------------------------------------------------------- layer tree (scenarios)
+
+def _gap_group(g: float) -> str:
+    a = abs(g)
+    return "gap 0-0.5%" if a < 0.5 else "gap 0.5-1%" if a < 1 else "gap 1-3%" if a < 3 else "gap >3%"
+
+
+LAYERS = [
+    ("Gap", lambda z: z["gap_pct"].map(_gap_group)),
+    ("Gap side", lambda z: np.where(z["gap_pct"].abs() < 0.5, "flat open",
+                                    np.where(np.sign(z["gap_pct"]) == z["sd"], "gap with the move", "gap against the move"))),
+    ("First candle", lambda z: np.where(z["first_body"] & z["first_clv"], "strong first candle", "weak first candle")),
+    ("Volume", lambda z: np.where(z["rvol_3"], "volume 3x+", np.where(z["rvol_15"], "volume 1.5-3x", "normal volume"))),
+    ("Market", lambda z: np.where(z["sector_with"] & z["beat_nifty"], "with sector + beats Nifty",
+                                  np.where(z["sector_with"], "with sector only",
+                                           np.where(z["beat_nifty"], "beats Nifty only", "alone")))),
+    ("Footprints", lambda z: np.where(z["fp"] >= 3, "3+ footprints", np.where(z["fp"] == 2, "2 footprints", "0-1 footprints"))),
+    ("Structure", lambda z: np.where(z["vwap_now"] & z["pdh_break"], "beyond VWAP + yday high/low broken",
+                                     np.where(z["vwap_now"], "beyond VWAP", "back inside VWAP"))),
+]
+
+
+def layer_tree(z: pd.DataFrame, split, days: int, min_n: int = 20) -> list[dict]:
+    """Every path through the layers (depth 1..len(LAYERS), in order): how many signals, how often they end as the
+    day's top 10 that way, the rest of the day after costs (all / train / test), win rate and months positive.
+    A written scenario line for each path."""
+    z = z.copy()
+    names = []
+    for name, f in LAYERS:
+        z[name] = f(z)
+        names.append(name)
+    out = []
+    for depth in range(1, len(names) + 1):
+        keys = names[:depth]
+        for path, g in z.groupby(keys):
+            if len(g) < min_n:
+                continue
+            path = path if isinstance(path, tuple) else (path,)
+            tr, te = g[g["day"] < split], g[g["day"] >= split]
+            mo = g.groupby("month")["rest_pct"].mean()
+            out.append({"depth": depth, "scenario": " → ".join(path), "n": int(len(g)),
+                        "per_day": round(len(g) / max(days, 1), 2),
+                        "topper_pct": round(g["topper_way"].mean() * 100, 1), "big_pct": round(g["big_way"].mean() * 100, 1),
+                        "rest_pct": round(g["rest_pct"].mean(), 3),
+                        "train": round(tr["rest_pct"].mean(), 3) if len(tr) >= 5 else None,
+                        "test": round(te["rest_pct"].mean(), 3) if len(te) >= 5 else None,
+                        "win_pct": round((g["rest_pct"] > 0).mean() * 100, 1),
+                        "months_pos": f"{int((mo > 0).sum())}/{len(mo)}", "last_month": round(mo.iloc[-1], 3) if len(mo) else None,
+                        "long": round(g[g["sd"] > 0]["rest_pct"].mean(), 3) if (g["sd"] > 0).sum() >= 5 else None,
+                        "short": round(g[g["sd"] < 0]["rest_pct"].mean(), 3) if (g["sd"] < 0).sum() >= 5 else None})
+    return out
+
 
 def analyse(t: pd.DataFrame) -> dict:
     items = [k for k in CHECKLIST if k in t.columns]
@@ -314,6 +368,7 @@ def analyse(t: pd.DataFrame) -> dict:
         out["tables"][key] = {
             "base_topper_pct": round(base_topper * 100, 2), "base_rest_pct": round(base_rest, 3),
             "items": tab.to_dict("records"), "chosen": chosen, "score": sc, "footprint": footprint,
+            "layers": layer_tree(z, split, len(days)),
             "top2": {"n": int(len(top2)), "rest_pct": round(top2["rest_pct"].mean(), 3),
                      "test_rest_pct": round(t2te["rest_pct"].mean(), 3) if len(t2te) else None,
                      "test_n": int(len(t2te)), "topper_pct": round(top2["topper_way"].mean() * 100, 1),

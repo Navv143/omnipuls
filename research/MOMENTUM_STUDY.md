@@ -363,3 +363,14 @@ side, hold 24 / 72 h, stop 1.5 ATR, 0.10% costs): fading crowded longs loses; fo
 heavily short worked in 2023 (+1.2% to +2.9%) and 2024 (+0.2% to +0.9%) but lost in 2025 and 2026 (-0.4% to -0.8%):
 an edge that rotated away - recent months decide, not the 3-year average. No new crypto setup deployed; crash buy and
 burst momentum stay on paper.
+
+## Layer tree: every scenario tested separately (5 Nov 2026, candle_study.layer_tree)
+Layers in order: gap group → gap side (flat / with the move / against the move) → first candle (strong / weak) →
+volume (normal / 1.5-3x / 3x+) → market (with sector + beats Nifty / sector only / Nifty only / alone) → footprints
+(0-1 / 2 / 3+) → structure (beyond VWAP + yesterday's high/low broken / beyond VWAP / back inside). Every path with
+>= 20 signals is scored: signals a day, top-10 %, rest of the day after costs (all / train / test), win %, months +,
+long / short. Shown in the app (Auto Trader → Candle study → Scenario tree). First local run (39 days, 5-min):
+- Gap AGAINST the move is positive at every check, both halves, every month: 0.5-1% gap +0.22% to +0.27%, 1-3% gap at
+  10:00 +0.38% (train +0.20 / test +0.47).
+- Gap WITH the move 1-3% (gap and go) loses at every check, both halves (-0.13% to -0.22%): the retail trap.
+- Deep paths reach +0.4% to +0.6% but on 30-100 signals out of ~245 paths: to be confirmed on the 6-month server run.
