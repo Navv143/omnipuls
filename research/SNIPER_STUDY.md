@@ -134,3 +134,19 @@ Conclusion for algo trading: plain level, sweep, profile and crossover rules car
 the only edges found are event-driven (crash buy, giant up-burst momentum, BTC NY trend pullback) and are being
 paper-traded. New ideas should be added as a function in algo_lab.py and a line in algo_run.py, and judged the same
 way (after costs, both halves, several markets).
+
+## Trend-based Fibonacci "MAGIC" template on 5-min (5 Nov 2026, `research/fib_study.py`)
+
+Template from an Instagram reel (XAUUSD 5-min): trend-based Fib extension with levels 0, 0.5, 0.618, 1.414, 1.618,
+2, 2.272, 2.618. Swings marked mechanically (pivot of 6 candles each side, swing ≥ 6 x 5-min ATR, known only once
+confirmed). At the first touch of each level: 'held' = price turns back 0.15 x the swing before going 0.15 x the swing
+further (the touch candle itself can only break, since its far side printed before the touch). Fibonacci levels are
+compared with non-Fibonacci control levels at nearby depths (0.3, 0.45, 0.55, 0.7, 0.85; 0.8, 1.2, 1.5, 1.8, 2.4).
+
+- Levels mostly break: hold rates 28-48% on retracements and 33-46% on extensions (below 50%), so fading them with
+  a 1:1 stop / target loses before costs.
+- Fibonacci levels hold as often as the control levels at the same depth: 4-year difference within ±1-3
+  percentage points on BTC, ETH and gold (PAXG), with no consistent sign; the template's 1.414 / 1.618 / 2.272 /
+  2.618 extensions are equal or slightly worse (-0.5 to -3 points). 60 days of COMEX gold: noisy, no edge.
+- The hold rate depends on how deep the level is (deeper retracements hold more often), not on whether the ratio is
+  a Fibonacci number.
