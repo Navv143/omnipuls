@@ -121,3 +121,20 @@ Same rules, all indices with their per-index modes, 45 days:
 | 15 min (move ≥ 0.15 ATR) | 141 | +0.10 | 60 | +0.06 / +0.14 | 3.0 |
 The 10-minute signal comes a median 5 minutes before the 15-minute one, ~0.11% earlier in price on average, but with more
 false starts. Both are live: EARLY (10 min) and CONFIRMED (15 min), recorded as separate sources.
+
+## Closing picks: buy at 15:15, sell next day (5 Nov 2026, `research/closing_study.py`)
+
+Stocks (Yahoo 5-minute, 58 days, 235 F&O stocks, 0.12% costs), readings at 15:15: day's move, last-30-minute move,
+close location in the day's range, last-30-minute money share and net vs the day, volume vs usual, sector money.
+- No long or short rule held up: e.g. 60%+ buying in the last 30 minutes with net ≥ 2% of the day's turnover and a close
+  near the high → next open -0.12%, next close -0.23%. Reversal versions (fade late strength) were ~0 too.
+- So the stock picks on the Closing Picks page are labelled untested and recorded to be tested live.
+
+Indices (Yahoo daily, 10 years):
+- Nifty, close in the top 20% of the day's range → next open +0.138% (up 70%, 10 of 11 years) vs +0.107% any day.
+- Nifty, strong day (1+ ATR) closing at the high → +0.182% (76% up, 11 of 11 years).
+- Bank Nifty, top-20% close → +0.201% (11 of 11 years) vs +0.091% any day.
+- Bottom-20% closes → ~0 (no short edge).
+Small but steady edge. The live page adds the last 30 minutes' index money, breadth change, futures OI build-up and
+option writing (calls vs puts added near the money) as confirmations; whether they add anything is tested on the
+recorded picks (`closing_picks`, next open and next close after costs).

@@ -7292,10 +7292,112 @@ def page_funnel():
          "a snapshot every 5 minutes for testing. A watchlist, not a tested signal yet.")
 
 
+def _closing_history() -> list:
+    d = PATHS.DATA / "closing"
+    out = []
+    for f in (sorted(d.glob("*.json")) if d.exists() else [])[-120:]:
+        try:
+            out.append(json.loads(f.read_text()))
+        except Exception:
+            pass
+    return out
+
+
+def page_closing():
+    """Closing picks: buy (or sell) near the close for the next day, from what the last 15-30 minutes added."""
+    status_strip()
+    for _c in (MX.CSS, MX.FUNNEL_CSS, MX.DESK_CSS):
+        st.markdown(_c, unsafe_allow_html=True)
+    st.markdown(MX.section("Closing Picks", "buy near the close, exit next day · live read from 14:45, picks fixed with "
+                           "the data up to 15:15 and recorded for testing"), unsafe_allow_html=True)
+    s = _bots_state() or {}
+    hist = _closing_history()
+    today = datetime.now(IST).strftime("%Y-%m-%d")
+    read = s.get("closing") if not s.get("stale") else None
+    rec_today = next((h for h in hist if h.get("day") == today), None)
+    cur = rec_today or read
+    ltps = {}
+    if cur and cur.get("day") == today:
+        try:
+            svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
+            for r in cur.get("indices", []) + cur.get("stocks", []):
+                k = r.get("key") or r.get("symbol")
+                b = _today_bars(k, svc)
+                if not b.empty:
+                    ltps[k] = float(b["Close"].iloc[-1])
+        except Exception:
+            pass
+    if not cur:
+        last = hist[-1] if hist else None
+        st.info("The live read starts at 14:45 on market days and the picks are fixed at 15:15 (server bots)."
+                + (f" Showing the last recorded picks ({last['day']})." if last else ""), icon=":material/schedule:")
+        cur = last
+    if cur:
+        when = ("recorded at " + cur.get("time", "")) if cur.get("final") or cur is rec_today else f"live read as of {cur.get('time', '')} (fixed at 15:15)"
+        st.caption(f"{cur.get('day')} · {when}")
+        st.markdown(MX.section("Indices", "tested: a close in the top 20% of the day's range → higher next open "
+                               "(Nifty 70%, Bank Nifty 69% of days over 10 years)"), unsafe_allow_html=True)
+        st.markdown(MX.closing_cards(cur.get("indices", []), "index", ltps, "No index read yet."), unsafe_allow_html=True)
+        stk = cur.get("stocks", [])
+        st.markdown(MX.section("Stocks: late buying", "untested · biggest last-30-minute inflow, closing near the high, "
+                               "sector money with it"), unsafe_allow_html=True)
+        st.markdown(MX.closing_cards([r for r in stk if r.get("side", 0) > 0], "stock", ltps, "No stock with strong late buying."),
+                    unsafe_allow_html=True)
+        sells = [r for r in stk if r.get("side", 0) < 0]
+        if sells:
+            with st.expander(f"Stocks: late selling ({len(sells)}), for sell / avoid"):
+                st.markdown(MX.closing_cards(sells, "stock", ltps), unsafe_allow_html=True)
+    # ---- record
+    st.markdown(MX.section("Closing record", "every pick with the next day's open and close (after costs: index 0.02%, "
+                           "stocks 0.12%)"), unsafe_allow_html=True)
+    rows = []
+    for h in hist:
+        for r in h.get("indices", []):
+            rows.append({"Day": h["day"], "Kind": "Index", "Symbol": r.get("key"), "Verdict": r.get("verdict"),
+                         "Side": int(r.get("side") or 0), "Tested": bool(r.get("tested")), "Price": r.get("price"),
+                         "Next day": r.get("next_day"), "Open %": r.get("open_pct"), "Close %": r.get("close_pct"),
+                         "Why": ", ".join(r.get("confirmations") or [])})
+        for r in h.get("stocks", []):
+            rows.append({"Day": h["day"], "Kind": "Stock", "Symbol": r.get("symbol"),
+                         "Verdict": "BUY" if r.get("side", 0) > 0 else "SELL", "Side": int(r.get("side") or 0), "Tested": False,
+                         "Price": r.get("price"), "Next day": r.get("next_day"), "Open %": r.get("open_pct"),
+                         "Close %": r.get("close_pct"), "Why": r.get("why")})
+    if not rows:
+        st.caption("The record starts with the first 15:15 picks the server stores.")
+    else:
+        df = pd.DataFrame(rows)
+        done = df[df["Open %"].notna()]
+
+        def _k(x, title, sub):
+            if x.empty:
+                return MX.kpi(title, "—", sub)
+            return MX.kpi(title, f"{x['Open %'].mean():+.2f}%", f"{len(x)} picks · {(x['Open %'] > 0).mean() * 100:.0f}% up at "
+                          f"open · close {x['Close %'].mean():+.2f}%", MX.tone_color(x["Open %"].mean()))
+        st.markdown(MX.kpis([
+            _k(done[(done["Kind"] == "Index") & done["Tested"] & (done["Side"] > 0)], "Index BUY (tested)", "next open"),
+            _k(done[(done["Kind"] == "Index") & (done["Side"] == 0)], "Index NO TRADE days", "as long, for comparison"),
+            _k(done[(done["Kind"] == "Stock") & (done["Side"] > 0)], "Stock BUY", "untested"),
+            _k(done[(done["Kind"] == "Stock") & (done["Side"] < 0)], "Stock SELL", "untested"),
+        ]), unsafe_allow_html=True)
+        df = df.sort_values(["Day", "Kind"], ascending=[False, True])
+        df["TradingView"] = df["Symbol"].map(lambda x: MX.tv_url(x, "D"))
+        st.dataframe(df.drop(columns=["Side"]), hide_index=True, width="stretch", height=380,
+                     column_config={"Price": st.column_config.NumberColumn(format="%.2f"),
+                                    "Open %": st.column_config.NumberColumn(format="%+.2f"),
+                                    "Close %": st.column_config.NumberColumn(format="%+.2f"),
+                                    "Why": st.column_config.TextColumn(width="large"),
+                                    "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
+    st.caption("How to use: buy at 15:15-15:25 (index futures or a stock), exit at the next day's open or by the next "
+               "close. The index rule has 10 years of daily evidence behind it (small edge: about +0.14-0.20% at the next "
+               "open vs +0.10% on any day). Stock picks did not carry over in the first 58-day test, so they are recorded "
+               "here to be tested on the live record before you trust them. Overnight positions carry gap risk.")
+
+
 PAGE_DEFS = [  # (url, function, menu title, icon)
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
     ("funnel", page_funnel, "Momentum Funnel", ":material/filter_alt:"),
     ("agents", page_agents, "AI Desk", ":material/groups:"),
+    ("closing", page_closing, "Closing Picks", ":material/nightlight:"),
     ("bot", page_bot, "Bots", ":material/smart_toy:"),
     ("dashboard", page_dashboard, "Trading Desk", ":material/space_dashboard:"),
     ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
@@ -7325,7 +7427,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "view"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({  # grouped by what you are doing: today's trading, the market, tools, your account
-    "Today": [P["view"], P["funnel"], P["agents"], P["dashboard"], P["scanners"], P["bot"], P["options"]],
+    "Today": [P["view"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["scanners"], P["bot"], P["options"]],
     "Markets": [P["indices"], P["sectors"], P["smart"], P["apex"], P["fno"], P["oi"], P["global"], P["mcx"], P["cdsfut"]],
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["odds"]],
     "Account": [P["account"]] + ([P["portfolio"], P["dhan"], P["review"], P["research"]] if IS_ADMIN else []),

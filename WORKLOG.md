@@ -512,3 +512,14 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   calls gain the current price and R now.
 - Server records the managed exit next to the plain target / stop result (trade_signals m_exit / m_r / m_pct, ltp,
   r_now, best_r, worst_r, advice) so the two exits can be compared.
+
+## 5 Nov 2026: Closing Picks (buy near the close for the next day)
+- New page "Closing Picks" (Today menu). From 14:45 the server's bots compute a live read every 5 minutes; at 15:15 the
+  picks are fixed and recorded (`<data>/closing/<day>.json` and Supabase `closing_picks`).
+- Indices (Nifty, Bank Nifty tested; Fin Nifty, Midcap, Sensex watch-only): close location in the day's range, day in
+  ATR, constituents' money and breadth change in the last 30 minutes, futures OI build-up in the last 30 minutes, calls
+  vs puts written near the money in the last 30 minutes (recorder option chain) with the strikes that got the most.
+- Stocks (untested): last 30 / 15 minutes' money, close location, volume vs usual, sector money in the last 30
+  minutes, futures OI change in the last 30 minutes (recorder quotes); top 10 buys, sells under an expander.
+- Scored on the next trading day: the gap at the open (after 9:20) and the close (15:35), after costs; the record table
+  and KPIs (index BUY vs NO TRADE days, stock BUY / SELL) show the results.
