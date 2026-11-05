@@ -413,3 +413,17 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - Bank Nifty variants tested (research/MOMENTUM_STUDY.md): the failed break of yesterday's high / low, faded, is the
   best (+0.12% ≈ 67 pts, 61% wins, both halves); it shows live on the Bank Nifty tab. The nightly server backtest now
   includes the Bank Nifty variants and writes the result to Supabase bot_results too.
+
+## 5 Nov 2026: Index signals on Market View, full-app check, new landing page
+
+- Market View: "Index setups" section (funnel steps for Nifty, Bank Nifty, Fin Nifty, Sensex, Midcap Select + the
+  Bank Nifty failed-break fade line); index funnel signals join the Signals list (Nifty / Midcap as "Small edge").
+  The Bank Nifty failed-break fade was already a tested setup in the app (plan rows); the new test confirms it.
+- Fix: style blocks joined with content in one markdown call did not render (index cards, funnel picks); every style
+  block is now its own call across the app.
+- Fix: index money skipped stocks whose candles have no volume column (was an error).
+- Full check: all 25 pages run without errors (AppTest); Supabase shows the server storing desk_log, bot_ideas,
+  radar_events, desk_calls, funnel_log and index_log today (real futures OI / option OI in index_log).
+- New landing / sign-in page: aurora background with grid, top bar with live NSE status and IST time, gradient headline,
+  stats strip, frosted sign-in card, feature tape, live product preview (sample data, labelled), feature cards, how it
+  works, honesty strip, footer; phone layout stacks with sign-in right after the headline.
