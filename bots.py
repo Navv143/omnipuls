@@ -1041,6 +1041,59 @@ def auto_step(mkt: "Market", now: datetime, scanned: int, final: bool = False) -
     return {k: book.get(k) for k in ("funnel", "pnl", "equity", "equity_start", "updated")}
 
 
+# ---------------------------------------------------------------- Bank Nifty EBP 1h, held overnight (paper, bn_ebp.py)
+
+BN_EBP_FILE = OUT / "bn_ebp.json"
+
+
+def bn_ebp_step(mkt: "Market", now: datetime) -> dict:
+    """Bank Nifty 1h Engulfing Bar Play (paper): finished hourly candles from the 5-min bars; trades whose signal came
+    after the paper start are kept with their state (waiting / open / closed) in <data>/bots/bn_ebp.json and every
+    change goes to Supabase crypto_paper (setup = name + signal time)."""
+    import bn_ebp as BE
+    try:
+        st = json.loads(BN_EBP_FILE.read_text())
+    except Exception:
+        st = {"since": now.strftime("%Y-%m-%d %H:%M"), "trades": []}
+    h1 = BE.hourly(mkt.bars("BANKNIFTY"))
+    if h1.empty:
+        return st
+    nowl = pd.Timestamp(now.replace(tzinfo=None))
+    end = h1.index + pd.Timedelta(minutes=60)
+    end = end.where(h1.index.strftime("%H:%M") != "15:15", h1.index + pd.Timedelta(minutes=15))
+    h1 = h1[end <= nowl]                                   # finished hours only
+    tr = BE.trades(h1, since=pd.Timestamp(st["since"]))
+    old = {t_["signal_at"]: t_ for t_ in st.get("trades", [])}
+    rows, new = [], []
+    for t_ in tr:
+        t_ = {k: (str(v) if isinstance(v, pd.Timestamp) else v) for k, v in t_.items()}
+        new.append(t_)
+        if old.get(t_["signal_at"]) != t_ and t_.get("entry") is not None:
+            sig = pd.Timestamp(t_["signal_at"])
+            rows.append({"day": sig.strftime("%Y-%m-%d"), "setup": f"{BE.NAME} {sig:%H:%M}", "symbol": "BANKNIFTY",
+                         "side": int(t_["side"]), "signal_at": sig.strftime("%H:%M"), "entry_at": str(t_.get("entry_at", ""))[5:16],
+                         "entry_at_ist": str(t_.get("entry_at", ""))[5:16], "entry": t_["entry"], "sl": t_["sl"], "tp": t_["tp"],
+                         "stop_pct": round(abs(t_["entry"] - t_["sl"]) / t_["entry"] * 100, 3), "result": t_["status"],
+                         "exit_at": (str(t_["exit_at"])[5:16] if t_.get("exit_at") else None), "exit_px": t_.get("exit_px"),
+                         "r": t_["r"], "pct": round(t_["pts"] / t_["entry"] * 100, 3)})
+            if t_["signal_at"] not in old:
+                log(f"BN EBP paper trade: {'BUY' if t_['side'] > 0 else 'SELL'} {t_['entry']} stop {t_['sl']} target {t_['tp']}")
+    # closed trades that fell out of the 45-day window are kept from the file
+    keep = [t_ for k_, t_ in old.items() if k_ not in {x_["signal_at"] for x_ in new}]
+    st["trades"] = sorted(keep + new, key=lambda z: z["signal_at"])
+    st["updated"] = now.strftime("%Y-%m-%d %H:%M")
+    st["last_hour"] = str(h1.index[-1]) if len(h1) else None
+    tmp = BN_EBP_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(_clean(st), default=str))
+    os.replace(tmp, BN_EBP_FILE)
+    try:
+        if rows:
+            _cloud().upsert_rows("crypto_paper", _clean(rows), "day,setup")
+    except Exception as e:
+        log(f"bn ebp: {e}")
+    return st
+
+
 def plan_for(mkt: "Market", stock: str, side: int) -> dict | None:
     """Entry / stop / targets for a stock idea, the same plan as the Momentum Funnel (funnel.trade_plan)."""
     import funnel as FN
@@ -1101,6 +1154,10 @@ def cycle(mkt: Market) -> dict:
         auto = auto_step(mkt, now, int(len(L)) + 5)
     except Exception as e:
         log(f"auto trader: {e}")
+    try:
+        bn_ebp_step(mkt, now)
+    except Exception as e:
+        log(f"bn ebp: {e}")
     closing = None
     if now.strftime("%H:%M") >= CLOSE_FROM:
         try:

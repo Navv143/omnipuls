@@ -75,10 +75,11 @@ def ebp_trades(x: pd.DataFrame, cost: float, entry="market", target="dol", rr=2.
                 px, how = o[m], "15:15"
                 break
             if (s > 0 and l[m] <= stop) or (s < 0 and h[m] >= stop):
-                px, how = stop, "stop"
+                # a gap through the stop fills at the open (worse)
+                px, how = ((min(o[m], stop) if s > 0 else max(o[m], stop)) if m > i else stop), "stop"
                 break
             if (s > 0 and h[m] >= tg) or (s < 0 and l[m] <= tg):
-                px, how = tg, "target"
+                px, how = ((max(o[m], tg) if s > 0 else min(o[m], tg)) if m > i else tg), "target"
                 break
         if px is None:
             px = c[m]
