@@ -480,3 +480,7 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - `index_funnel._oi_at`: the index future's build-up over the signal's 15 minutes and for the day; "OI confirms" when
   new positions are on the burst's side. Shown on the momentum cards, saved in trade_signals.note (new column) so the
   live record can be split by OI confirmation.
+
+## 5 Nov 2026: Momentum bot EARLY stage (10-minute window)
+- Signals now come in two stages: EARLY (10-minute window, move ≥ 0.12 ATR; ~5 minutes earlier) and CONFIRMED
+  (15-minute window), each with the plan and OI, recorded separately ("Index momentum bot (early)").

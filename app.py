@@ -6428,7 +6428,8 @@ def market_view_body(svc, t: pd.DataFrame):
     for _k, _mo in moms.items():
         for g in (_mo or {}).get("signals", []):
             pl = g["plan"]
-            bot_rows.append({"Signal": f"Index momentum bot: {IF.INDEXES[_k]} {g['side']}", "Status": "● SIGNAL",
+            bot_rows.append({"Signal": f"Index momentum bot ({g.get('stage', 'CONFIRMED').lower()}): {IF.INDEXES[_k]} {g['side']}",
+                             "Status": "● SIGNAL",
                              "Evidence": "Small edge",
                              "Details": f"{g['time']} @ {g['price']:,.0f} · stop {pl['sl']:,.0f} · targets {pl['tp1']:,.0f} / "
                                         f"{pl['tp2']:,.0f} · {g['why']}"})
