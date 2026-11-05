@@ -577,3 +577,13 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - `bots.bn_ebp_step` every 5 minutes in market hours: <data>/bots/bn_ebp.json (since, trades with state) and Supabase
   crypto_paper. Auto Trader page: "Bank Nifty EBP 1h · paper" (limit waiting / open trade with R and points) and the
   trades in the per-setup record.
+
+## 5 Nov 2026: Nightly noise-band research (5-min) and filter test
+- `noise_research.py` (run nightly by bots.run_research after index_funnel.py, on the Setup Finder's year of Dhan
+  5-minute candles): A. the Noise Area strategy with 30-minute checks, flat at 15:15, lookback 3/5/10/14 x band
+  0.5-1.25 x at 0.02% / 0.04% cost, for Nifty, Bank Nifty, Fin Nifty, Midcap Select, Sensex; B. the momentum bot's
+  bursts split by inside / outside the noise band (result to 15:15 and over 30 minutes after 0.04% cost).
+  -> <data>/bot/noise_band.json and Supabase bot_results ('noise_band ...').
+- Momentum Funnel → Indices: "Noise band" section (paper default, best cell, cells positive per index and cost; the
+  filter table). First 60-day check (Yahoo): strategy negative at 0.04%; Bank Nifty bursts inside the band -0.22% vs
+  outside -0.04% (37% vs 61% wins), Nifty no difference; the server's year decides.
