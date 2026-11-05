@@ -1,6 +1,8 @@
-import sys, pickle; sys.path.insert(0, "/home/user/omnipuls")
+"""Gap / trend days on Nifty and Bank Nifty with 1-hour bars (Yahoo, 730 days) and their stocks: entries at 10:15 and after the first hour.
+Usage: python research/gap_days_hourly.py <folder with yahoo1h.pkl>"""
+import sys, pickle; sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.dirname(__import__("os").path.abspath(__file__))))
 import numpy as np, pandas as pd, indices as IX
-S='/tmp/claude-0/-home-user-omnipuls/43304a8f-14f6-5f5b-9345-780c9549450f/scratchpad'
+S = sys.argv[1] if len(sys.argv) > 1 else '.'  # folder with yahoo1h.pkl (Yahoo 1-hour bars, 730 days)
 H = pickle.load(open(S+'/yahoo1h.pkl','rb'))
 COST = 0.0002
 def days_of(df):
