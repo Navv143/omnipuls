@@ -158,8 +158,8 @@ def candle_table(sym: str, df: pd.DataFrame, flow: pd.DataFrame | None = None, k
         "net_cr": (cumin - cumout).to_numpy() / 1e7, "chg": C / pc.reindex(day).to_numpy() - 1,  # change vs yesterday's close
     }
     keep = (mins >= FIRST) & (mins <= LAST)
-    if not keep_all_days:  # live: today only
-        keep &= out["day"] == out["day"].max()
+    if not keep_all_days:  # live: today only, the whole session (the bots watch to the close)
+        keep = (mins >= 560) & (mins <= 930) & (out["day"] == out["day"].max())
     need = ["move_atr", "range_x", "atr", "entry", "exit"] if keep_all_days else ["move_atr", "range_x", "atr"]
     for k in need:
         keep &= np.isfinite(out[k].astype(float))
@@ -414,6 +414,67 @@ def macd_test(index_bars: pd.DataFrame, flow: pd.DataFrame) -> dict:
         res[name] = {"train": stats(a["ret"].to_numpy(), a["day"].to_numpy()),
                      "test": stats(b["ret"].to_numpy(), b["day"].to_numpy())}
     return res
+
+
+# ---------------------------------------------------------------- odds: what happened after similar moments
+
+ODDS_BINS = {"vol": [0, 1.5, 2.5, 4, np.inf], "mv": [0, 0.3, 0.6, 1.0, np.inf]}
+ODDS_TIMES = [630, 720, 871]          # up to 10:30, up to 12:00, up to 14:30 (minutes)
+
+
+def _odds_keys(m, vol_x, move_atr, flow_share, side) -> pd.DataFrame:
+    agree = np.where(side > 0, flow_share >= 0.55, flow_share <= 0.45)
+    return pd.DataFrame({
+        "side": side.astype(np.int8),
+        "tb": np.searchsorted(ODDS_TIMES, m, side="left").clip(0, 2).astype(np.int8),
+        "vol": (np.digitize(np.nan_to_num(vol_x, nan=1.0), ODDS_BINS["vol"][1:-1])).astype(np.int8),
+        "mv": (np.digitize(np.abs(np.nan_to_num(move_atr)), ODDS_BINS["mv"][1:-1])).astype(np.int8),
+        "fl": agree.astype(np.int8)})
+
+
+def odds_table(T: dict, cost: float = COST) -> dict:
+    """For every kind of moment (side, time of day, volume vs usual, move from open in ATR, money flow agreeing),
+    what happened next on past days: share that kept going to 15:15, average result after costs, share that ran
+    another 1 ATR. Each stock-day counts once per kind (its first such candle)."""
+    if not T:
+        return {}
+    side = np.sign(T["move"]).astype(np.int8)
+    k = _odds_keys(T["m"], T["vol_x"], T["move_atr"], T["flow_share"], side)
+    ok = (side != 0) & np.isfinite(T["entry"]) & np.isfinite(T["exit"]) & (T["atr"] > 0)
+    k["sym"], k["day"] = T["sym"], T["day"]
+    s = side.astype(float)
+    ret = s * (T["exit"] / T["entry"] - 1) - cost
+    fav = np.where(side > 0, T["maxhigh"] - T["entry"], T["entry"] - T["minlow"]) / T["atr"]
+    k["ret"], k["run"] = ret, fav >= 1.0
+    k = k[ok].drop_duplicates(["sym", "day", "side", "tb", "vol", "mv", "fl"])
+    out = {"days": int(len(np.unique(T["day"]))), "levels": {}}
+    for name, cols in (("full", ["side", "tb", "vol", "mv", "fl"]), ("no_time", ["side", "vol", "mv", "fl"]),
+                       ("coarse", ["side", "vol", "mv"])):
+        g = k.groupby(cols).agg(n=("ret", "size"), win=("ret", lambda r: float((r > 0).mean())),
+                                avg=("ret", "mean"), run=("run", "mean"))
+        out["levels"][name] = {"|".join(map(str, i if isinstance(i, tuple) else (i,))):
+                               [int(r.n), round(r.win * 100, 1), round(r.avg * 100, 3), round(r.run * 100, 1)]
+                               for i, r in g.iterrows()}
+    base = k.groupby("side")["ret"].agg(lambda r: float((r > 0).mean()))
+    out["base_win"] = {str(int(i)): round(v * 100, 1) for i, v in base.items()}
+    return out
+
+
+def odds_lookup(table: dict, m: float, vol_x: float, move_atr: float, flow_share: float, side: int,
+                min_n: int = 40) -> dict | None:
+    """The odds for one moment now: the most specific level with enough past cases."""
+    if not table or not side:
+        return None
+    k = _odds_keys(np.array([m]), np.array([vol_x]), np.array([move_atr]), np.array([flow_share]),
+                   np.array([side])).iloc[0]
+    keys = {"full": [k.side, k.tb, k.vol, k.mv, k.fl], "no_time": [k.side, k.vol, k.mv, k.fl],
+            "coarse": [k.side, k.vol, k.mv]}
+    for level in ("full", "no_time", "coarse"):
+        v = table["levels"].get(level, {}).get("|".join(str(int(x)) for x in keys[level]))
+        if v and v[0] >= min_n:
+            return {"n": int(v[0]), "win": float(v[1]), "avg": float(v[2]), "run": float(v[3]), "level": level,
+                    "edge": round(float(v[1]) - float(table.get("base_win", {}).get(str(int(side)), 50.0)), 1)}
+    return None
 
 # ---------------------------------------------------------------- live: today's first signals of a passed rule
 

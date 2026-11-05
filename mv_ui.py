@@ -84,6 +84,31 @@ CSS = """<style>
 .mx-lad .mp{position:absolute;top:10px;width:9px;height:9px;margin-left:-4px;transform:rotate(45deg);background:var(--om-warn)}
 .mx-lad .lb{position:absolute;top:-6px;font-family:var(--font-num);font-size:.62rem;color:var(--om-text-3);transform:translateX(-50%)}
 .mx-ch .f{display:flex;justify-content:space-between;font-family:var(--font-num);font-size:.66rem;color:var(--om-faint)}
+.mx-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:10px;margin:4px 0 6px}
+.mx-k{border:1px solid var(--om-border);border-radius:var(--r-md);padding:11px 13px;background:linear-gradient(180deg,var(--om-surface),var(--om-sunken))}
+.mx-k .h{font-size:var(--fs-2xs);letter-spacing:.08em;text-transform:uppercase;color:var(--om-muted);display:flex;align-items:center;gap:6px}
+.mx-k .v{font-family:var(--font-num);font-size:var(--fs-xl);font-weight:600;color:var(--c);margin-top:3px}
+.mx-k .s{font-size:var(--fs-xs);color:var(--om-faint);margin-top:1px}
+.mx-dot{width:8px;height:8px;border-radius:50%;background:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 25%,transparent)}
+.mx-ev{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+.mx-e{border:1px solid var(--om-border);border-left:3px solid var(--c);border-radius:var(--r-sm);padding:10px 12px;background:var(--om-surface)}
+.mx-e .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mx-e .nm{font-weight:700;font-size:var(--fs-md)}
+.mx-e .px{font-family:var(--font-num);font-size:var(--fs-sm);color:var(--om-text-3)}
+.mx-e ul{margin:5px 0 6px;padding-left:16px;font-size:var(--fs-xs);color:var(--om-text-2)}
+.mx-e li{margin:1px 0}
+.mx-odds{display:flex;align-items:center;gap:8px;font-size:var(--fs-2xs);color:var(--om-muted)}
+.mx-odds .b{flex:1;position:relative;height:7px;border-radius:4px;background:var(--om-border-soft)}
+.mx-odds .b span{position:absolute;left:0;top:0;height:7px;border-radius:4px;background:var(--c)}
+.mx-odds .b i{position:absolute;left:50%;top:-3px;width:1px;height:13px;background:var(--om-faint)}
+.mx-feed{border:1px solid var(--om-border);border-radius:var(--r-md);background:var(--om-surface);max-height:420px;overflow:auto}
+.mx-f{display:grid;grid-template-columns:48px 92px 1fr auto;gap:8px;align-items:center;padding:6px 12px;
+  border-bottom:1px solid var(--om-border-soft);font-size:var(--fs-xs)}
+.mx-f:last-child{border-bottom:none}
+.mx-f .t{font-family:var(--font-num);color:var(--om-faint)}
+.mx-f .s{font-weight:600;color:var(--c)}
+.mx-f .w{font-family:var(--font-num);color:var(--om-text-3)}
+@media (max-width:640px){.mx-f{grid-template-columns:42px 80px 1fr}.mx-f .w{display:none}}
 .mx-legend{font-size:var(--fs-xs);color:var(--om-faint);margin-top:6px}
 </style>"""
 
@@ -237,7 +262,7 @@ def idea_panel(idea: dict, when: str, md=lambda s: _e(s)) -> str:
 
 
 STATUS_STYLE = {  # status -> (colour, icon)
-    "● SIGNAL": (UP, "●"), "Waiting": (WARN, "◔"), "Watch": (ACCENT, "◎"), "Confluence": (ACCENT, "◆"),
+    "● SIGNAL": (UP, "●"), "Good odds": (UP, "%"), "Waiting": (WARN, "◔"), "Watch": (ACCENT, "◎"), "Confluence": (ACCENT, "◆"),
     "Done today": (NEUTRAL, "✓"), "None today": (NEUTRAL, "–"), "No data": (NEUTRAL, "?"),
 }
 
@@ -358,3 +383,48 @@ def chain_tile(read: dict | None, spot: float | None, max_pain: float | None) ->
 
 def chains(tiles: list[str]) -> str:
     return "<div class='mx-chains'>" + "".join(t for t in tiles if t) + "</div>"
+
+
+def kpi(title: str, value: str, sub: str = "", color: str = NEUTRAL, dot: bool = False) -> str:
+    d = f"<span class='mx-dot' style='--c:{color}'></span>" if dot else ""
+    return (f"<div class='mx-k' style='--c:{color}'><div class='h'>{d}{_e(title)}</div><div class='v'>{_e(value)}</div>"
+            f"<div class='s'>{_e(sub)}</div></div>")
+
+
+def kpis(parts: list[str]) -> str:
+    return "<div class='mx-kpis'>" + "".join(parts) + "</div>"
+
+
+def odds_bar(o: dict | None) -> str:
+    if not o:
+        return "<div class='mx-odds'>No past odds yet for this kind of moment.</div>"
+    c = UP if o["win"] >= 55 else DOWN if o["win"] < 45 else NEUTRAL
+    return (f"<div class='mx-odds' style='--c:{c}' title='Past days, same kind of moment: {o['n']} cases; "
+            f"average {o['avg']:+.2f}% to 15:15 after costs; ran another 1 ATR {o['run']:.0f}% of the time'>"
+            f"<span>kept going</span><div class='b'><span style='width:{min(o['win'], 100):.0f}%'></span><i></i></div>"
+            f"<b style='color:{c}'>{o['win']:.0f}%</b><span>n {o['n']} · {o['avg']:+.2f}%</span></div>")
+
+
+def event_cards(events: list, limit: int = 12) -> str:
+    if not events:
+        return "<div class='mx-quiet'>No sudden change right now.</div>"
+    out = []
+    for r in events[:limit]:
+        c = UP if r["side"] > 0 else DOWN if r["side"] < 0 else NEUTRAL
+        out.append(f"<div class='mx-e' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['stock'])}</span>"
+                   f"<span class='px'>{_num(r['price'])} <span class='mx-chip' style='--c:{c}'>{_sgn(r['chg'])}</span></span></div>"
+                   f"<div class='mx-quiet' style='margin:1px 0 0'>{_e(r['sector'])} · {_e(r['time'])} · score {r['score']}</div>"
+                   "<ul>" + "".join(f"<li>{_e(t)}</li>" for t in r["events"]) + "</ul>" + odds_bar(r.get("odds")) + "</div>")
+    return "<div class='mx-ev'>" + "".join(out) + "</div>"
+
+
+def feed(items: list, limit: int = 80) -> str:
+    if not items:
+        return "<div class='mx-quiet'>The feed fills as sudden changes happen in market hours.</div>"
+    rows = []
+    for e in items[:limit]:
+        c = UP if e["side"] > 0 else DOWN if e["side"] < 0 else NEUTRAL
+        w = f"{e['win']:.0f}% kept going (n {e['n']})" if e.get("win") is not None else ""
+        rows.append(f"<div class='mx-f' style='--c:{c}'><span class='t'>{_e(e['time'])}</span><span class='s'>{_e(e['stock'])}</span>"
+                    f"<span>{_e(e['text'])}</span><span class='w'>{_e(w)}</span></div>")
+    return "<div class='mx-feed'>" + "".join(rows) + "</div>"
