@@ -414,7 +414,8 @@ def event_cards(events: list, limit: int = 12) -> str:
         out.append(f"<div class='mx-e' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['stock'])}</span>"
                    f"<span class='px'>{_num(r['price'])} <span class='mx-chip' style='--c:{c}'>{_sgn(r['chg'])}</span></span></div>"
                    f"<div class='mx-quiet' style='margin:1px 0 0'>{_e(r['sector'])} · {_e(r['time'])} · score {r['score']}</div>"
-                   "<ul>" + "".join(f"<li>{_e(t)}</li>" for t in r["events"]) + "</ul>" + odds_bar(r.get("odds")) + "</div>")
+                   "<ul>" + "".join(f"<li>{_e(t)}</li>" for t in r["events"]) + "</ul>" + odds_bar(r.get("odds"))
+                   + plan_html(r.get("plan")) + "</div>")
     return "<div class='mx-ev'>" + "".join(out) + "</div>"
 
 
@@ -661,10 +662,10 @@ FUNNEL_CSS = """<style>
 .wc .g div{background:var(--om-sunken);border:1px solid var(--om-border-soft);border-radius:8px;padding:4px 8px}
 .wc .g small{display:block;font-size:.58rem;letter-spacing:.07em;text-transform:uppercase;color:var(--om-faint)}
 .wc .g b{font-family:var(--font-num);font-size:var(--fs-sm)}
-.wc .plan{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:8px}
-.wc .plan div{border-radius:8px;padding:4px 7px;border:1px solid var(--om-border-soft);background:var(--om-sunken)}
-.wc .plan small{display:block;font-size:.56rem;letter-spacing:.07em;text-transform:uppercase;color:var(--om-faint)}
-.wc .plan b{font-family:var(--font-num);font-size:var(--fs-xs)}
+.plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:5px;margin-top:8px}
+.plan div{border-radius:8px;padding:4px 7px;border:1px solid var(--om-border-soft);background:var(--om-sunken)}
+.plan small{display:block;font-size:.56rem;letter-spacing:.07em;text-transform:uppercase;color:var(--om-faint)}
+.plan b{font-family:var(--font-num);font-size:var(--fs-xs)}
 </style>"""
 
 
@@ -767,3 +768,26 @@ def plan_html(p: dict | None) -> str:
             f"<div><small>Target 2</small><b style='color:var(--om-up)'>{_num(p['tp2'])}</b></div></div>"
             f"<div class='px' style='font-size:var(--fs-2xs);margin-top:4px'>risk {p['risk_pct']:.2f}% · half off at target 1, "
             f"stop to entry · exit {p.get('exit', '15:15')}</div>")
+
+
+def idea_card(i: dict) -> str:
+    """A master-bot idea: what to do, why, how many checks agree, and the full plan."""
+    long = i["side"] == "BUY"
+    c = UP if long else DOWN
+    lab = {"passed": ("TESTED", UP), "odds": ("GOOD ODDS", ACCENT), "watch": ("WATCH", WARN)}.get(i["status"], ("IDEA", NEUTRAL))
+    p = i.get("plan") or {}
+    where = (f"Buy near {_num(p['entry'])}" if long else f"Sell near {_num(p['entry'])}") if p else ("Buy" if long else "Sell")
+    checks = "".join(f"<span style='--v:{UP if ok else DOWN}'>{_e(k)} {'✓' if ok else '✗'}</span>"
+                     for k, ok in (i.get("checks") or {}).items())
+    return (f"<div class='wc' style='--c:{c}'><div class='top'><span class='nm'>{_e(i['stock'])} · {'LONG' if long else 'SHORT'}</span>"
+            f"<span class='sd' style='--c:{lab[1]}'>{lab[0]}</span></div>"
+            f"<div class='px'>{_e(i.get('sector', ''))} · since {_e(i.get('time', ''))} · checks {_e(i.get('agree', ''))}</div>"
+            f"<div style='font-weight:700;margin-top:8px;color:{c}'>{where}</div>"
+            f"<div class='px' style='font-family:Inter,sans-serif;font-size:var(--fs-xs);margin-top:3px'>{_e(i.get('source', ''))}</div>"
+            + plan_html(p) + f"<div class='votes' style='margin-top:8px'>{checks}</div></div>")
+
+
+def idea_cards(ideas: list) -> str:
+    if not ideas:
+        return "<div class='mx-quiet'>No idea right now.</div>"
+    return "<div class='wl'>" + "".join(idea_card(i) for i in ideas) + "</div>"

@@ -17,6 +17,31 @@ if "streamlit" not in sys.modules:  # started with `python app.py` or the deskto
     sys.exit()
 bootstrap.ensure()  # started with `streamlit run`: still fill any gaps
 
+
+def _reload_changed_modules():
+    """Streamlit re-runs app.py on every page load but keeps imported modules in memory, so after the server pulls new
+    code the pages could keep using the old helpers (new levels / cards / AI Desk not showing). Pure helper modules
+    whose file changed are dropped from memory here and imported fresh below. Modules that hold live state (Dhan,
+    the scan service, the feed, accounts, storage) are never reloaded."""
+    import os
+    seen = getattr(bootstrap, "_mtimes", None)
+    first = seen is None
+    if first:
+        seen = bootstrap._mtimes = {}
+    base = os.path.dirname(os.path.abspath(__file__))
+    for name in ("mv_ui", "funnel", "index_funnel", "index_levels", "desk_agents", "agents", "market_view", "bot",
+                 "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex"):
+        try:
+            m = os.stat(os.path.join(base, name + ".py")).st_mtime
+        except OSError:
+            continue
+        if (name in seen and seen[name] != m) or first:  # first pass of a running server: start fresh once
+            sys.modules.pop(name, None)
+        seen[name] = m
+
+
+_reload_changed_modules()
+
 import json
 import os
 import socket
@@ -5975,7 +6000,8 @@ def _momentum_section():
 def page_bot():
     status_strip()
     st.header("Bots")
-    st.markdown(MX.CSS, unsafe_allow_html=True)
+    for _c in (MX.CSS, MX.FUNNEL_CSS, MX.DESK_CSS):
+        st.markdown(_c, unsafe_allow_html=True)
     l, r = st.columns([3, 1], vertical_alignment="center")
     l.caption("The bots watch every F&O stock, the indices, sectors and VIX every 5 minutes: sudden changes against "
               "each stock's own usual, with the odds of what happened next on past days, and ideas only when the "
@@ -6010,12 +6036,19 @@ def page_bot():
 
         st.markdown(MX.section("Master bot: ideas", master.get("note", "")), unsafe_allow_html=True)
         if ideas:
+            st.markdown(MX.idea_cards(ideas[:12]), unsafe_allow_html=True)
             lab = {"passed": "✅ Tested", "odds": "🎯 Good odds", "watch": "👀 Watch"}
-            st.dataframe(pd.DataFrame([{"Status": lab[i["status"]], "Stock": i["stock"], "Side": i["side"],
-                                        "Since": i["time"], "Price": i["price"], "Checks": i["agree"],
-                                        "Odds kept %": (i.get("odds") or {}).get("win"), "Sector": i["sector"],
-                                        "Why": i["why"]} for i in ideas]),
-                         hide_index=True, width="stretch", column_config={"Why": st.column_config.TextColumn(width="large")})
+            with st.expander(f"All {len(ideas)} ideas as a table (with levels)", icon=":material/table_rows:"):
+                st.dataframe(pd.DataFrame([{
+                    "Status": lab.get(i["status"], i["status"]), "Stock": i["stock"], "Side": i["side"], "Since": i["time"],
+                    "Entry": (i.get("plan") or {}).get("entry"), "Stop": (i.get("plan") or {}).get("sl"),
+                    "Target 1": (i.get("plan") or {}).get("tp1"), "Target 2": (i.get("plan") or {}).get("tp2"),
+                    "Risk %": (i.get("plan") or {}).get("risk_pct"), "Checks": i["agree"],
+                    "Odds kept %": (i.get("odds") or {}).get("win"), "Sector": i["sector"], "Why": i["why"]} for i in ideas]),
+                    hide_index=True, width="stretch", column_config={"Why": st.column_config.TextColumn(width="large")})
+            st.caption("Plan for every idea: entry at the price shown · stop just beyond the last 30 minutes' swing "
+                       "(0.3-0.6 of the daily ATR) · target 1 = 1R (half off, stop to entry) · target 2 = 2R · exit 15:15. "
+                       "Every idea is recorded and scored at the close (Signal record below).")
         else:
             st.caption("No idea yet: no stock has the balance (market, Nifty, sector, VIX) agreeing with a tested rule "
                        "or good past odds.")
@@ -6074,6 +6107,7 @@ def page_bot():
                 st.dataframe(pd.DataFrame(sig), hide_index=True, width="stretch")
             _bot_flags(bt.get("unusual"), [("Stock", "name"), ("Move", "value"), ("Sector", "sector"), ("Why", "text")])
 
+    _signal_record()
     st.divider()
     _momentum_section()
     st.subheader("Setup Finder research")

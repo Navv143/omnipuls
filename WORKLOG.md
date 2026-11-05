@@ -446,3 +446,13 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - First backtest of the funnel with the plan (research/funnel_backtest.py): about break-even, not proven.
 - AI Desk: Indian indices and 16 Indian stocks first, then crypto, forex, commodities and the rupee (no US / foreign
   stocks or indices); ATLAS reads Nifty, Bank Nifty, India VIX and USD/INR; the dollar index is context only.
+
+## 5 Nov 2026: Live-reload fix, plans for every bot idea
+
+- Fix: the server kept old helper modules in memory after pulling new code (Streamlit re-runs app.py but not its
+  imports), so the trade levels and the Indian AI Desk did not show. Changed pure helper modules are now reloaded on
+  the next page load (and once when a running server picks up this fix); stateful ones (Dhan, scan service, feed,
+  accounts, storage) are never reloaded.
+- Bots: every master-bot idea and radar event has the plan (entry / "buy near" or "sell near", stop, target 1, target 2,
+  exit 15:15); ideas show as cards with their checks; every master idea is recorded and scored with the other signals
+  (source "Master bot (tested / odds / watch)"); Signal record on the Bots page too.
