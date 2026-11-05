@@ -40,9 +40,10 @@ ALIGNED = "Aligned 10:00"
 FADE = "Nifty midday fade"
 SEC_UP = "Sector top 2 UP"
 SEC_DN = "Sector top 2 DOWN vs Nifty"
+NIFTY_ORB = "Nifty ORB break"
 TESTED = {GRINDER: ("+0.18% a trade", "56%"), IGNITION: ("+0.13% a trade", "40%"), ALIGNED: ("+0.16% a trade", "55%"),
           FADE: ("+0.09% a trade (11 days)", "82%"), SEC_UP: ("+0.22% a trade", "56%"),
-          SEC_DN: ("+0.13% a trade (14 days)", "62%")}
+          SEC_DN: ("+0.13% a trade (14 days)", "62%"), NIFTY_ORB: ("+1.31R (22 days; 3 yrs hourly: ~0)", "41%")}
 
 
 def _hm(idx) -> np.ndarray:
@@ -250,6 +251,38 @@ def sector_picks(S: dict, nifty, now: datetime, checks=("11:00", "12:00", "13:00
     return out
 
 
+def nifty_orb(nifty, now: datetime) -> dict | None:
+    """Nifty first 5-min close beyond the 9:15-9:30 range (09:30-14:30); stop at that candle's far end, only when the
+    risk is 0.1-0.5 ATR (small stop); exit 15:20. research/setup_scan.py: +1.31R a trade on 22 days (4 big trend days),
+    but the hourly first-hour version over 3 years is ~0R - recorded to see if the 5-min version holds."""
+    if nifty is None or not getattr(nifty, "ok", False) or len(nifty.today) < 5:
+        return None
+    g = nifty.today
+    hm = _hm(g.index)
+    orh, orl = g["High"].iloc[:3].max(), g["Low"].iloc[:3].min()
+    ok = (hm >= "09:30") & (hm <= "14:30")
+    c = g["Close"].to_numpy()
+    idx = np.flatnonzero(ok & ((c > orh) | (c < orl)))
+    if not len(idx) or idx[0] + 1 >= len(g):
+        return None
+    i = idx[0]
+    side = 1 if c[i] > orh else -1
+    stop = float(g["Low"].iloc[i] if side > 0 else g["High"].iloc[i])
+    e = float(g["Open"].iloc[i + 1])
+    risk = side * (e - stop)
+    A = nifty.atr
+    if risk <= 0 or not A or not (0.1 <= risk / A <= 0.5):
+        return None
+    res = track(g, g.index[i + 1], side, e, stop, e + side * 1000 * risk, now)
+    if res["result"] != "open":
+        res["pct"] = round(res["pct"] + COST - 0.03, 3)        # index costs 0.03%, not the stock 0.12%
+    et = g.index[i + 1].strftime("%H:%M")
+    stop_pct = risk / e * 100
+    return {"day": now.strftime("%Y-%m-%d"), "setup": f"{NIFTY_ORB} NIFTY", "symbol": "NIFTY", "side": side,
+            "signal_at": hm[i], "entry_at": et, "entry_at_ist": et, "entry": round(e, 2), "sl": round(stop, 2), "tp": None,
+            "stop_pct": round(stop_pct, 3), "r": round(res["pct"] / stop_pct, 2), **res}
+
+
 def nifty_fade(nifty, now: datetime, look: int = 12, min_brk: float = 0.1) -> dict | None:
     """Short Nifty after its first midday (11:00-14:00) close > min_brk % above the last hour's high; exit 60 min later."""
     if nifty is None or not getattr(nifty, "ok", False):
@@ -293,7 +326,7 @@ def rows(S: dict, nifty, now: datetime) -> list[dict]:
                     "signal_at": p["signal_at"], "entry_at": et, "entry_at_ist": et, "entry": round(p["entry"], 2),
                     "sl": round(p["sl"], 2), "tp": round(p["tp"], 2), "stop_pct": round(stop_pct, 3),
                     "r": round(res["pct"] / stop_pct, 2) if stop_pct else None, **res})
-    f = nifty_fade(nifty, now)
-    if f:
-        out.append(f)
+    for f in (nifty_fade(nifty, now), nifty_orb(nifty, now)):
+        if f:
+            out.append(f)
     return out
