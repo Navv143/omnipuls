@@ -7459,6 +7459,27 @@ def _candle_study_results():
                      "Checklist top 2: toppers % (test)": t2.get("test_topper_pct"), "Checklist top 2: % a trade (test)": t2.get("test_rest_pct")})
     if rows:
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    st.markdown("**Scenario tree: gap group → gap side → first candle → volume → market → footprints → structure**")
+    sc1, sc2, sc3, sc4 = st.columns(4)
+    tkey = sc1.selectbox("Timeframe / time", list(tabs), index=list(tabs).index("5m 10:00") if "5m 10:00" in tabs else 0,
+                         key="cs_tree_key") if tabs else None
+    depth = sc2.slider("Layers", 1, 7, (1, 7), key="cs_tree_depth")
+    min_n = sc3.number_input("Min signals", 20, 2000, 30, 10, key="cs_tree_n")
+    order = sc4.selectbox("Sort by", ["Weaker of train / test", "Rest of day %", "Toppers %", "Signals"], key="cs_tree_sort")
+    L = pd.DataFrame((tabs.get(tkey) or {}).get("layers") or []) if tkey else pd.DataFrame()
+    if not L.empty:
+        L = L[(L["depth"] >= depth[0]) & (L["depth"] <= depth[1]) & (L["n"] >= min_n)].copy()
+        L["weaker"] = L[["train", "test"]].min(axis=1)
+        col = {"Weaker of train / test": "weaker", "Rest of day %": "rest_pct", "Toppers %": "topper_pct", "Signals": "n"}[order]
+        L = L.sort_values(col, ascending=False)
+        st.dataframe(L.rename(columns={"scenario": "Scenario", "n": "Signals", "per_day": "A day", "topper_pct": "Top 10 %",
+                                       "big_pct": "≥1.5 ATR day %", "rest_pct": "Rest of day %", "train": "Train %",
+                                       "test": "Test %", "weaker": "Weaker %", "win_pct": "Win %", "months_pos": "Months +",
+                                       "last_month": "Last month %", "long": "Long %", "short": "Short %", "depth": "Layers"}),
+                     hide_index=True, width="stretch", height=520)
+        st.caption("Each row is one path through the layers, tested on its own: rest of the day from the next candle's open "
+                   "after 0.12% costs; train = first 60% of days, test = the rest. With hundreds of paths some look good by "
+                   "luck - trust the rows with many signals, both halves positive and most months positive.")
     pick = st.selectbox("Checklist detail", list(tabs), index=min(len(tabs) - 1, list(tabs).index("5m 10:00")) if "5m 10:00" in tabs else 0,
                         key="cs_pick") if tabs else None
     if pick:
