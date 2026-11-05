@@ -21,9 +21,14 @@ def resample(df: pd.DataFrame, rule: str) -> pd.DataFrame:
 
 
 def ebp_trades(x: pd.DataFrame, cost: float, entry="market", target="dol", rr=2.0, dol_n=10, prior_opp=True, wait=3,
-               hold=20, min_rr=1.0, side_filter=0):
+               hold=20, min_rr=1.0, side_filter=0, intraday_tz=None, last_entry="14:15", flat_at="15:15"):
+    """intraday_tz (e.g. 'Asia/Kolkata'): no entry after last_entry, exit at the open of the first candle at / after
+    flat_at, never held overnight."""
     o, h, l, c = (x[k].to_numpy(float) for k in ("Open", "High", "Low", "Close"))
     n = len(x)
+    if intraday_tz:
+        lt = x.index.tz_convert(intraday_tz) if x.index.tz is not None else x.index   # naive = already local time
+        hhmm, dd = lt.strftime("%H:%M").to_numpy(), lt.normalize().to_numpy()
     out, busy = [], -1
     for k in range(max(dol_n, 1) + 1, n - 2):
         if k <= busy:
@@ -40,6 +45,8 @@ def ebp_trades(x: pd.DataFrame, cost: float, entry="market", target="dol", rr=2.
             continue
         stop = l[k] if s > 0 else h[k]
         # entry
+        if intraday_tz and hhmm[k] >= last_entry:
+            continue
         if entry == "market":
             i, e = k + 1, o[k + 1]
         else:
@@ -51,6 +58,8 @@ def ebp_trades(x: pd.DataFrame, cost: float, entry="market", target="dol", rr=2.
                     break
             if i is None:
                 continue
+        if intraday_tz and (dd[i] != dd[k] or hhmm[i] >= flat_at):
+            continue
         risk = s * (e - stop)
         if risk <= 0:
             continue
@@ -62,6 +71,9 @@ def ebp_trades(x: pd.DataFrame, cost: float, entry="market", target="dol", rr=2.
             tg = e + s * rr * risk
         px, how, m = None, "time", i
         for m in range(i, min(i + hold, n)):
+            if intraday_tz and m > i and (dd[m] != dd[i] or hhmm[m] >= flat_at):
+                px, how = o[m], "15:15"
+                break
             if (s > 0 and l[m] <= stop) or (s < 0 and h[m] >= stop):
                 px, how = stop, "stop"
                 break
