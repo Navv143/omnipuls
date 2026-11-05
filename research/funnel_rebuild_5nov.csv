@@ -1,0 +1,33 @@
+stock,side,time,entry,sl,tp1,stop%,plain,plain_R,managed,managed_R,managed_%,best_R,worst_R,session
+360ONE,BUY,10:30,1130.0,1108.73,1151.27,1.88,15:15,0.61,momentum slowed 10:50,0.11,0.079,0.52,-0.16,morning (never recorded)
+ASHOKLEY,BUY,10:30,170.32,167.86,172.78,1.44,15:15,0.02,momentum slowed 11:25,0.15,0.097,0.64,-0.36,morning (never recorded)
+BSE,BUY,10:30,3763.9,3733.12,3794.68,0.82,TP2,1.5,target 2 11:35,1.5,1.107,2.21,-0.16,morning (never recorded)
+HDFCAMC,BUY,10:30,2633.5,2612.47,2654.53,0.8,15:15,-0.05,15:15 exit 15:15,-0.05,-0.162,0.4,-0.63,morning (never recorded)
+JIOFIN,BUY,10:30,229.4,226.49,232.31,1.27,15:15,0.03,momentum slowed 14:00,0.35,0.329,0.68,-0.2,morning (never recorded)
+MOTHERSON,BUY,10:30,165.0,163.67,166.33,0.81,TP2,1.5,momentum slowed 11:35,0.3,0.122,0.74,-0.24,morning (never recorded)
+MOTILALOFS,BUY,10:30,1085.7,1063.75,1107.65,2.02,15:15,0.42,15:15 exit 15:15,0.42,0.727,0.45,-0.36,morning (never recorded)
+NAM-INDIA,BUY,10:30,1059.3,1045.83,1072.77,1.27,TP1 then 15:15,0.9,15:15 exit 15:15,0.9,1.026,1.73,-0.5,morning (never recorded)
+PAYTM,BUY,10:30,1795.2,1776.7,1813.7,1.03,15:15,-0.39,momentum slowed 10:50,-0.18,-0.304,0.58,-0.36,morning (never recorded)
+SBICARD,BUY,10:30,589.65,581.27,598.03,1.42,stop,-1.0,stop 11:00,-1.0,-1.541,0.09,-1.12,morning (never recorded)
+ETERNAL,BUY,10:40,358.15,351.84,364.46,1.76,15:15,0.12,15:15 exit 15:15,0.12,0.089,0.21,-0.67,morning (never recorded)
+BRITANNIA,SELL,10:45,4968.3,5006.09,4930.51,0.76,stop,-1.0,stop 13:55,-1.0,-0.881,0.14,-1.1,morning (never recorded)
+PIIND,SELL,10:45,1850.6,1886.96,1814.24,1.96,stop,-1.0,stop 11:25,-1.0,-2.085,0.18,-1.08,morning (never recorded)
+BPCL,SELL,10:45,315.55,318.81,312.29,1.03,stop,-1.0,stop 11:25,-1.0,-1.153,0.28,-1.01,morning (never recorded)
+KOTAKBANK,SELL,10:50,462.1,465.19,459.01,0.67,stop,-1.0,stop 12:40,-1.0,-0.789,0.31,-1.07,morning (never recorded)
+OIL,SELL,10:50,435.75,438.51,432.99,0.63,TP2,1.5,target 2 12:25,1.5,0.83,2.26,-0.45,morning (never recorded)
+M&M,BUY,11:15,3075.6,3057.01,3094.19,0.6,TP2,1.5,target 2 13:00,1.5,0.786,2.71,-0.33,morning (never recorded)
+PREMIERENE,SELL,11:20,884.35,900.5,868.2,1.83,15:15,-0.04,momentum slowed 12:20,0.24,0.327,0.54,-0.23,morning (never recorded)
+APOLLOHOSP,SELL,11:20,8333.5,8404.66,8262.34,0.85,15:15,-0.48,momentum slowed 11:45,0.27,0.114,0.68,-0.07,morning (never recorded)
+NHPC,SELL,11:20,79.88,80.68,79.08,1.0,stop,-1.0,stop 12:30,-1.0,-1.122,0.18,-1.07,morning (never recorded)
+INDUSINDBK,BUY,11:55,896.85,890.28,903.42,0.73,TP2,1.5,target 2 12:35,1.5,0.979,2.05,-0.13,morning (never recorded)
+TMPV,BUY,11:55,292.85,290.86,294.84,0.68,TP1 then stop at entry,0.5,trailing stop 14:20,0.78,0.409,1.76,-0.48,morning (never recorded)
+EICHERMOT,BUY,12:20,7677.0,7623.94,7730.06,0.69,15:15,0.38,momentum slowed 14:20,-0.15,-0.224,0.54,-0.34,morning (never recorded)
+BAJFINANCE,BUY,12:20,1057.6,1046.82,1068.38,1.02,TP1 then 15:15,1.07,trailing stop 14:25,0.63,0.523,1.33,-0.12,morning (never recorded)
+MARUTI,BUY,12:45,12575.0,12497.0,12653.0,0.62,TP1 then 15:15,0.98,momentum slowed 14:15,0.4,0.127,0.79,-0.08,morning (never recorded)
+PATANJALI,BUY,13:35,402.4,395.05,409.75,1.83,TP1 then 15:15,1.17,momentum slowed 14:25,0.16,0.166,0.8,-0.2,afternoon
+IDFCFIRSTB,BUY,13:50,77.73,77.0,78.46,0.95,15:15,-0.04,15:15 exit 15:15,-0.04,-0.159,0.32,-0.42,afternoon
+SUNPHARMA,BUY,14:10,1836.1,1824.8,1847.4,0.62,15:15,-0.01,15:15 exit 15:15,-0.01,-0.125,0.17,-0.72,afternoon
+FORTIS,BUY,14:10,822.2,810.42,833.98,1.43,15:15,-0.31,15:15 exit 15:15,-0.31,-0.558,0.03,-0.59,afternoon
+AUROPHARMA,BUY,14:10,1778.5,1756.99,1800.01,1.21,15:15,-0.07,momentum slowed 15:10,0.16,0.071,0.85,-0.35,afternoon
+ICICIBANK,BUY,14:35,1498.0,1489.59,1506.41,0.56,15:15,0.06,15:15 exit 15:15,0.06,-0.087,0.24,-0.29,afternoon
+BIOCON,BUY,14:40,362.8,359.67,365.93,0.86,15:15,-0.19,15:15 exit 15:15,-0.19,-0.285,0.03,-0.48,afternoon
