@@ -1266,6 +1266,13 @@ def cycle(mkt: Market) -> dict:
         momentum_step(mkt, now)
     except Exception as e:
         log(f"momentum paper: {e}")
+    try:
+        import ironfly as IFY
+        fly = IFY.step(now)
+        if fly:
+            _cloud().upsert_rows("crypto_paper", _clean([IFY.paper_row(fly)]), "day,setup")
+    except Exception as e:
+        log(f"iron fly: {e}")
     closing = None
     if now.strftime("%H:%M") >= CLOSE_FROM:
         try:
@@ -1312,6 +1319,8 @@ def run_research():
         log(f"index funnel backtest: finished (exit {x.returncode})")
         nz = subprocess.run([sys.executable, str(paths.HERE / "noise_research.py")], cwd=str(paths.HERE), timeout=3600)
         log(f"noise band research: finished (exit {nz.returncode})")
+        cs = subprocess.run([sys.executable, str(paths.HERE / "candle_study.py")], cwd=str(paths.HERE), timeout=3 * 3600)
+        log(f"candle study (6 months, 3 / 5 / 15 min): finished (exit {cs.returncode})")
     except Exception as e:
         log(f"momentum study: {e}")
     if r.returncode != 0 and not (B.BOT_DIR / "latest.json").exists():

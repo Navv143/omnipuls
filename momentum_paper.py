@@ -41,9 +41,11 @@ FADE = "Nifty midday fade"
 SEC_UP = "Sector top 2 UP"
 SEC_DN = "Sector top 2 DOWN vs Nifty"
 NIFTY_ORB = "Nifty ORB break"
+FOOTPRINT = "Footprint top 2 10:00"
 TESTED = {GRINDER: ("+0.18% a trade", "56%"), IGNITION: ("+0.13% a trade", "40%"), ALIGNED: ("+0.16% a trade", "55%"),
           FADE: ("+0.09% a trade (11 days)", "82%"), SEC_UP: ("+0.22% a trade", "56%"),
-          SEC_DN: ("+0.13% a trade (14 days)", "62%"), NIFTY_ORB: ("+1.31R (22 days; 3 yrs hourly: ~0)", "41%")}
+          SEC_DN: ("+0.13% a trade (14 days)", "62%"), NIFTY_ORB: ("+1.31R (22 days; 3 yrs hourly: ~0)", "41%"),
+          FOOTPRINT: ("+0.55% a trade (39 days)", "65%")}
 
 
 def _hm(idx) -> np.ndarray:
@@ -251,6 +253,46 @@ def sector_picks(S: dict, nifty, now: datetime, checks=("11:00", "12:00", "13:00
     return out
 
 
+_FP_CACHE: dict = {}
+
+
+def footprint_picks(S: dict, now: datetime, T: str = "10:00", top: int = 2) -> list[dict]:
+    """candle_study.py's big-player footprints at 10:00 on 5-minute candles: a trap the other way first, absorption,
+    strong closes, opened against then turned, volume on the candles going its way, rejection wicks. The 2 stocks with
+    the most (ties: the bigger move) - in the direction of their move so far. Stop 1 ATR, exit 15:20.
+    Tested (39 days): +0.55% a trade held to the close, halves +0.58 / +0.51, 65% win, long and short alike."""
+    import candle_study as CS
+    day = now.strftime("%Y-%m-%d")
+    if now.strftime("%H:%M") < T:
+        return []
+    if day not in _FP_CACHE:
+        rows = []
+        for sym, s in S.items():
+            x = pd.concat([s.hist, s.today])
+            x = x[(x.index.strftime("%H:%M") >= "09:15") & (x.index.strftime("%H:%M") <= "15:29")]
+            if x.index.normalize().nunique() < 23 or not (_hm(s.today.index) >= T).any():
+                continue
+            try:
+                r = CS.stock_rows(sym, x, 5, {}, {}, last_only=True, times=(T,))
+            except Exception:
+                continue
+            for z in r:
+                z["fp"] = sum(bool(z[k]) for k in CS.FOOTPRINTS)
+                z["w"] = z["mv"] * z["sd"]
+                z["stock"] = s
+                rows.append(z)
+        best = sorted(rows, key=lambda z: (z["fp"], z["w"]), reverse=True)[:top]
+        _FP_CACHE.clear()
+        _FP_CACHE[day] = best
+    out = []
+    for z in _FP_CACHE.get(day, []):
+        sd, A, e = int(z["sd"]), float(z["A"]), float(z["entry"])
+        out.append({"setup": FOOTPRINT, "sym": z["sym"], "side": sd, "signal_at": T, "entry_ts": z["entry_ts"], "entry": e,
+                    "sl": e - sd * 1.0 * A, "tp": e + sd * 50 * A, "stock": z["stock"],
+                    "why": f"{z['fp']} footprints: " + ", ".join(k for k in CS.FOOTPRINTS if z[k])})
+    return out
+
+
 def nifty_orb(nifty, now: datetime) -> dict | None:
     """Nifty first 5-min close beyond the 9:15-9:30 range (09:30-14:30); stop at that candle's far end, only when the
     risk is 0.1-0.5 ATR (small stop); exit 15:20. research/setup_scan.py: +1.31R a trade on 22 days (4 big trend days),
@@ -313,6 +355,7 @@ def rows(S: dict, nifty, now: datetime) -> list[dict]:
     picks = ignition_picks(S)
     if now.strftime("%H:%M") >= "10:00":
         picks += aligned_picks(S, nifty)
+        picks += footprint_picks(S, now)
     if now.strftime("%H:%M") >= "10:30":
         picks += grinder_picks(S, nifty)
     if now.strftime("%H:%M") >= "11:00":
