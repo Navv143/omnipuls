@@ -206,3 +206,19 @@ losers (8.6% of stocks). Readings from the 9:15-9:30 candles only.
 - The tradable part needs the breakout trigger (V3: a close beyond the 9:15-9:30 range, best on the 9:30 candle):
   the V3 early pick +0.58% a trade vs +0.16% for the best static 9:30 selection. Skipping ATR >4.5% does not help
   the early pick (its 3 such picks won).
+
+## "Grinders": flat open, big move by the close (5 Nov 2026, `research/grinders_study.py`)
+235 F&O stocks, 45 days: 7,352 flat-open stock-days (|gap| ≤ 0.3 ATR); 587 (8.0%) finish ≥ 1.25 ATR from yesterday's
+close. Readings at 9:30 / 10:00 / 10:30 / 11:00 / 12:00, in the direction of the move so far.
+- What is different about them (medians, grinders vs other flat opens, 10:30): already 0.76 vs 0.26 ATR from
+  yesterday's close; beating Nifty since the open by 1.30% vs 0.51%; above (below) VWAP on 80% vs 67% of candles;
+  pullback from the day's extreme 15% vs 38% of the move; volume 1.12x vs 0.73x the usual for the time; their sector
+  moving the same way (0.38 vs 0.13 ATR). Before the open nothing separates them: yesterday's range, NR7, ATR %,
+  room to the 20-day high / low are about the same.
+- When they show: the top 10 flat-open movers become grinders 29% at 9:30, 41% at 10:00, 45% at 10:30, 55% at 12:00
+  (base 8%); a grinder almost never reverses its direction after 10:00 (99%).
+- Tradable from 10:00 / 10:30, not from 9:30: the "grinder profile" (move ≥ 0.4 ATR, beats Nifty ≥ 0.8%, held VWAP
+  ≥ 80% of candles, pullback ≤ 20%) with its sector moving the same way, held to the close, after 0.12% costs:
+  10:00 +0.20% (halves +0.10 / +0.28, 8 a day, 59% go on); 10:30 +0.20% (halves +0.23 / +0.18, 14 a day, 62% go on);
+  11:00 +0.19% (halves +0.38 / +0.09); 12:00 +0.15% (+0.40 / +0.02). The same profile at 9:30 loses -0.76% (three
+  candles are too few: early strength fades). No stop was used (hold to the close): to be tested with a stop.
