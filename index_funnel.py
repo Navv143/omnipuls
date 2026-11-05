@@ -313,3 +313,78 @@ def run_server() -> dict | None:
 if __name__ == "__main__":
     r = run_server()
     print("index funnel:", (r or {}).get("all"))
+
+
+def day_trend(ix: pd.DataFrame, stocks: dict, weights: dict) -> dict | None:
+    """The day measured from YESTERDAY's close (catches gap days the from-open funnel cannot see): change, gap, breadth
+    vs yesterday (share of the index weight up / down), and whether the move is a trend day."""
+    d = _clean(ix)
+    if d.empty:
+        return None
+    day = d.index.normalize()
+    days = sorted(set(day))
+    if len(days) < 16:
+        return None
+    today, prev = d[day == days[-1]], d[day == days[-2]]
+    dd = d.groupby(day).agg(h=("High", "max"), l=("Low", "min"), c=("Close", "last"))
+    pcs = dd["c"].shift(1)
+    trd = pd.concat([dd["h"] - dd["l"], (dd["h"] - pcs).abs(), (dd["l"] - pcs).abs()], axis=1).max(axis=1)
+    atr14 = float(trd.iloc[-15:-1].mean())
+    pc, o, last = float(prev["Close"].iloc[-1]), float(today["Open"].iloc[0]), float(today["Close"].iloc[-1])
+    up = dn = wsum = 0.0
+    for s, w in (weights or {}).items():
+        b = _clean(stocks.get(s))
+        if b.empty:
+            continue
+        bd = b.index.normalize()
+        bdays = sorted(set(bd))
+        if len(bdays) < 2 or bdays[-1] != days[-1]:
+            continue
+        bpc = float(b[bd == bdays[-2]]["Close"].iloc[-1])
+        ch = float(b["Close"].iloc[-1]) / bpc - 1
+        up += w * (ch > 0)
+        dn += w * (ch < 0)
+        wsum += w
+    br_up = up / wsum * 100 if wsum else np.nan
+    br_dn = dn / wsum * 100 if wsum else np.nan
+    chg_atr = (last - pc) / atr14 if atr14 else np.nan
+    side = 1 if last > pc else -1 if last < pc else 0
+    breadth = br_up if side > 0 else br_dn
+    trend = bool(np.isfinite(chg_atr) and abs(chg_atr) >= 1.0 and breadth == breadth and breadth >= 75)
+    return {"price": last, "chg_pct": (last / pc - 1) * 100, "gap_pct": (o / pc - 1) * 100, "from_open_pct": (last / o - 1) * 100,
+            "chg_atr": chg_atr, "gap_atr": (o - pc) / atr14 if atr14 else np.nan, "breadth_up": br_up, "breadth_dn": br_dn,
+            "side": side, "breadth_with": breadth, "trend_day": trend, "atr14": atr14, "pc": pc, "open": o}
+
+
+def gap_go(ix: pd.DataFrame, stocks: dict, weights: dict) -> dict | None:
+    """Gap & go: on a gap of 0.3+ daily ATR, the first 5-minute close beyond the FIRST HOUR's high (gap up) / low (gap
+    down) after 10:15, with 70%+ of the index weight moving the gap's way vs yesterday. Small edge in the 3-year
+    hourly test (Bank Nifty +0.05% a trade, both halves positive; Nifty ~0); buying the pullback on gap days lost."""
+    dt = day_trend(ix, stocks, weights)
+    if not dt or not np.isfinite(dt["gap_atr"]) or abs(dt["gap_atr"]) < 0.3:
+        return {"active": False, "day": dt}
+    d = _clean(ix)
+    today = d[d.index.normalize() == d.index.normalize().max()]
+    m = today.index.hour * 60 + today.index.minute
+    first = today[m < 615]
+    if len(first) < 12:
+        return {"active": True, "signal": None, "day": dt, "wait": "first hour not finished"}
+    s = 1 if dt["gap_atr"] > 0 else -1
+    fh, fl = float(first["High"].max()), float(first["Low"].min())
+    later = today[(m >= 615) & (m <= 840)]
+    brk = later[(later["Close"] > fh)] if s > 0 else later[(later["Close"] < fl)]
+    br = dt["breadth_up"] if s > 0 else dt["breadth_dn"]
+    out = {"active": True, "day": dt, "first_high": fh, "first_low": fl, "side": "LONG" if s > 0 else "SHORT",
+           "breadth": br, "signal": None}
+    if brk.empty or not (br == br and br >= 70):
+        out["wait"] = (f"waiting for a close {'above' if s > 0 else 'below'} the first hour's "
+                       f"{'high' if s > 0 else 'low'} {fh if s > 0 else fl:,.0f}" + ("" if br == br and br >= 70 else
+                                                                                       f" with breadth 70%+ (now {br:.0f}%)"))
+        return out
+    t0 = brk.index[0]
+    px = float(brk["Close"].iloc[0])
+    upto = today[today.index <= t0].tail(6)
+    import funnel as FN
+    plan = FN.trade_plan(s, px, dt["atr14"], float(upto["Low"].min()), float(upto["High"].max()))
+    out["signal"] = {"time": (t0 + pd.Timedelta(minutes=5)).strftime("%H:%M"), "side": out["side"], "price": px, "plan": plan}
+    return out
