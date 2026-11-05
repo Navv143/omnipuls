@@ -92,3 +92,20 @@ target / stop, exit after 4 hours. Long only (fading spikes loses).
   16 quarters; +0.07R at double costs. PAXG crash candles are real gold moves (5-min correlation with COMEX GC 0.95,
   gold fell 0.3-0.6% in the same candles). Last 60 days were negative on both PAXG (-0.12R) and GC (small sample).
 - Paper-traded live from 5 Nov 2026 (`crash_buy.py`, agents.py every minute; reproduces the backtest trades).
+
+## Burst study: what happens after every wild 5-minute candle (5 Nov 2026, `research/burst_study.py`)
+
+Every candle with |return| ≥ 4x the 20-day normal 5-min move (BTC, ETH, SOL, gold: ~9-15 a week each, 4 years),
+and the next 1-7 candles (entry at the next open, costs in):
+- On average bursts do NOT run on after costs. Direction decides: in crypto UP-bursts continue (6 candles: ETH +0.10%,
+  SOL +0.08%, BTC +0.05% before costs) and DOWN-bursts snap back (the crash buy). Gold reverses both ways.
+- Size decides: giant up-bursts (8x+) continue in all three coins in both halves: 6 candles after costs BTC +0.10 /
+  +0.26%, ETH +0.30 / +0.43%, SOL +0.19 / +0.46%. The first candle after usually pauses; the run comes in candles 2-6.
+  Very high volume (8x usual) and the New York morning help a little; breakouts of the day's range, the 20-hour trend
+  and the close location do not.
+- Trade: up-burst ≥ 8x, enter one candle later, stop at the burst candle's low (1.4-2.6% away), exit after 12 candles:
+  BTC +0.21% a trade (+0.22 / +0.21), ETH +0.36% (+0.19 / +0.52), SOL +0.61% (+0.64 / +0.58); ~0.7 a week per coin.
+  Stops at the burst midpoint (tighter) get shaken out.
+- 60 days of oil, gold futures, EURUSD, GBPUSD, USDJPY, USDINR and Nasdaq futures: forex and USDINR bursts do not run
+  (run-on 30-40%); oil mixed; Nasdaq up-bursts 6x+ ran on 77% (13 events: watch); too little data for more.
+- Paper-traded live as "BTC / ETH / SOL burst momentum" (crash_buy.py, reproduces the backtest trades exactly).

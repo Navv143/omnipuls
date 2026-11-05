@@ -562,3 +562,10 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   Z=4 / +0.4% / -0.4%, 4 h max, 2 a day max; 20-day history paged from Crypto.com; trades to record.json and
   Supabase crypto_paper. Auto Trader page: "Crash buy · paper" panel (today's trigger level, signal, open trade) and a
   per-setup record vs the tested numbers.
+
+## 5 Nov 2026: Burst study and burst-momentum paper trades
+- `research/burst_study.py`: every wild 5-min candle on BTC, ETH, SOL, gold (4 years) and oil, gold futures, forex,
+  USDINR, Nasdaq (60 days): giant crypto up-bursts run on, crashes snap back, gold fades, forex does not run.
+- `crash_buy.py` gains burst momentum setups (BTC / ETH / SOL: up-burst ≥ 8x, enter one candle later, stop at the burst
+  low, 12-candle hold), run every minute by agents.crash_tick with the crash buys; all trades stored in record.json
+  and Supabase crypto_paper. Auto Trader panel renamed "Wild-move setups · paper".
