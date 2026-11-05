@@ -347,39 +347,34 @@ def _git_head() -> str:
         return ""
 
 
-BOT_AFTER = os.environ.get("REC_BOT_AFTER", "16:30")
-BOT_REQUEST = paths.state("bot_request")
+class Bots:
+    """bots.py (the five live bots plus the nightly Setup Finder research) as a child process, restarted if it dies.
+    Its own process: a crash or the research run's memory can't touch the recorder."""
 
+    def __init__(self):
+        self.proc, self.started = None, 0.0
 
-def bot_due(now: datetime) -> bool:
-    """The Setup Finder runs once a day after BOT_AFTER (any day, so weekends catch up), or when the app asks, never
-    in market hours."""
-    if market_open(now) or os.environ.get("REC_BOT", "1") != "1":
-        return False
-    if BOT_REQUEST.exists():
-        return True
-    last = ""
-    try:
-        last = json.loads((DATA / "bot" / "latest.json").read_text()).get("run_at", "")[:10]
-    except Exception:
-        pass
-    return now.strftime("%H:%M") >= BOT_AFTER and last != now.strftime("%Y-%m-%d")
+    def keep_alive(self):
+        if os.environ.get("REC_BOT", "1") != "1":
+            return
+        if self.proc is not None and self.proc.poll() is None:
+            return
+        if self.proc is not None:
+            log(f"bots stopped (exit {self.proc.returncode}): restarting")
+        if time.time() - self.started < 60:  # crash loop guard
+            return
+        self.started = time.time()
+        self.proc = subprocess.Popen([sys.executable, str(paths.HERE / "bots.py")], cwd=str(paths.HERE))
+        STATUS["bots"] = {"time": datetime.now(IST), "pid": self.proc.pid}
+        log(f"bots started (pid {self.proc.pid})")
 
-
-def run_bot():
-    """bot.py in its own process (memory is freed when it ends; a crash can't stop the recorder)."""
-    BOT_REQUEST.unlink(missing_ok=True)
-    log("Setup Finder: starting")
-    try:
-        r = subprocess.run([sys.executable, str(paths.HERE / "bot.py")], cwd=str(paths.HERE), timeout=4 * 3600)
-        STATUS["bot"] = {"time": datetime.now(IST), "exit": r.returncode}
-    except Exception as e:
-        _error("Setup Finder", e)
-    (DATA / "bot").mkdir(parents=True, exist_ok=True)
-    marker = DATA / "bot" / "latest.json"
-    if not marker.exists():  # failed before writing results: don't retry in a tight loop today
-        marker.write_text(json.dumps({"run_at": datetime.now(IST).isoformat(timespec="seconds"), "error": "run failed",
-                                      "top": []}))
+    def stop(self):
+        if self.proc is not None and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(20)
+            except Exception:
+                self.proc.kill()
 
 
 def market_open(now: datetime) -> bool:
@@ -396,12 +391,14 @@ def run():
     head = _git_head()
     restart_on_update = os.environ.get("REC_RESTART_ON_UPDATE") == "1"
     chain, quotes = Snapshots("option_chain"), Snapshots("quotes")
+    bots = Bots()
     uni, uni_day, exps, holiday = None, None, {}, None
     last_chain = last_quote = last_backfill_try = last_head_check = 0.0
     while True:
         now = datetime.now(IST)
         today = now.date()
         try:
+            bots.keep_alive()
             if not D.configured(dh.cfg):
                 dh.cfg = D.load_config()
                 time.sleep(30)
@@ -447,8 +444,6 @@ def run():
             if now.weekday() < 5 and now.strftime("%H:%M") >= CANDLES_AFTER and not _candle_file(today).exists() \
                     and not _candle_file(today).with_suffix(".holiday").exists():
                 record_candles(dh, today, uni)
-            if bot_due(now):
-                run_bot()
         except Exception as e:
             _error("loop", e)
             if os.environ.get("REC_DEBUG"):
@@ -461,6 +456,7 @@ def run():
                 chain.flush(force=True)
                 quotes.flush(force=True)
                 log("new code pulled: restarting")
+                bots.stop()
                 sys.exit(0)  # Docker restarts the service with the new code
         time.sleep(1 if market_open(now) else 20)
 

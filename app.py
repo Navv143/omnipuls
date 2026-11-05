@@ -5808,91 +5808,160 @@ def _sign_out():
 # ---------------------------------------------------------------- Setup Finder (bot.py results)
 
 
-def _bot_live(svc, rule: dict) -> pd.DataFrame:
-    """Today's stocks matching the bot's passed rule; rebuilt in the background once per loader pass."""
-    bars, nifty_df = svc.bars()
-    if not bars or nifty_df is None or nifty_df.empty:
-        return pd.DataFrame()
-    key = ((id(svc), SC.session_of(nifty_df)), svc.last_pass, json.dumps(rule, sort_keys=True))
-    return _fresh_or_last(_memo("bot_live"), key, lambda: BOT.live_matches(rule, svc.bars()[0], U.FNO_SECTOR_OF))
+def _bots_state() -> dict | None:
+    """The live bots' latest readings (bots.py on the server writes them every 5 minutes in market hours)."""
+    try:
+        s = json.loads((PATHS.DATA / "bots" / "state.json").read_text())
+    except Exception:
+        return None
+    try:  # only today's readings count
+        if s.get("updated", "")[:10] != datetime.now(IST).strftime("%Y-%m-%d"):
+            s["stale"] = True
+    except Exception:
+        pass
+    return s
 
 
 def _pct(x) -> str:
     return "—" if x is None or (isinstance(x, float) and np.isnan(x)) else f"{x:+.3f}%"
 
 
+def _tone_dot(t) -> str:
+    return "🟢" if (t or 0) > 0 else "🔴" if (t or 0) < 0 else "⚪"
+
+
+def _research_rows(top: list) -> pd.DataFrame:
+    return pd.DataFrame([{"Verdict": {"pass": "✅ Pass", "watch": "👀 Watch", "fail": "✖ Fail"}[x["verdict"]],
+                          "Rule": x["text"], "Unseen days / trade": _pct(x["test"].get("per_trade_pct")),
+                          "Trades": x["test"].get("n", 0), "Win %": x["test"].get("win_pct"), "t": x["test"].get("t"),
+                          "Tuning days / trade": _pct(x["train"].get("per_trade_pct")),
+                          "Robust %": x["neighbours_positive_pct"]} for x in top or []])
+
+
+def _passed_card(best: dict, label: str):
+    te = best["test"]
+    st.markdown(
+        f"<div class='mv-idea' style='--mvc:var(--om-up);--mvg:var(--om-up-soft)'><div class='k'>{label} · passed on "
+        f"unseen days</div><h3>{te['per_trade_pct']:+.2f}% a trade after costs · {te['win_pct']:.0f}% wins · "
+        f"{te['n']} trades (t {te['t']})</h3><p>{best['text']}.</p><p class='d'>Robust: "
+        f"{best['neighbours_positive_pct']:.0f}% of the rules one setting away also made money. Paper-trade it "
+        "before real money.</p></div>", unsafe_allow_html=True)
+
+
+def _bot_flags(b: dict, cols: list[str]):
+    fl = (b or {}).get("flags") or []
+    if (b or {}).get("note"):
+        st.caption(b["note"])
+    if not fl:
+        st.caption("Nothing flagged right now.")
+        return
+    st.dataframe(pd.DataFrame([{"": _tone_dot(f.get("tone")), **{c: f.get(k, "") for c, k in cols}} for f in fl]),
+                 hide_index=True, width="stretch", column_config={"Why": st.column_config.TextColumn(width="large")})
+
+
 def page_bot():
     status_strip()
-    st.header("Setup Finder")
-    res = BOT.latest()
+    st.header("Bots")
     l, r = st.columns([3, 1], vertical_alignment="center")
-    l.caption("Our research bot tests about 5,000 money-flow rules every evening and keeps only those that still make "
-              "money on days it never saw while choosing.")
-    if IS_ADMIN and r.button("Run tonight", icon=":material/smart_toy:", width="stretch",
-                             help="Runs after 16:30, or within a minute when the market is closed."):
+    l.caption("Five bots watch every F&O stock, the indices, sectors and India VIX all day. The master bot passes an "
+              "idea only when a tested rule fires and the market, Nifty, sector and VIX agree.")
+    if IS_ADMIN and r.button("Run research tonight", icon=":material/smart_toy:", width="stretch",
+                             help="Re-runs the Setup Finder research after market hours."):
         PATHS.state("bot_request").touch()
-        st.success("Requested: the server runs the bot after market hours (results in about 10-20 minutes).")
+        st.success("Requested: the server runs the research after market hours (results in about 10-20 minutes).")
+    s = _bots_state()
+    if not s:
+        st.info("The bots run on the server (recorder). Their readings show here from the next market session, "
+                "updated every 5 minutes.", icon=":material/hourglass_top:")
+    else:
+        bt = s.get("bots", {})
+        st.caption(f"Updated {s.get('updated', '')[11:16]} IST" + (" · from an earlier day (market closed)"
+                                                                   if s.get("stale") else ""))
+        ideas = (bt.get("master") or {}).get("ideas") or []
+        passed = [i for i in ideas if i["status"] == "passed"]
+        st.subheader("Master bot: ideas")
+        if (bt.get("master") or {}).get("note"):
+            st.caption(bt["master"]["note"])
+        if passed:
+            for i in passed[:5]:
+                c = "var(--om-up)" if i["side"] == "BUY" else "var(--om-down)"
+                st.markdown(f"<div class='mv-idea' style='--mvc:{c};--mvg:transparent'><div class='k'>Passed · "
+                            f"{i['time']} · {i['sector']} · checks {i['agree']}</div><h3>{i['side']} {i['stock']} "
+                            f"@ {float(i['price']):,.2f}" + (f" · stop {float(i['stop']):,.2f}" if i.get("stop") else "")
+                            + f"</h3><p>{i['why']}. Exit 15:20.</p></div>", unsafe_allow_html=True)
+        else:
+            st.caption("No idea passed yet today: no tested rule fired with the balance agreeing.")
+        if ideas:
+            st.dataframe(pd.DataFrame([{"Status": "✅ Passed" if i["status"] == "passed" else "👀 Watch",
+                                        "Stock": i["stock"], "Side": i["side"], "Since": i["time"],
+                                        "Price": i["price"], "Checks": i["agree"], "Sector": i["sector"],
+                                        "Why": i["why"]} for i in ideas]),
+                         hide_index=True, width="stretch", column_config={"Why": st.column_config.TextColumn(width="large")})
+        t1, t2, t3, t4 = st.tabs(["Index bot", "Sector bot", "Sector movers", "F&O unusual"])
+        with t1:
+            _bot_flags(bt.get("index"), [("Index", "name"), ("Level", "value"), ("Signal", "signal"), ("Why", "text")])
+        with t2:
+            _bot_flags(bt.get("sector"), [("Sector", "name"), ("Net money", "value"), ("Why", "text")])
+        with t3:
+            _bot_flags(bt.get("movers"), [("Stock", "name"), ("Move", "value"), ("Why", "text")])
+        with t4:
+            sig = (bt.get("unusual") or {}).get("signals") or []
+            if sig:
+                st.markdown("**Tested rule signals today**")
+                st.dataframe(pd.DataFrame(sig), hide_index=True, width="stretch")
+            _bot_flags(bt.get("unusual"), [("Stock", "name"), ("Move", "value"), ("Sector", "sector"), ("Why", "text")])
+
+    st.divider()
+    st.subheader("Setup Finder research")
+    res = BOT.latest()
     if not res:
-        st.info("No results yet: the bot runs on the server every evening after 16:30 (first run downloads a year of "
-                "5-minute data, about 15 minutes).", icon=":material/hourglass_top:")
+        st.info("No research yet: it runs on the server every evening after 16:30.", icon=":material/hourglass_top:")
         return
     if res.get("error"):
         st.warning(f"Last run failed ({res.get('run_at', '')[:16]}): {res['error']}. It tries again tomorrow.")
         return
-    st.caption(f"Last run {res['run_at'][:16].replace('T', ' ')} · {res['rules_tried']:,} rules · {res['events']:,} "
-               f"stock-moments over {res['days']} days · judged on unseen days from {res['split']} · "
+    sr = res.get("stocks") or {}
+    if "rules_tried" not in sr:
+        st.caption("Results are from the old research format; the next nightly run refreshes them.")
+        return
+    st.caption(f"Last run {res['run_at'][:16].replace('T', ' ')} · {sr['rules_tried']:,} rules on all F&O stocks · "
+               f"{sr['candles']:,} candles over {sr['days']} days · judged on unseen days from {sr['split']} · "
                f"{res.get('seconds', 0) // 60} min")
-    best = res.get("best")
-    if best:
-        te = best["test"]
-        st.markdown(
-            f"<div class='mv-idea' style='--mvc:var(--om-up);--mvg:var(--om-up-soft)'><div class='k'>Passed on unseen "
-            f"days</div><h3>{te['per_trade_pct']:+.2f}% a trade after costs · {te['win_pct']:.0f}% wins · "
-            f"{te['n']} trades (t {te['t']})</h3><p>{best['text']}.</p><p class='d'>Robust: "
-            f"{best['neighbours_positive_pct']:.0f}% of the rules one setting away also made money. Paper-trade it "
-            "before real money.</p></div>", unsafe_allow_html=True)
-        if DHAN_DATA:
-            try:
-                svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
-                m = _bot_live(svc, best["rule"])
-                if not m.empty:
-                    st.markdown("**Matching now**")
-                    st.dataframe(m.round(2), hide_index=True, width="stretch")
-                elif datetime.now(IST).strftime("%H:%M") >= best["rule"]["t"]:
-                    st.caption("No stock matches the rule today.")
-                else:
-                    st.caption(f"Matches appear at {best['rule']['t']}.")
-            except Exception as e:
-                st.caption(f"Live matches unavailable: {e}")
+    if sr.get("best"):
+        _passed_card(sr["best"], "F&O stocks")
     else:
-        st.info("No rule passed on the unseen days, so there is no bot setup to trade. That is the honest result: the "
-                "rules below looked good on the first part of the year but did not hold up.", icon=":material/block:")
-    rows = [{"Verdict": {"pass": "✅ Pass", "watch": "👀 Watch", "fail": "✖ Fail"}[x["verdict"]], "Rule": x["text"],
-             "Unseen days / trade": _pct(x["test"].get("per_trade_pct")), "Trades": x["test"].get("n", 0),
-             "Win %": x["test"].get("win_pct"), "t": x["test"].get("t"),
-             "Tuning days / trade": _pct(x["train"].get("per_trade_pct")),
-             "Robust %": x["neighbours_positive_pct"]} for x in res.get("top", [])]
-    if rows:
-        st.subheader("Best rules, judged on unseen days")
-        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
-                     column_config={"Rule": st.column_config.TextColumn(width="large")})
-    b = res.get("baseline", {})
-    if b:
-        st.caption(f"For comparison, {b.get('rule')}: {_pct(b.get('test', {}).get('per_trade_pct'))} a trade on unseen "
-                   f"days ({b.get('test', {}).get('n', 0)} trades).")
-    nm = res.get("nifty_macd") or {}
-    if nm:
-        st.subheader("Nifty: MACD crosses with and without money flow")
-        st.dataframe(pd.DataFrame([{"Crosses": {"all_crosses": "All crosses", "flow_backed": "Money flow agrees",
-                                                "flow_against": "Money flow disagrees"}[k],
-                                    "Unseen days / trade": _pct(v["test"].get("per_trade_pct")),
-                                    "Trades": v["test"].get("n", 0), "Win %": v["test"].get("win_pct"),
-                                    "Tuning days / trade": _pct(v["train"].get("per_trade_pct"))}
-                                   for k, v in nm.items()]), hide_index=True, width="stretch")
-    note("Rules combine: decision time (10:00-12:00), move from the open in ATR, money-flow buying share, volume vs "
-         "the usual by that time, range so far vs the usual day, sector and market money agreeing, top 1 or 3 a day "
-         "by net flow; stop 0.5 or 1 ATR, exit 15:20, 0.12% costs. Tuned on the first 60% of days, judged on the "
-         "last 40%. Pass = +0.05%+ a trade, t 2+, 40+ trades on unseen days and 60%+ of neighbours positive.")
+        st.info("No stock rule passed on the unseen days, so the master bot only gives watch ideas. That is the honest "
+                "result: the rules below looked good on the first days but did not hold up.", icon=":material/block:")
+    df = _research_rows(sr.get("top"))
+    if not df.empty:
+        st.dataframe(df, hide_index=True, width="stretch", column_config={"Rule": st.column_config.TextColumn(width="large")})
+    ix = res.get("indices") or {}
+    if ix:
+        st.subheader("Indices")
+        for k, v in ix.items():
+            with st.expander(f"{BOT.INDEX_NAMES.get(k, k)} · " + ("✅ rule passed" if v.get("best") else "no rule passed")):
+                if v.get("best"):
+                    _passed_card(v["best"], BOT.INDEX_NAMES.get(k, k))
+                d = _research_rows(v.get("top"))
+                if not d.empty:
+                    st.dataframe(d, hide_index=True, width="stretch",
+                                 column_config={"Rule": st.column_config.TextColumn(width="large")})
+                nm = v.get("macd") or {}
+                if nm:
+                    st.caption("MACD crosses with and without money flow")
+                    st.dataframe(pd.DataFrame([{"Crosses": {"all_crosses": "All crosses", "flow_backed": "Money flow agrees",
+                                                            "flow_against": "Money flow disagrees"}[kk],
+                                                "Unseen days / trade": _pct(vv["test"].get("per_trade_pct")),
+                                                "Trades": vv["test"].get("n", 0), "Win %": vv["test"].get("win_pct"),
+                                                "Tuning days / trade": _pct(vv["train"].get("per_trade_pct"))}
+                                               for kk, vv in nm.items()]), hide_index=True, width="stretch")
+    note("Bots: every 5 minutes in market hours. A setup fires at the first candle its conditions are true (9:30-14:30), "
+         "no fixed time. Research rules combine move from the open in ATR, money-flow buying share, volume vs the "
+         "usual by that time, range vs the usual day, sector and market money agreeing; stop 0.5 or 1 ATR, exit 15:20, "
+         "0.12% costs (0.02% index). Tuned on the first 60% of days, judged on the last 40%. Pass = +0.05%+ a trade, "
+         "t 2+, 40+ trades on unseen days and 60%+ of neighbours positive. Every master idea is logged with its "
+         "result at the close.")
+
 
 
 # ---------------------------------------------------------------- Market View: one page, every signal and reading
@@ -6106,20 +6175,22 @@ def market_view_body(svc, t: pd.DataFrame):
 
     bot_rows = []
     try:
-        res = BOT.latest()
-        best = (res or {}).get("best")
-        if best:
-            te = best["test"]
-            for _, r in _bot_live(svc, best["rule"]).iterrows():
-                bot_rows.append({"Signal": f"Setup Finder: {r['Stock']} {r['Side']}", "Status": "● SIGNAL",
-                                 "Evidence": "Tested", "Details": f"entry {r['Entry']:,.2f}, stop {r['Stop']:,.2f}, "
-                                 f"exit 15:20 · bot rule {te['per_trade_pct']:+.2f}%/trade on unseen days"})
+        bs = _bots_state()
+        if bs and not bs.get("stale"):
+            for i in ((bs.get("bots") or {}).get("master") or {}).get("ideas") or []:
+                ok = i["status"] == "passed"
+                bot_rows.append({"Signal": f"Master bot: {i['side']} {i['stock']}", "Status": "● SIGNAL" if ok else "Watch",
+                                 "Evidence": "Tested" if ok else "Context",
+                                 "Details": f"since {i['time']} @ {float(i['price']):,.2f}"
+                                 + (f", stop {float(i['stop']):,.2f}" if i.get("stop") else "")
+                                 + f", checks {i['agree']} · {i['why']}"})
     except Exception:
         pass
-    # ---- 1. the trade idea (Setup Finder matches count as tested signals)
-    idea_rows = plan_rows + ([{"name": "Setup Finder (bot, passed on unseen days)", "state": "fired", "where": "",
+    # ---- 1. the trade idea (master-bot passed ideas count as tested signals)
+    passed = [r for r in bot_rows if r["Status"] == "● SIGNAL"]
+    idea_rows = plan_rows + ([{"name": "Master bot (tested rule + balance agree)", "state": "fired", "where": "",
                                "text": "; ".join(r["Signal"].split(": ", 1)[1] + " (" + r["Details"].split(" · ")[0] + ")"
-                                                 for r in bot_rows)}] if bot_rows else [])
+                                                 for r in passed)}] if passed else [])
     idea = MV.trade_idea(idea_rows, verdict, every)
     c = UP if idea["tone"] > 0 else DOWN if idea["tone"] < 0 else "#94A3B8"
     g = {UP: "rgba(38,166,154,.18)", DOWN: "rgba(239,83,80,.18)"}.get(c, "rgba(148,163,184,.10)")
@@ -6195,7 +6266,7 @@ def page_view():
 
 PAGE_DEFS = [  # (url, function, menu title, icon)
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
-    ("bot", page_bot, "Setup Finder", ":material/smart_toy:"),
+    ("bot", page_bot, "Bots", ":material/smart_toy:"),
     ("dashboard", page_dashboard, "Trading Desk", ":material/space_dashboard:"),
     ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
     ("smart", page_smart_money, "Smart Money Sectors", ":material/insights:"),

@@ -280,3 +280,20 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - Run research/index_options/dhan_index_options.py (real expired-option prices) and send the summary back.
 - Candidates for next: Morning plan card (opening setups + 9:30 relative-weakness short), daily option-chain logging
   to test hedged option selling, cash-futures arbitrage scanner.
+
+## 5 Nov 2026: five live bots and the Setup Finder on all F&O stocks
+
+- Setup Finder (bot.py v2) now tests **all F&O stocks and the five indices**, not the Nifty 100. No fixed 10:30
+  time: a setup fires at the first candle its conditions are true (9:30-14:30). Tuned on the first 60% of days,
+  judged on the last 40%; checked on planted-edge data (12 rules passed, unseen ≈ tuning) and true-null data (0 passed).
+- New `bots.py`, started and kept alive by the recorder: every 5 minutes in market hours it runs
+  1. Index bot (move in ATR, constituents' money flow, MACD, futures OI build-up, passed index rule signal),
+  2. Sector bot (money by sector, rotation from/to), 3. Sector movers (top gainers/losers and whether money backs them),
+  4. F&O unusual (volume, range, net money, open = high/low, tested-rule signals), 5. Master bot: an idea **passes**
+  only when a tested rule fired and 3+ of 4 balance checks agree (market money, Nifty not against, sector money,
+  VIX calm); 3+ checks without the rule = watch. Ideas are logged to Supabase `bot_ideas` and scored at 15:35.
+  The nightly research (after 16:30) now runs from bots.py.
+- App: the Setup Finder page became **Bots** (master ideas, a tab per bot, research for stocks and each index);
+  Market View lists the master bot's ideas and counts passed ones as tested signals.
+- Tested with mocked market data: planted sector rally → tested-rule signals passed 4/4, watch ideas, each idea
+  logged once, scored at the close; app pages render without errors.
