@@ -322,3 +322,13 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   with what happened (the self-improvement loop).
 - Bots page is now a dashboard: KPIs, master ideas, radar event cards with odds bars, live feed, odds check, system
   health, and every F&O stock's full readings. Market View shows the top sudden changes.
+
+## 5 Nov 2026: Sectors page redesign
+
+- Top KPIs (advancing, declining, A/D ratio, average move, net money, most active stock) and the sector money heatmap.
+- Every sector as a card: header with the sector's average change, R-factor, smart score and activity (volume vs usual
+  by now); its stocks listed below (price, change, change %, R-factor, smart score, activity %); a footer line with the
+  number of stocks, how many up / down, and the sector's money inflow, outflow and net with a buy/sell bar.
+- Sort sectors by change, net money, R-factor, smart score or activity; search a sector or stock.
+- Sector detail: pick a sector for a full live table (price, change, R-factor bar, smart score, activity, build-up, OI
+  change, money in / out / net, gap, volume × average, RSI, trend, O=H/L, lot, chart link).

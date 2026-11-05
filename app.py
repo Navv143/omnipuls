@@ -3266,142 +3266,146 @@ def _pick_sector(sec: str):
     st.session_state.sec_pick = sec
 
 
+def _sector_data(t: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """F&O stocks with R-factor, smart score, activity and money flow (live from Dhan), and the flow by sector."""
+    t = t.copy()
+    t["Change"] = t["Price"] - t["Price"] / (1 + t["Chg %"] / 100)
+    for c in ("R-factor", "Smart", "Activity %", "OI Chg %", "Flow Cr", "Inflow Cr", "Outflow Cr", "Net Flow Cr"):
+        t[c] = np.nan
+    t["Buildup"], t["O=H/L"] = "", ""
+    secflow = pd.DataFrame()
+    if not DHAN_DATA:
+        return t, secflow
+    try:
+        svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
+        idx = index_defs()
+        svc.set_universe(tuple(sorted(set(scan_universe("All F&O stocks")) | {m for d in idx.values() for m in d["w"]})))
+        svc.set_indices({**{k: d["id"] for k, d in idx.items()}, "INDIAVIX": 21})
+        svc.touch()
+    except Exception:
+        return t, secflow
+    try:
+        rf, _ = smart_money_stocks(svc)
+        if not rf.empty:
+            f = rf.set_index("Stock")
+            for c in ("R-factor", "OI Chg %", "Flow Cr", "Buildup"):
+                if c in f:
+                    t[c] = t["Stock"].map(f[c])
+            t["Buildup"] = t["Buildup"].fillna("")
+    except Exception:
+        pass
+    try:
+        act = _activity_data(svc)
+        if act:
+            R, per = act[0], act[2]
+            if not R.empty:
+                r = R.set_index("Stock")
+                t["Smart"] = t["Stock"].map(r["Smart"]) if "Smart" in r else np.nan
+                if "Vol x (time)" in r:
+                    t["Activity %"] = t["Stock"].map(r["Vol x (time)"]) * 100
+                if "O=H/L" in r:
+                    t["O=H/L"] = t["Stock"].map(r["O=H/L"]).fillna("")
+            flow = A.flow_window(per, None) if per else pd.DataFrame()
+            if not flow.empty:
+                fl = flow.set_index("Stock")
+                for c in ("Inflow Cr", "Outflow Cr", "Net Flow Cr"):
+                    t[c] = t["Stock"].map(fl[c])
+                flow["Sector"] = flow["Stock"].map(dict(zip(t["Stock"], t["Sector"]))).fillna("Other")
+                secflow = A.sector_flow(flow).reset_index().rename(columns={"index": "Sector"})
+                if "Sector" not in secflow:
+                    secflow = secflow.rename(columns={secflow.columns[0]: "Sector"})
+    except Exception:
+        pass
+    return t, secflow
+
+
 def page_sectors():
     status_strip()
-    st.header("Sector performance")
+    st.header("Sectors")
+    st.markdown(MX.CSS + MX.SECTOR_CSS, unsafe_allow_html=True)
     with st.spinner("Loading F&O stocks…"):
         res, err = safe(fno_table)
     if res is None or res[0].empty:
         no_data_msg(err)
         return
-    t = res[0]
-    period = st.segmented_control("Period", list(PERIODS), default="Today", key="sec_period",
-                                  label_visibility="collapsed") or "Today"
-    col = PERIODS[period]
+    t, secflow = _sector_data(res[0])
+    fl_of = secflow.set_index("Sector").to_dict("index") if not secflow.empty else {}
 
-    # ---- overall breadth (always today's move)
+    # ---- market at a glance
     adv, dec = int((t["Chg %"] > 0).sum()), int((t["Chg %"] < 0).sum())
-    unch = len(t) - adv - dec
-    m = st.columns(5)
-    m[0].metric("Advancing", adv, border=True)
-    m[1].metric("Declining", dec, border=True)
-    m[2].metric("Unchanged", unch, border=True)
-    m[3].metric("Advance / decline ratio", f"{adv / dec:.2f}" if dec else "—",
-                None if adv == dec else ("more advancing" if adv > dec else "-more declining"),
-                delta_color="normal", border=True)
-    m[4].metric(f"Average move ({period.lower()})", f"{t[col].mean():+.2f}%", border=True)
-    st.markdown(breadth_bar(adv, dec, unch, big=True), unsafe_allow_html=True)
-    hist_note()
+    net = float(secflow["Net Flow Cr"].sum()) if not secflow.empty else None
+    st.markdown(MX.kpis([
+        MX.kpi("Advancing", f"{adv}", f"of {len(t)} F&O stocks", MX.UP),
+        MX.kpi("Declining", f"{dec}", f"{len(t) - adv - dec} unchanged", MX.DOWN),
+        MX.kpi("Advance / decline", f"{adv / dec:.2f}" if dec else "—", "above 1 = more stocks up",
+               MX.UP if adv > dec else MX.DOWN if dec > adv else MX.NEUTRAL),
+        MX.kpi("Average move", f"{t['Chg %'].mean():+.2f}%", "today", MX.tone_color(t["Chg %"].mean())),
+        MX.kpi("Net money", f"₹{net:+,.0f} Cr" if net is not None else "—", "all F&O stocks, today",
+               MX.tone_color(net or 0)),
+        MX.kpi("Most active", (t.loc[t["Activity %"].idxmax(), "Stock"] if t["Activity %"].notna().any() else "—"),
+               "volume vs usual by this time", MX.ACCENT),
+    ]), unsafe_allow_html=True)
+    heat = MX.heatmap(secflow)
+    if heat:
+        st.markdown(MX.section("Sector money", "size = turnover · colour = net money in / out") + heat,
+                    unsafe_allow_html=True)
 
-    # ---- sector index moves
-    idx_specs = [(n, c) for n, k, c in U.INDEX_SPECS if n in set(SECTOR_INDEX.values())]
-    ires = resolved(idx_specs)
-    idx_move = {}
-    if ires:
-        it, _ = safe(build_table, tuple(ires.values()), tuple((v, k) for k, v in ires.items()))
-        if it is not None and not it.empty:
-            idx_move = dict(zip(it["Name"], it[col]))
-
-    # ---- sector summary
+    # ---- every sector as a card
+    s1, s2 = st.columns([2, 3], vertical_alignment="bottom")
+    sort = s1.segmented_control("Sort sectors by", ["Change", "Net money", "R-factor", "Smart score", "Activity"],
+                                default="Change", key="sx_sort") or "Change"
+    q = s2.text_input("Find a sector or stock", key="sx_find", placeholder="e.g. Banks or TCS")
     rows = []
     for sec, g in t.groupby("Sector"):
-        g = g.dropna(subset=[col])
-        if g.empty:
-            continue
-        best, worst = g.loc[g[col].idxmax()], g.loc[g[col].idxmin()]
-        rows.append({"Sector": sec, "n": len(g), "adv": int((g["Chg %"] > 0).sum()), "dec": int((g["Chg %"] < 0).sum()),
-                     "avg": g[col].mean(), "idx": idx_move.get(SECTOR_INDEX.get(sec)),
-                     "idx_name": SECTOR_INDEX.get(sec) if SECTOR_INDEX.get(sec) in idx_move else None,
-                     "best": (best["Stock"], best[col]), "worst": (worst["Stock"], worst[col]),
-                     "turnover": g["Turnover Cr"].sum()})
-    sec_df = pd.DataFrame(rows).sort_values("avg", ascending=False)
-    if st.session_state.get("sec_pick") not in set(sec_df["Sector"]):
-        st.session_state.sec_pick = sec_df["Sector"].iloc[0]
-    pick = st.session_state.sec_pick
-
-    st.subheader("Sectors")
-    sq1, sq2 = st.columns([2, 4])
-    sq = sq1.text_input("Find a sector or stock", key="sec_find", placeholder="e.g. Banks or TCS")
-    if sq:
-        hit = t[t["Stock"].str.contains(sq.strip(), case=False, regex=False)]["Sector"].unique().tolist()
-        sec_df = sec_df[sec_df["Sector"].str.contains(sq.strip(), case=False, regex=False) | sec_df["Sector"].isin(hit)]
-        if not sec_df.empty and st.session_state.sec_pick not in set(sec_df["Sector"]):
-            st.session_state.sec_pick = sec_df["Sector"].iloc[0]
-            pick = st.session_state.sec_pick
-        sq2.markdown(f'<div class="cell muted">{len(sec_df)} sector(s) match</div>', unsafe_allow_html=True)
-    box = st.container(key="rows_wide_sectors")
-    widths = [2.4, 1.1, 1.3, 2.3, 1.9, 1.9, 1.2]
-    h = box.columns(widths)
-    for c, label in zip(h, ["Sector (click to see stocks)", "Avg move", "Sector index", "Advance / decline",
-                            "Best", "Worst", "Turnover ₹ Cr"]):
-        c.markdown(f'<div class="hdr">{label}</div>', unsafe_allow_html=True)
-    for _, r in sec_df.iterrows():
-        c = box.columns(widths, vertical_alignment="center")
-        c[0].button(("▸ " if r["Sector"] == pick else "") + f'{r["Sector"]}  ({r["n"]})', key=f"sec_{r['Sector']}",
-                    type="tertiary", on_click=_pick_sector, args=(r["Sector"],))
-        c[1].markdown(pct_html(r["avg"]), unsafe_allow_html=True)
-        c[2].markdown(pct_html(r["idx"]) if r["idx_name"] else '<div class="cell muted">—</div>',
-                      unsafe_allow_html=True)
-        c[3].markdown(breadth_bar(r["adv"], r["dec"], r["n"] - r["adv"] - r["dec"]) +
-                      f'<div class="muted"><span class="chg-up">{r["adv"]}▲</span> · '
-                      f'<span class="chg-down">{r["dec"]}▼</span></div>', unsafe_allow_html=True)
-        for k, key in ((4, "best"), (5, "worst")):
-            name, v = r[key]
-            cls = "chg-up" if v > 0 else "chg-down" if v < 0 else "muted"
-            c[k].markdown(f'<div class="cell">{name} <span class="{cls}">{v:+.2f}%</span></div>', unsafe_allow_html=True)
-        c[6].markdown(f'<div class="cell">{r["turnover"]:,.0f}</div>', unsafe_allow_html=True)
-    st.caption(f"Sectors sorted by average move ({period.lower()}). Advance/decline counts use today's change. "
-               "Sector index: the matching NSE index's move over the same period.")
-
-    # ---- stocks in the selected sector
-    st.divider()
-    g = t[t["Sector"] == pick].copy()
-    sr = sec_df[sec_df["Sector"] == pick].iloc[0]
-    a, b = st.columns([3, 2])
-    a.subheader(f"{pick}: {len(g)} stocks")
-    a.markdown(f'<span class="chg-up">{sr["adv"]} advancing</span> · <span class="chg-down">{sr["dec"]} declining</span>'
-               f' · average {sr["avg"]:+.2f}% ({period.lower()})', unsafe_allow_html=True)
-    sort_by = b.selectbox("Sort stocks by", [f"Change ({period.lower()})", "Volume vs average", "RSI", "Name"],
-                          key="sec_sort")
-    f1, f2, f3 = st.columns([2, 2, 2])
-    q = f1.text_input("Search stock", key="sec_q", placeholder="e.g. HDFC")
-    show = f2.segmented_control("Show", ["All", "Advancing", "Declining"], default="All", key="sec_show") or "All"
-    trend = f3.multiselect("Trend", ["Strong up", "Up", "Sideways", "Down", "Strong down"], key="sec_trend")
+        rows.append({"Sector": sec, "Change": g["Chg %"].mean(), "Net money": (fl_of.get(sec) or {}).get("Net Flow Cr", np.nan),
+                     "R-factor": g["R-factor"].mean(), "Smart score": g["Smart"].mean(), "Activity": g["Activity %"].mean()})
+    order = pd.DataFrame(rows).sort_values(sort, ascending=False, na_position="last")["Sector"].tolist()
     if q:
-        g = g[g["Stock"].str.contains(q.strip(), case=False, regex=False)]
-    if show != "All":
-        g = g[g["Chg %"] > 0] if show == "Advancing" else g[g["Chg %"] < 0]
-    if trend:
-        g = g[g["Trend"].isin(trend)]
-    key = {"Volume vs average": "Vol x Avg", "RSI": "RSI", "Name": "Stock"}.get(sort_by, col)
-    g = g.sort_values(key, ascending=key == "Stock", na_position="last")
-    if g.empty:
-        st.caption("No stocks match. Clear the search or filters.")
+        hit = set(t[t["Stock"].str.contains(q.strip(), case=False, regex=False)]["Sector"])
+        order = [s for s in order if q.strip().lower() in s.lower() or s in hit]
+    if not order:
+        st.caption("No sector or stock matches.")
+        return
+    if st.session_state.get("sx_pick") not in order:
+        st.session_state.sx_pick = order[0]
+    pick = st.session_state.sx_pick
+    st.markdown(MX.section("All sectors", "R = R-factor (0-100) · Smart = smart score · Activity = volume vs usual by now")
+                + MX.sector_grid([MX.sector_card(s, t[t["Sector"] == s], fl_of.get(s) or {}, s == pick) for s in order]),
+                unsafe_allow_html=True)
 
-    box = st.container(key="rows_wide_secstocks")
-    widths = [2.2, 1.5, 1.2, 1.2, 1.2, 1.2, 1.1, 1.5, 1.1]
-    h = box.columns(widths)
-    period_label = "Today %" if col == "Chg %" else period
-    for c, label in zip(h, ["Stock (click for chart)", "LTP", "Today %", period_label if col != "Chg %" else "1 week",
-                            "Gap %", "Vol × avg", "RSI", "Trend", "Lot"]):
-        c.markdown(f'<div class="hdr">{label}</div>', unsafe_allow_html=True)
-    second = col if col != "Chg %" else "1W %"
-    for _, r in g.iterrows():
-        c = box.columns(widths, vertical_alignment="center")
-        c[0].markdown(f"[{r['Stock']}]({chart_link(r['Symbol'])})")
-        c[1].markdown(f'<div class="cell">{fmt_price(r["Price"], r["Symbol"])}</div>', unsafe_allow_html=True)
-        c[2].markdown(pct_html(r["Chg %"]), unsafe_allow_html=True)
-        c[3].markdown(pct_html(r[second]), unsafe_allow_html=True)
-        c[4].markdown(pct_html(r["Gap %"]), unsafe_allow_html=True)
-        vx = r["Vol x Avg"]
-        c[5].markdown(f'<div class="cell">{vx:.2f}×</div>' if pd.notna(vx) else '<div class="cell muted">—</div>',
-                      unsafe_allow_html=True)
-        c[6].markdown(f'<div class="cell">{r["RSI"]:.0f}</div>' if pd.notna(r["RSI"]) else '<div class="cell muted">—</div>',
-                      unsafe_allow_html=True)
-        c[7].markdown(f'<div class="cell">{r["Trend"]}</div>', unsafe_allow_html=True)
-        lot = r.get("Lot size")
-        c[8].markdown(f'<div class="cell">{int(lot):,}</div>' if pd.notna(lot) else '<div class="cell muted">—</div>',
-                      unsafe_allow_html=True)
+    # ---- the chosen sector as a full live table
+    st.markdown(MX.section("Sector detail", "pick a sector"), unsafe_allow_html=True)
+    pick = st.pills("Sector", order, default=pick, key="sx_pill", label_visibility="collapsed") or pick
+    st.session_state.sx_pick = pick
+    g = t[t["Sector"] == pick].sort_values("Chg %", ascending=False)
+    fl = fl_of.get(pick) or {}
+    st.markdown(MX.sector_card(pick, g, fl, True).replace("sx-list", "sx-list' style='display:none"),
+                unsafe_allow_html=True)
+    cols = ["Stock", "Price", "Change", "Chg %", "R-factor", "Smart", "Activity %", "Buildup", "OI Chg %",
+            "Inflow Cr", "Outflow Cr", "Net Flow Cr", "Gap %", "Vol x Avg", "RSI", "Trend", "O=H/L", "Lot size", "Symbol"]
+    df = g[[c for c in cols if c in g]].copy()
+    df["Chart"] = df["Symbol"].map(chart_link) if "Symbol" in df else None
+    st.dataframe(df.drop(columns=["Symbol"], errors="ignore"), hide_index=True, width="stretch",
+                 height=min(42 + 35 * len(df), 620), column_config={
+                     "Price": st.column_config.NumberColumn(format="%.2f"),
+                     "Change": st.column_config.NumberColumn(format="%+.2f"),
+                     "Chg %": st.column_config.NumberColumn(format="%+.2f%%"),
+                     "R-factor": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
+                     "Smart": st.column_config.NumberColumn(format="%+.0f"),
+                     "Activity %": st.column_config.NumberColumn(format="%.0f%%"),
+                     "OI Chg %": st.column_config.NumberColumn(format="%+.2f%%"),
+                     "Inflow Cr": st.column_config.NumberColumn("In ₹ Cr", format="%.1f"),
+                     "Outflow Cr": st.column_config.NumberColumn("Out ₹ Cr", format="%.1f"),
+                     "Net Flow Cr": st.column_config.NumberColumn("Net ₹ Cr", format="%+.1f"),
+                     "Gap %": st.column_config.NumberColumn(format="%+.2f%%"),
+                     "Vol x Avg": st.column_config.NumberColumn("Vol × avg", format="%.2f×"),
+                     "RSI": st.column_config.NumberColumn(format="%.0f"),
+                     "Lot size": st.column_config.NumberColumn("Lot", format="%d"),
+                     "Chart": st.column_config.LinkColumn("Chart", display_text="Open")})
+    st.caption("Live from Dhan. R-factor: how unusual today's volume, futures OI change, range and move are vs the "
+               "same time on the last 20 sessions (0-100). Smart score: unusual-activity score (+ bullish, − bearish). "
+               "Activity: volume so far vs the usual by this time (100% = normal). Money in / out: turnover split by "
+               "where each candle closed.")
     check_alerts(dict(zip(t["Symbol"], t["Price"])))
 
 
