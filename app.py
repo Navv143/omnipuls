@@ -6421,7 +6421,8 @@ def market_view_body(svc, t: pd.DataFrame):
         _w2 = {k: d.get("w", {}) for k, d in index_defs().items()}
         _sb2 = svc.bars()[0]
         for _k, _nm in IF.INDEXES.items():
-            moms[_k] = IF.momentum_now(idx_b.get(_k), _sb2, _w2.get(_k, {}), _nm, mode=IF.MOM_MODE.get(_k))
+            moms[_k] = IF.momentum_now(idx_b.get(_k), _sb2, _w2.get(_k, {}), _nm, mode=IF.MOM_MODE.get(_k),
+                                       fut=svc.ifut_bars().get(_k))
     except Exception as e:
         print(f"market view momentum bot: {e}", flush=True)
     for _k, _mo in moms.items():

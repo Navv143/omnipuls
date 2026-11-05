@@ -448,8 +448,29 @@ MOM_MODE = {"NIFTY": "trend_only",       # with it, only on trend days (+0.25%, 
             "FINNIFTY": "watch"}         # lost either way: readings only, no trades
 
 
+def _oi_at(fut: pd.DataFrame | None, ts, side: int) -> dict:
+    """The index future's OI over the 15 minutes to `ts` and since yesterday's close, with the build-up, and whether
+    it backs a move in `side` (new positions the move's way: long build-up up / short build-up down)."""
+    import index_levels as LV
+    f = _clean(fut)
+    if f.empty or "OI" not in f or not f["OI"].fillna(0).any():
+        return {}
+    f = f[f.index <= ts]
+    if len(f) < 4:
+        return {}
+    oi = f["OI"].replace(0, np.nan).ffill()
+    d = f.index.normalize()
+    prev = f[d < d.max()]
+    oi0 = float(prev["OI"].replace(0, np.nan).dropna().iloc[-1]) if not prev.empty and prev["OI"].notna().any() else float(oi.iloc[0])
+    b15 = LV.buildup(float(f["Close"].iloc[-1] - f["Close"].iloc[-4]), float(oi.iloc[-1] - oi.iloc[-4]))
+    bday = LV.buildup(float(f["Close"].iloc[-1] - (prev["Close"].iloc[-1] if not prev.empty else f["Open"].iloc[0])), float(oi.iloc[-1] - oi0))
+    good = ("Long build-up",) if side > 0 else ("Short build-up",)
+    return {"oi_15m": b15, "oi_day": bday, "oi_chg_pct": round((float(oi.iloc[-1]) / oi0 - 1) * 100, 2) if oi0 else None,
+            "oi_ok": b15 in good or bday in good}
+
+
 def momentum_now(ix: pd.DataFrame, stocks: dict, weights: dict, name: str = "", fade: bool = False,
-                 mode: str | None = None) -> dict | None:
+                 mode: str | None = None, fut: pd.DataFrame | None = None) -> dict | None:
     """Index momentum bot: today's signals (price + net money + breadth + ATR all rising together, 9:30-14:00, at
     least an hour apart, each with the plan), the latest reading and any trap warning (price moving while money and
     breadth go the other way: likely a stop hunt, no trade). First tests: small edge on Nifty (3 years hourly
@@ -469,8 +490,9 @@ def momentum_now(ix: pd.DataFrame, stocks: dict, weights: dict, name: str = "", 
         sd = -int(r["msd"]) if fade else int(r["msd"])
         p = FN.trade_plan(sd, float(r["Close"]), float(r["atr14"]), float(r["swl"]), float(r["swh"]))
         if p:
+            oi = _oi_at(fut, ts + pd.Timedelta(minutes=4), int(r["msd"]))  # OI behind the BURST (new positions its way?)
             sigs.append({"time": (ts + pd.Timedelta(minutes=5)).strftime("%H:%M"), "side": p["side"], "price": float(r["Close"]),
-                         "plan": p, "fade": fade,
+                         "plan": p, "fade": fade, "oi": oi,
                          "why": ("FADE: Bank Nifty bursts usually reverse (stop hunt) · " if fade else "")
                                 + f"15 min: price {r['d_px']:+,.0f}, money ₹{r['d_net']:+,.0f} Cr, breadth {r['br_y']:.0f}% up "
                                   f"({r['d_br']:+.0f}), ATR {r['now_x']:.1f}x usual and rising"})
