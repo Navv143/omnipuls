@@ -160,3 +160,19 @@ Weak / no difference: day ATR, range, the stock's net money and its growth, sect
 open, distance from VWAP, time of day (before / after 12:00), yesterday's range. Wider stops slightly better.
 Combined (market with ≥0.55%, no gap with the trade, not chasing): 304 trades (6.8 a day), 72% wins, +0.30R, +0.33% a
 trade after costs, halves +0.19 / +0.38R. Chosen after looking at the whole sample: to be confirmed on the live record.
+
+## Breakout V3: what makes its picks work (5 Nov 2026, `research/v3_study.py`, `research/v3_study.csv`)
+Every session (54 days, Yahoo 5-min): the top 10 of V3's 9:30 ranking (ATR %, 9:15-9:30 range, opening RVOL, gap)
+and each one's first 15-min opening-range breakout until 12:00, with V3's own trade (entry next open, stop 0.5 ATR,
+trail 1 ATR, exit 15:20, 0.12% costs).
+- The ranking does not pick the winner: rank 1 +0.08% (filtered), rank 2 -0.21%, ranks 6-10 +0.13%. What V3 trades
+  now (rank 1-2 with the volume and Nifty filters): 56 trades, 48% wins, -0.05% a trade (halves +0.05 / -0.18).
+- The volume and Nifty filters do not help: breakouts failing them did +0.09%.
+- Timing decides: breakouts by 9:45 +0.20% (halves +0.10 / +0.30); 9:50-10:30 -0.27%; after 10:30 -0.35%.
+- Block deals (opening RVOL ≥20x): 8 trades, 12% wins, -0.99% (5 Nov PIIND, RVOL 47, -1.7%).
+- Gapped 0-1% the trade's way: 31% wins, -0.24% (same finding as the funnel: the move is partly used up).
+- With Nifty's day direction looked strong (+0.19% vs -0.23%) but uses the close: hindsight, not usable.
+- Combined (top-10 breakout by 9:45, no block deal, not gapped 0-1% the trade's way, the day's first such breakout):
+  49 trades (~1 a day), 57% wins, +0.59% a trade after costs, halves +0.61 / +0.56. Chosen on the same data: to be
+  confirmed live. Lodha (3 Nov) ranked 4 and broke out at 10:00, BHEL (4 Nov) ranked 7, Motilal (5 Nov) ranked 2;
+  4 Nov's first qualifying breakout was INOXWIND (+3.0%); on 3 Nov the rank-1 pick HFCL lost -3.2%.
