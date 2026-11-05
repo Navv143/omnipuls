@@ -332,3 +332,19 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - Sort sectors by change, net money, R-factor, smart score or activity; search a sector or stock.
 - Sector detail: pick a sector for a full live table (price, change, R-factor bar, smart score, activity, build-up, OI
   change, money in / out / net, gap, volume × average, RSI, trend, O=H/L, lot, chart link).
+
+## 5 Nov 2026: AI Desk, six agents over every market
+
+- `desk_agents.py` (pure logic) + `agents.py` (24/7 runner, started by the recorder next to bots.py; every 15 min):
+  ATLAS (global regime: S&P / Nasdaq trend, VIX, dollar index, US 10y, India VIX → bias per class), VEGA (daily +
+  hourly trend, 20-day breakout / breakdown with volume, pullback to the 20-day average, support / resistance from
+  swing points, ATR and volume vs average, RSI), ORION (headlines scored, high-impact catalysts), LUNA (RSI extremes,
+  5-day z-score, class breadth, crypto Fear & Greed; crowded = against), TITAN (1% risk sizing, stop 0.75-2 ATR beyond
+  support / resistance, all stops ≤ 4%, R/R ≥ 1.5, volatility, correlation ≤ 0.75, max 6 trades / 2 per class),
+  NOVA (TRADE / WAIT / REJECT).
+- Universe: 10 indices (India, US, Europe, Asia), 14 stocks (India + US), 6 crypto, gold / silver / copper / platinum,
+  crude / Brent / natural gas / wheat, 6 forex pairs. Yahoo data, Crypto.com fallback for crypto.
+- Every TRADE call is paper-tracked (target / stop / 3-day time-out) in calls.json and Supabase `desk_calls`.
+- New page **AI Desk** (Today menu): agent cards, NOVA counts, trade / wait / reject cards with entry, stop, target,
+  each agent's vote and TITAN's risk review, a table per market class with 60-day sparklines, ORION's headlines and
+  the paper record. On Streamlit Cloud (no server state) the page computes the desk itself every 15 minutes.

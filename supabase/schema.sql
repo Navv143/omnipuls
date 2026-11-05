@@ -82,3 +82,14 @@ create table if not exists public.radar_events (
   unique (day, stock, kind)
 );
 alter table public.radar_events enable row level security;
+
+-- AI Desk paper calls (agents.py): every TRADE call with its target / stop result.
+create table if not exists public.desk_calls (
+  id bigint generated always as identity primary key,
+  time text not null, symbol text not null, name text, class text, side smallint,
+  entry double precision, stop double precision, target double precision, rr double precision, setup text,
+  result text, exit double precision, r double precision,
+  updated_at timestamptz not null default now(),
+  unique (time, symbol)
+);
+alter table public.desk_calls enable row level security;
