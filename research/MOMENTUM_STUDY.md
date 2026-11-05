@@ -222,3 +222,21 @@ close. Readings at 9:30 / 10:00 / 10:30 / 11:00 / 12:00, in the direction of the
   10:00 +0.20% (halves +0.10 / +0.28, 8 a day, 59% go on); 10:30 +0.20% (halves +0.23 / +0.18, 14 a day, 62% go on);
   11:00 +0.19% (halves +0.38 / +0.09); 12:00 +0.15% (+0.40 / +0.02). The same profile at 9:30 loses -0.76% (three
   candles are too few: early strength fades). No stop was used (hold to the close): to be tested with a stop.
+
+### Speed of the move: target / stop / 1-2 hour tests (5 Nov 2026, `research/grinder_exits.py`, `research/ignition_study.py`)
+- Grinders are slow, not momentum. Grinder profile + sector at 10:30 (719 trades): median best move within 30 / 60 / 120
+  minutes 0.11 / 0.14 / 0.21 ATR (0.36 by the close); only 6% reach +0.5 ATR within an hour, 14% within two hours, 35% by
+  the close; the day's best price comes after 2 hours in 61% of trades. Exits after 60 minutes lose (-0.05% to -0.09%),
+  after 120 minutes about 0 (+0.01 / +0.12 halves at 11:00); held to the close with the stop at the day's opposite extreme
+  and a 1.5 ATR target: +0.18% (halves +0.14 / +0.20, 56% win). A tight stop (0.3 ATR) is worse (+0.13%).
+- Momentum ignition (first 5-min candle of the day breaking the day's high / low on >= 1.5x usual volume, 09:30-13:55,
+  4,936 events): no fast move on average - 9% reach +0.5 ATR within an hour, average 60-minute result +0.01 ATR, every
+  target / stop / 1-2 hour combination loses after costs (-0.08% to -0.09%). Higher volume (5x+) or earlier time only
+  slightly faster (14% / 12% within an hour), still negative.
+- What separates the 9% fast movers from the 58% duds (no +0.2 ATR in an hour): bigger signal candle (0.28 vs 0.22 ATR),
+  more volume (3.1x vs 2.7x), already further from the open (0.57 vs 0.46 ATR), Nifty not strongly the same way. The
+  clearest: stocks already >= 1.5 ATR on the day - 24% reach +0.5 ATR in an hour, 33% in two; with a 0.4 ATR stop and a
+  1.5 ATR target held to the close +0.13% (172 trades, halves +0.12 / +0.14, 40% win); limited to 2 hours +0.05%.
+- So: in F&O stocks the fast momentum is at the open (big 9:30 movers, V3 early pick); after that the moves that last
+  are slow grinds that pay only if held to the close. Both added as paper setups with the result after 1 h / 2 h
+  recorded (momentum_paper.py, crypto_paper pct_60 / pct_120).

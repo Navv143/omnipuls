@@ -7700,7 +7700,13 @@ def _btc_paper_section():
                 else "open")})
     except Exception:
         pass
-    tested = {"V3 early pick": ("+0.58% a trade", "57%"), "V3 (top 2, filters)": ("-0.05% (54 days)", "48%"),
+    mom = []
+    try:
+        mom = json.loads((PATHS.DATA / "bots" / "momentum_record.json").read_text())
+        rec += [{**x_, "setup": " ".join(x_["setup"].split(" ")[:-1])} for x_ in mom]
+    except Exception:
+        pass
+    tested = {"Grinder 10:30": ("+0.18% a trade", "56%"), "Ignition big mover": ("+0.13% a trade", "40%"), "V3 early pick": ("+0.58% a trade", "57%"), "V3 (top 2, filters)": ("-0.05% (54 days)", "48%"),
               "Bank Nifty EBP 1h (overnight)": ("+0.40R", "27%"), "BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%"),
               "BTC burst momentum": ("+0.15R (+0.21%)", ""), "ETH burst momentum": ("+0.13R (+0.36%)", ""),
               "SOL burst momentum": ("+0.24R (+0.61%)", "")}
@@ -7733,6 +7739,22 @@ def _btc_paper_section():
                                     "Avg R": st.column_config.NumberColumn(format="%+.2f"),
                                     "Total R": st.column_config.NumberColumn(format="%+.1f"),
                                     "≈ ₹ at ₹1,000 a trade": st.column_config.NumberColumn(format="%+,.0f")})
+    if mom:
+        m_ = pd.DataFrame(mom).assign(Setup=lambda d: d["setup"].str.split(" ").str[:-1].str.join(" "))
+        st.markdown("**Momentum speed check** (stocks, paper): average result 1 hour and 2 hours after entry vs at the "
+                    "exit. Fast momentum = most of the final result already there at 1-2 hours.")
+        g_ = m_.groupby("Setup").agg(Trades=("pct", "size"), Open=("result", lambda r: (r == "open").sum()),
+                                     **{"After 1h %": ("pct_60", "mean"), "After 2h %": ("pct_120", "mean"),
+                                        "Final %": ("pct", "mean"), "Win %": ("pct", lambda r: (r > 0).mean() * 100)}).reset_index()
+        st.dataframe(g_, hide_index=True, width="stretch", column_config={
+            k: st.column_config.NumberColumn(format="%+.2f") for k in ("After 1h %", "After 2h %", "Final %")} | {
+            "Win %": st.column_config.NumberColumn(format="%.0f")})
+        today_ = m_[m_["day"] == m_["day"].max()]
+        st.dataframe(today_.reindex(columns=["day", "setup", "side", "signal_at", "entry_at", "entry", "sl", "tp", "result",
+                                             "exit_at", "pct_60", "pct_120", "pct"]).rename(columns={
+            "day": "Day", "setup": "Trade", "side": "Side", "signal_at": "Signal", "entry_at": "Entry at", "entry": "Entry",
+            "sl": "Stop", "tp": "Target", "result": "Result", "exit_at": "Exit", "pct_60": "1h %", "pct_120": "2h %",
+            "pct": "Now / final %"}), hide_index=True, width="stretch")
     if rec:
         with st.expander(f"Crypto & gold paper record ({len(rec)} trades)", icon=":material/currency_bitcoin:"):
             st.dataframe(pd.DataFrame(rec[::-1]).reindex(columns=["day", "setup", "side", "entry_at_ist", "entry", "sl", "tp",

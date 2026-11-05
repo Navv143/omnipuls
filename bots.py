@@ -1151,6 +1151,49 @@ def v3_step(mkt: "Market", now: datetime):
             log(f"v3 record: {e}")
 
 
+MOM_FILE = OUT / "momentum_record.json"
+
+
+def momentum_step(mkt: "Market", now: datetime):
+    """Grinder 10:30 and Ignition big mover paper trades (momentum_paper.py), with the result 60 / 120 minutes after
+    entry: <data>/bots/momentum_record.json and Supabase crypto_paper."""
+    import momentum_paper as MP
+    import scanners as SC
+    if now.strftime("%H:%M") < "09:36":
+        return
+    nb = mkt.bars("NIFTY")
+    session = SC.session_of(nb)
+    if session is None or session.strftime("%Y-%m-%d") != now.strftime("%Y-%m-%d"):
+        return
+    S = SC.prepare(mkt.stock_bars(), session)
+    if len(S) < 50:
+        return
+    N = SC.Stock("NIFTY 50", nb, session)
+    try:
+        rec = json.loads(MOM_FILE.read_text())
+    except Exception:
+        rec = []
+    have = {(x["day"], x["setup"]): x for x in rec}
+    new = []
+    for row in MP.rows(S, N if N.ok else None, now):
+        old = have.get((row["day"], row["setup"]))
+        if old is not None and old.get("result") != "open":
+            continue                                   # finished trades stay as recorded
+        if old != row:
+            if old is None:
+                log(f"{row['setup']}: {'BUY' if row['side'] > 0 else 'SELL'} {row['entry']} stop {row['sl']} target {row['tp']}")
+            have[(row["day"], row["setup"])] = row
+            new.append(row)
+    if new:
+        tmp = MOM_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(list(have.values()), default=str))
+        os.replace(tmp, MOM_FILE)
+        try:
+            _cloud().upsert_rows("crypto_paper", _clean(new), "day,setup")
+        except Exception as e:
+            log(f"momentum record: {e}")
+
+
 def plan_for(mkt: "Market", stock: str, side: int) -> dict | None:
     """Entry / stop / targets for a stock idea, the same plan as the Momentum Funnel (funnel.trade_plan)."""
     import funnel as FN
@@ -1219,6 +1262,10 @@ def cycle(mkt: Market) -> dict:
         v3_step(mkt, now)
     except Exception as e:
         log(f"v3: {e}")
+    try:
+        momentum_step(mkt, now)
+    except Exception as e:
+        log(f"momentum paper: {e}")
     closing = None
     if now.strftime("%H:%M") >= CLOSE_FROM:
         try:
