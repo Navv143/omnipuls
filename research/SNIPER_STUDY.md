@@ -150,3 +150,21 @@ compared with non-Fibonacci control levels at nearby depths (0.3, 0.45, 0.55, 0.
   2.618 extensions are equal or slightly worse (-0.5 to -3 points). 60 days of COMEX gold: noisy, no edge.
 - The hold rate depends on how deep the level is (deeper retracements hold more often), not on whether the ratio is
   a Fibonacci number.
+
+## Engulfing Bar Play (EBP, train_and_trade reel) on every timeframe (5 Nov 2026, `research/ebp_study.py`)
+
+Rules from the reel: bearish EBP = the candle sweeps above the previous high and closes below the previous open
+(bullish mirror); stop just beyond the EBP wick (invalidation); target the draw on liquidity (DOL = highest high /
+lowest low of the 10 candles before, at least 1R away) or 1R / 2R; entry at the next open or a limit at the EBP
+candle's 50% (3 candles). 5m, 15m, 1h, 4h, daily on BTC, ETH, SOL, gold (4 years), Nifty and Bank Nifty (1h / daily
+2 years, 5m / 15m 60 days). Results: `research/ebp_results.csv`; runner `research/ebp_run.py`.
+
+- 5m and 15m (the small-stop version): loses everywhere, -0.16 to -0.99R a trade; before costs exactly ~0 (stops of
+  0.05-0.3% make costs 10-50% of the risk).
+- 1h: -0.04 to -0.21R on crypto and gold; 4h: about break-even (-0.12 to +0.10R, halves disagree).
+- Daily gold: positive in every variant (+0.36 to +0.90R) but only 26-46 trades in 4 years.
+- Bank Nifty 1h with the previous candle the opposite colour and the DOL target: +0.15 to +0.69R (all 12 settings),
+  mostly from shorts, but only when trades are held overnight. Intraday only (no entry after 14:15, flat at 15:15):
+  -0.11 to 0R; Nifty ~0. The edge was the overnight gap, not the pattern. 15m intraday on 60 days: -0.39 to -0.47R.
+
+Conclusion: no intraday edge on any timeframe or market; not added to paper trading.
