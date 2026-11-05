@@ -365,3 +365,14 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   net money in that direction and beyond its value 15 minutes ago. Passing stocks = watchlist (long / short), with an
   "Add to Watchlist & Alerts" button; funnel counts, sector money heatmap and a step-by-step table of every stock.
 - Checked on real Yahoo 5-minute data (5 Nov, 9:55): 235 stocks → 26 → 22 → 14 on the watchlist.
+
+## 5 Nov 2026: Funnel step 2 (range), suggestions, stored snapshots
+
+- New step 2: high-low from 9:15 to now vs the usual high-low of that window (default ≥ 1.2×); sector money and stock
+  money are now steps 3 and 4.
+- **Suggested: best to trade now** = watchlist stocks moving with the market, ranked by a 0-100 score (ATR, range,
+  last 15 min, money share, sector share, market direction, room to the 20-day high/low, quiet yesterday), each with
+  the reasons. Stocks against the market are never suggested (they lost at every time in the momentum study).
+- The server stores the funnel every 5 minutes: all F&O stocks in <data>/funnel/<day>/<HHMM>.parquet and the step-1
+  stocks in Supabase `funnel_log`, so the steps and the score can be tested on what was known at each moment.
+- Real data check (5 Nov): 235 → 26 (ATR) → 22 (range) → 18 (sector) → 12 (stock money) → 7 suggested.

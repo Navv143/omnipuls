@@ -93,3 +93,15 @@ create table if not exists public.desk_calls (
   unique (time, symbol)
 );
 alter table public.desk_calls enable row level security;
+
+-- Momentum Funnel snapshots (bots.py, every 5 minutes): stocks that pass step 1, with each step's reading.
+create table if not exists public.funnel_log (
+  id bigint generated always as identity primary key,
+  day date not null, time text not null, stock text not null, side smallint, price double precision,
+  day_x double precision, now_x double precision, range_x double precision, sec_net double precision,
+  net double precision, net_before double precision, mkt_move double precision, room_atr double precision,
+  prev_rng_atr double precision, score double precision, step smallint, suggest boolean,
+  updated_at timestamptz not null default now(),
+  unique (day, time, stock)
+);
+alter table public.funnel_log enable row level security;
