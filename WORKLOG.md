@@ -356,3 +356,12 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
   relative strength, market / sector direction, O=H/L) → trend-day lift and the trade result to 15:15 after costs,
   1-3 condition rules judged on unseen days with t counted over days. Runs every night on the server after the Setup
   Finder (year of Dhan data); results on the Bots page. First run on 45 days of Yahoo data: research/MOMENTUM_STUDY.md.
+
+## 5 Nov 2026: Momentum Funnel (simple step-by-step watchlist)
+
+- `funnel.py` + page **Momentum Funnel** (Today menu). Step 1: average 5-minute true range from 9:15 to now vs the
+  same window on the last 20 days (default ≥ 1.2×) and the last 15 minutes vs the same 15 minutes (≥ 1.0×); side =
+  up / down from the open. Step 2: the sector's net money in that direction (option: also rising). Step 3: the stock's
+  net money in that direction and beyond its value 15 minutes ago. Passing stocks = watchlist (long / short), with an
+  "Add to Watchlist & Alerts" button; funnel counts, sector money heatmap and a step-by-step table of every stock.
+- Checked on real Yahoo 5-minute data (5 Nov, 9:55): 235 stocks → 26 → 22 → 14 on the watchlist.

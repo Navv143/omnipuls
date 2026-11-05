@@ -52,6 +52,7 @@ import twelve as TW
 import market_view as MV
 import mv_ui as MX
 import desk_agents as DA
+import funnel as FN
 import bot as BOT
 import paths as PATHS
 import cryptocom as CC
@@ -1402,6 +1403,7 @@ HOWTO = {  # one line under each page's status bar: what the page is for and how
     "view": "Start here. Trade only what the top box calls a tested signal; the rest helps you pick the side.",
     "dashboard": "The full desk: mood, index plans and focus lists. Today's plan card lists the tested setups.",
     "scanners": "Each tab is one setup with today's signals. Follow entry, stop and exit exactly as shown.",
+    "funnel": "Step 1 ATR active vs usual → step 2 sector money with the move → step 3 stock money with the move and growing → watchlist.",
     "agents": "Six agents read every market (indices, stocks, crypto, gold, commodities, forex). TRADE only when all agree and risk passes; paper-track first.",
     "bot": "Live radar of every F&O stock: sudden changes vs its own usual, with past-days odds. Tested = trade; good odds = paper-trade first.",
     "options": "Pick an index and expiry. Most puts written = support, most calls written = resistance.",
@@ -6548,8 +6550,92 @@ def page_agents():
          "4 agents agreeing, none against and TITAN passing.")
 
 
+# ---------------------------------------------------------------- Momentum funnel: simple step-by-step watchlist
+
+
+def page_funnel():
+    status_strip()
+    st.header("Momentum Funnel")
+    st.markdown(MX.CSS + MX.FUNNEL_CSS, unsafe_allow_html=True)
+    if not DHAN_DATA:
+        need_dhan()
+        return
+    with st.expander("Settings", icon=":material/tune:"):
+        c1, c2, c3 = st.columns(3)
+        day_x = c1.slider("Step 1: ATR 9:15→now vs usual, at least", 1.0, 2.5, 1.2, 0.05, key="fn_day")
+        now_x = c2.slider("Step 1: ATR last 15 min vs usual, at least", 0.5, 2.5, 1.0, 0.05, key="fn_now")
+        sec_rise = c3.toggle("Step 2: sector money must also be rising", False, key="fn_secrise")
+    svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
+    idx = index_defs()
+    svc.set_universe(tuple(sorted(set(scan_universe("All F&O stocks")) | {m for d in idx.values() for m in d["w"]})))
+    svc.set_indices({**{k: d["id"] for k, d in idx.items()}, "INDIAVIX": 21})
+    svc.touch()
+    bars, _ = svc.bars()
+    act = _activity_data(svc)
+    if not bars or not act:
+        st.info("Loading today's 5-minute candles for every F&O stock…", icon=":material/hourglass_top:")
+        return
+    fno = set(U.FNO_SECTOR_OF)
+    t, sec = FN.build({s: b for s, b in bars.items() if s in fno}, act[2], U.FNO_SECTOR_OF,
+                      {"day_x": day_x, "now_x": now_x, "sector_rising": sec_rise})
+    if t.empty:
+        st.info("Not enough candles yet: the funnel starts after the first few minutes.", icon=":material/hourglass_top:")
+        return
+    n1, n2, n3 = int(t["step1"].sum()), int(t["step2"].sum()), int(t["step3"].sum())
+    left, right = st.columns([1, 1.6]) if not MOBILE else (st.container(), st.container())
+    with left:
+        st.markdown(MX.funnel([
+            ("F&O stocks", len(t), f"latest candle {t['time'].max()}"),
+            ("Step 1 · ATR active", n1, f"day ≥ {day_x:.2f}× and last 15 min ≥ {now_x:.2f}× usual"),
+            ("Step 2 · sector money", n2, "sector net money in the move's direction"),
+            ("Step 3 · stock money", n3, "stock net money with the move and still growing"),
+        ]), unsafe_allow_html=True)
+    with right:
+        wl = t[t["step3"]]
+        st.markdown(MX.section("Watchlist", f"{int((wl['side'] > 0).sum())} long · {int((wl['side'] < 0).sum())} short"),
+                    unsafe_allow_html=True)
+        st.markdown(MX.watch_cards(wl.sort_values("day_x", ascending=False).to_dict("records")), unsafe_allow_html=True)
+        if not wl.empty and st.button("Add these to Watchlist & Alerts", icon=":material/playlist_add:", key="fn_add"):
+            syms = [U.fno_yahoo(s) for s in wl["Stock"]]
+            store["watchlist"] = list(dict.fromkeys(store.get("watchlist", []) + syms))
+            save_store(store)
+            st.success(f"Added {len(syms)} stocks to your watchlist.")
+
+    st.markdown(MX.section("Sector money", "step 2 uses this: net money in (green) or out (red) of each sector"),
+                unsafe_allow_html=True)
+    hm = sec.rename(columns={"sec_net": "Net Flow Cr", "sec_in": "Inflow Cr", "sec_out": "Outflow Cr"})
+    st.markdown(MX.heatmap(hm[["Sector", "Net Flow Cr", "Inflow Cr", "Outflow Cr"]]), unsafe_allow_html=True)
+
+    st.markdown(MX.section("Every F&O stock, step by step", "✓ passed · ✗ failed"), unsafe_allow_html=True)
+    show = st.segmented_control("Show", ["Passed step 1", "All"], default="Passed step 1", key="fn_show") or "Passed step 1"
+    v = t if show == "All" else t[t["step1"]]
+    ok = lambda b: "✓" if b else "✗"  # noqa: E731
+    st.dataframe(pd.DataFrame({
+        "Stock": v["Stock"], "Side": np.where(v["side"] > 0, "▲ long", np.where(v["side"] < 0, "▼ short", "—")),
+        "Price": v["price"], "From open %": v["move_pct"], "Chg %": v["chg_pct"],
+        "ATR 9:15→now ×usual": v["day_x"], "ATR last 15m ×usual": v["now_x"], "1 ATR": v["step1"].map(ok),
+        "Sector": v["Sector"], "Sector net ₹Cr": v["sec_net"], "2 Sector": v["step2"].map(ok),
+        "Stock net ₹Cr": v["net"], "Net 15m ago": v["net_before"], "Buying %": v.get("buy_share"),
+        "3 Stock": v["step3"].map(ok), "Watchlist": v["Watch"]}), hide_index=True, width="stretch", height=520,
+        column_config={"Price": st.column_config.NumberColumn(format="%.2f"),
+                       "From open %": st.column_config.NumberColumn(format="%+.2f"),
+                       "Chg %": st.column_config.NumberColumn(format="%+.2f"),
+                       "ATR 9:15→now ×usual": st.column_config.NumberColumn(format="%.2f×"),
+                       "ATR last 15m ×usual": st.column_config.NumberColumn(format="%.2f×"),
+                       "Sector net ₹Cr": st.column_config.NumberColumn(format="%+.0f"),
+                       "Stock net ₹Cr": st.column_config.NumberColumn(format="%+.1f"),
+                       "Net 15m ago": st.column_config.NumberColumn(format="%+.1f"),
+                       "Buying %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f%%")})
+    note("Step 1: average 5-minute true range from 9:15 to the latest candle vs the same window on the last 20 days, "
+         "and the last 3 candles vs the same 15 minutes on those days. Side = up or down from today's open. Step 2: "
+         "the sector's net money (turnover split by where each candle closed) is in the same direction. Step 3: the "
+         "stock's net money is in that direction and beyond its value 15 minutes ago. Refreshes with the page. "
+         "This is a watchlist, not a tested signal yet.")
+
+
 PAGE_DEFS = [  # (url, function, menu title, icon)
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
+    ("funnel", page_funnel, "Momentum Funnel", ":material/filter_alt:"),
     ("agents", page_agents, "AI Desk", ":material/groups:"),
     ("bot", page_bot, "Bots", ":material/smart_toy:"),
     ("dashboard", page_dashboard, "Trading Desk", ":material/space_dashboard:"),
@@ -6580,7 +6666,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "view"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({  # grouped by what you are doing: today's trading, the market, tools, your account
-    "Today": [P["view"], P["agents"], P["dashboard"], P["scanners"], P["bot"], P["options"]],
+    "Today": [P["view"], P["funnel"], P["agents"], P["dashboard"], P["scanners"], P["bot"], P["options"]],
     "Markets": [P["indices"], P["sectors"], P["smart"], P["apex"], P["fno"], P["oi"], P["global"], P["mcx"], P["cdsfut"]],
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["odds"]],
     "Account": [P["account"]] + ([P["portfolio"], P["dhan"], P["review"], P["research"]] if IS_ADMIN else []),
