@@ -348,3 +348,11 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - New page **AI Desk** (Today menu): agent cards, NOVA counts, trade / wait / reject cards with entry, stop, target,
   each agent's vote and TITAN's risk review, a table per market class with 60-day sparklines, ORION's headlines and
   the paper record. On Streamlit Cloud (no server state) the page computes the desk itself every 15 minutes.
+
+## 5 Nov 2026: Momentum study (what makes a stock trend intraday)
+
+- `momentum_study.py`: per F&O stock-day, readings at 9:30 / 9:45 / 10:15 (gap, yesterday's range and close, ATR
+  squeeze, room to the 20-day extreme, move / range so far, volume vs usual, opening-range expansion, money flow,
+  relative strength, market / sector direction, O=H/L) → trend-day lift and the trade result to 15:15 after costs,
+  1-3 condition rules judged on unseen days with t counted over days. Runs every night on the server after the Setup
+  Finder (year of Dhan data); results on the Bots page. First run on 45 days of Yahoo data: research/MOMENTUM_STUDY.md.
