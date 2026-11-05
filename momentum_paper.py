@@ -14,6 +14,12 @@ the live record can show whether the move comes fast (momentum) or slowly (grind
 - "Nifty midday fade" (research/nifty_leaders_study.py): Nifty closes a 5-min candle > 0.1% above its last hour's high
   between 11:00 and 14:00 (first time that day); short Nifty at the next open, exit after 60 minutes. Only 11 cases so
   far (Nifty fell back in 9): recorded to build the sample.
+- "Sector top 2 UP" / "Sector top 2 DOWN vs Nifty" (research/sector_leaders_study.py): at 11:00 / 12:00 / 13:00, a
+  sector (>= 5 stocks) whose stocks average >= 0.3 ATR up (down) from yesterday's close; its 2 strongest (weakest) stocks
+  today that are above (below) VWAP and within 0.3 ATR of the day's high (low); first time per stock and day. The DOWN
+  side only when Nifty is up (a sector falling against the market). Entry at the next candle's open, stop 0.75 ATR,
+  target 1.5 ATR, exit 15:20. Tested (32 days, first per stock-day): UP +0.22% a trade, halves +0.07 / +0.33, every
+  quarter positive, ~9 a day; DOWN +0.13% (14 days, quarters mixed) - recorded to build the sample.
 - "Ignition big mover": a stock already >= 1.5 ATR from yesterday's close whose first volume-burst candle of the day
   (>= 1.5x usual volume for the time, range >= 0.15 ATR, close in the outer 30%) breaks the day's high (low), 09:30-13:55.
   Entry at the next candle's open, stop 0.4 ATR, target 1.5 ATR, exit 15:20. Tested: +0.13% a trade (172 trades,
@@ -32,8 +38,11 @@ GRINDER = "Grinder 10:30"
 IGNITION = "Ignition big mover"
 ALIGNED = "Aligned 10:00"
 FADE = "Nifty midday fade"
+SEC_UP = "Sector top 2 UP"
+SEC_DN = "Sector top 2 DOWN vs Nifty"
 TESTED = {GRINDER: ("+0.18% a trade", "56%"), IGNITION: ("+0.13% a trade", "40%"), ALIGNED: ("+0.16% a trade", "55%"),
-          FADE: ("+0.09% a trade (11 days)", "82%")}
+          FADE: ("+0.09% a trade (11 days)", "82%"), SEC_UP: ("+0.22% a trade", "56%"),
+          SEC_DN: ("+0.13% a trade (14 days)", "62%")}
 
 
 def _hm(idx) -> np.ndarray:
@@ -192,6 +201,55 @@ def aligned_picks(S: dict, nifty, T: str = "10:00", top: int = 10) -> list[dict]
     return out
 
 
+def sector_picks(S: dict, nifty, now: datetime, checks=("11:00", "12:00", "13:00"), min_sec: float = 0.3) -> list[dict]:
+    n_up = False
+    out, seen = [], set()
+    for T in checks:
+        if now.strftime("%H:%M") < T:
+            break
+        rows_ = []
+        for sym, s in S.items():
+            A, P = s.atr, s.prev_close
+            if not A or A <= 0:
+                continue
+            hm = _hm(s.today.index)
+            a, post = s.today[hm < T], s.today[hm >= T]
+            if not len(a) or post.empty:
+                continue
+            c = float(a["Close"].iloc[-1])
+            tp_ = (a["High"] + a["Low"] + a["Close"]) / 3
+            vw = float(((tp_ * a["Volume"]).cumsum() / a["Volume"].replace(0, np.nan).cumsum()).iloc[-1])
+            rows_.append({"sym": sym, "sector": _sector(sym), "mv": (c - P) / A, "vwap": (c - vw) / A if np.isfinite(vw) else 0.0,
+                          "hod": (float(a["High"].max()) - c) / A, "lod": (c - float(a["Low"].min())) / A,
+                          "stock": s, "entry_ts": post.index[0], "entry": float(post["Open"].iloc[0])})
+        if not rows_:
+            continue
+        df = pd.DataFrame(rows_)
+        if nifty is not None and getattr(nifty, "ok", False):
+            na = nifty.today[_hm(nifty.today.index) < T]
+            n_up = bool(len(na)) and float(na["Close"].iloc[-1]) > nifty.prev_close
+        for sec, g in df.groupby("sector"):
+            if len(g) < 5 or sec == "Other":
+                continue
+            m = g["mv"].mean()
+            if abs(m) < min_sec:
+                continue
+            side = 1 if m > 0 else -1
+            if side < 0 and not n_up:
+                continue                                   # DOWN side only against a rising Nifty
+            top = g.assign(w=g["mv"] * side).sort_values("w", ascending=False).head(2)
+            for r in top.itertuples(index=False):
+                if r.vwap * side <= 0 or (r.hod if side > 0 else r.lod) > 0.3 or (r.sym, side) in seen:
+                    continue
+                seen.add((r.sym, side))
+                A = r.stock.atr
+                out.append({"setup": SEC_UP if side > 0 else SEC_DN, "sym": r.sym, "side": side, "signal_at": T,
+                            "entry_ts": r.entry_ts, "entry": r.entry, "sl": r.entry - side * 0.75 * A,
+                            "tp": r.entry + side * 1.5 * A, "stock": r.stock,
+                            "why": f"{sec} {m:+.2f} ATR, stock {r.mv:+.2f} ATR (top 2)"})
+    return out
+
+
 def nifty_fade(nifty, now: datetime, look: int = 12, min_brk: float = 0.1) -> dict | None:
     """Short Nifty after its first midday (11:00-14:00) close > min_brk % above the last hour's high; exit 60 min later."""
     if nifty is None or not getattr(nifty, "ok", False):
@@ -224,6 +282,8 @@ def rows(S: dict, nifty, now: datetime) -> list[dict]:
         picks += aligned_picks(S, nifty)
     if now.strftime("%H:%M") >= "10:30":
         picks += grinder_picks(S, nifty)
+    if now.strftime("%H:%M") >= "11:00":
+        picks += sector_picks(S, nifty, now)
     out = []
     for p in picks:
         res = track(p["stock"].today, p["entry_ts"], p["side"], p["entry"], p["sl"], p["tp"], now)

@@ -281,3 +281,18 @@ rest of the day from the next open, 0.12% costs):
 - Against-Nifty stocks that finish big vs those that fade: already further (1.0 vs 0.6 ATR), gapped their way (0.31 vs
   0.13 ATR), much more volume (2.1x vs 1.3x) - news-type moves - but trading them is still unstable (halves flip).
 Added "Aligned 10:00" (with/with, >= 0.5 ATR, >= 2x volume) and "Nifty midday fade" as paper setups (momentum_paper.py).
+
+## Sector leg + its top 2 stocks, instead of Nifty (5 Nov 2026, `research/sector_leaders_study.py`)
+Sector index = average move (ATR from yesterday's close) of the sector's stocks (>= 5 stocks), every 5 minutes.
+32 days, both directions, stop first, 0.12% costs.
+- A. Sector breakout of its last hour (11:00-14:00), top 2 stocks: loses on both sides (-0.03% to -0.41%) - midday
+  sector breakouts fade, like Nifty's.
+- B. Sector already >= 0.3 ATR at 11:00 / 12:00 / 13:00, its top 2 stocks that way:
+  - UP, top 2 above VWAP and within 0.3 ATR of the day's high, stop 0.75 / target 1.5 ATR, first per stock-day:
+    +0.22% a trade, halves +0.07 / +0.33, every quarter positive (+0.09 / +0.17 / +0.34 / +0.29), 67% of days positive,
+    ~9 a day. The rest of the sector (rank 3+) only +0.10% (halves -0.06 / +0.21): the top 2 add. Best at 12:00
+    (+0.39%, halves +0.35 / +0.42) - not used on its own (picked after seeing the data). Sector >= 0.5 ATR: +0.24%.
+  - DOWN with Nifty: unstable (halves +0.27 / -0.64). DOWN against a rising Nifty: +0.13% first per stock-day, +0.34%
+    when also below VWAP and near the low - but only 14 days and two of four quarters negative.
+  - UP against a falling Nifty: only 8 days, about 0.
+Added "Sector top 2 UP" and "Sector top 2 DOWN vs Nifty" as paper setups (momentum_paper.sector_picks).

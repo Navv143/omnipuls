@@ -7707,7 +7707,8 @@ def _btc_paper_section():
     except Exception:
         pass
     tested = {"Grinder 10:30": ("+0.18% a trade", "56%"), "Ignition big mover": ("+0.13% a trade", "40%"),
-              "Aligned 10:00": ("+0.16% a trade", "55%"), "Nifty midday fade": ("+0.09% (11 days)", "82%"), "V3 early pick": ("+0.58% a trade", "57%"), "V3 (top 2, filters)": ("-0.05% (54 days)", "48%"),
+              "Aligned 10:00": ("+0.16% a trade", "55%"), "Nifty midday fade": ("+0.09% (11 days)", "82%"),
+              "Sector top 2 UP": ("+0.22% a trade", "56%"), "Sector top 2 DOWN vs Nifty": ("+0.13% (14 days)", "62%"), "V3 early pick": ("+0.58% a trade", "57%"), "V3 (top 2, filters)": ("-0.05% (54 days)", "48%"),
               "Bank Nifty EBP 1h (overnight)": ("+0.40R", "27%"), "BTC crash buy": ("+0.21R", "52%"), "Gold crash buy": ("+0.12R", "60%"), BS.NAME: ("+0.09R", "36%"),
               "BTC burst momentum": ("+0.15R (+0.21%)", ""), "ETH burst momentum": ("+0.13R (+0.36%)", ""),
               "SOL burst momentum": ("+0.24R (+0.61%)", "")}
