@@ -593,7 +593,8 @@ def _odds_check() -> list:
 
 FUNNEL_COLS = ["Stock", "Sector", "side", "price", "move_pct", "chg_pct", "gap_pct", "day_x", "now_x", "range_x",
                "room_atr", "prev_rng_atr", "net", "net_before", "inflow", "outflow", "sec_net", "sec_net_before",
-               "mkt_move", "flow_with", "sec_with", "score", "step1", "step2", "step3", "step4", "step5", "suggest"]
+               "mkt_move", "flow_with", "sec_with", "score", "step1", "step2", "step3", "step4", "step5", "suggest",
+               "mkt_prev", "gap_atr", "q_mkt", "q_gap", "q_calm", "quality"]
 
 
 def funnel_snapshot(mkt: "Market", now: datetime) -> dict:
@@ -615,7 +616,9 @@ def funnel_snapshot(mkt: "Market", now: datetime) -> dict:
              "sec_net": _f(r["sec_net"], 2), "net": _f(r["net"], 2), "net_before": _f(r["net_before"], 2),
              "mkt_move": _f(r["mkt_move"], 3), "room_atr": _f(r["room_atr"], 2), "prev_rng_atr": _f(r["prev_rng_atr"], 2),
              "score": _f(r["score"], 0), "step": sum(int(r[f"step{i}"]) for i in (1, 2, 3, 4, 5)),
-             "suggest": bool(r["suggest"])} for _, r in snap[snap["step1"]].iterrows()]
+             "suggest": bool(r["suggest"]), "quality": int(r.get("quality", 0) or 0), "q_mkt": bool(r.get("q_mkt", False)),
+             "q_gap": bool(r.get("q_gap", False)), "q_calm": bool(r.get("q_calm", False)),
+             "gap_atr": _f(r.get("gap_atr"), 3), "mkt_prev": _f(r.get("mkt_prev"), 3)} for _, r in snap[snap["step1"]].iterrows()]
     try:
         if rows:
             _cloud().upsert_rows("funnel_log", rows, "day,time,stock")
@@ -624,12 +627,12 @@ def funnel_snapshot(mkt: "Market", now: datetime) -> dict:
     p5 = t[t["step5"] & t["entry"].notna()]
     plans = [{"symbol": r["Stock"], "side": int(r["side"]), "time": r["time"], "entry": float(r["entry"]),
               "sl": float(r["sl"]), "tp1": float(r["tp1"]), "tp2": float(r["tp2"]), "risk_pct": float(r["risk_pct"]),
-              "score": _f(r["score"], 0)} for _, r in p5.iterrows()]
+              "score": _f(r["score"], 0), "note": r.get("quality_note") or None} for _, r in p5.iterrows()]
     return {"plans": plans, "time": snap["time"].iloc[0], "stocks": int(len(snap)),
             "steps": [int(snap[f"step{i}"].sum()) for i in (1, 2, 3, 4, 5)], "suggest": int(snap["suggest"].sum()),
             "top": t[t["suggest"]].sort_values("score", ascending=False).head(10)[
                 ["Stock", "Sector", "side", "price", "move_pct", "time", "day_x", "now_x", "range_x", "score", "sec_net", "net",
-                 "net_before", "why"]].to_dict("records")}
+                 "net_before", "why", "quality", "q_mkt", "q_gap", "q_calm"]].to_dict("records")}
 
 
 def _latest_chain(index: str, day: str) -> tuple[float, pd.DataFrame]:

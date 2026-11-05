@@ -175,3 +175,8 @@ create table if not exists public.crypto_paper (
   unique (day, setup)
 );
 alter table public.crypto_paper enable row level security;
+
+-- Momentum Funnel quality flags (5 Nov 2026): market with the trade, no gap with it, not chasing
+alter table public.funnel_log add column if not exists quality smallint, add column if not exists q_mkt boolean,
+  add column if not exists q_gap boolean, add column if not exists q_calm boolean,
+  add column if not exists gap_atr double precision, add column if not exists mkt_prev double precision;

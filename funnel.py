@@ -158,6 +158,15 @@ def build(bars: dict, per: dict, sectors: dict, cfg: dict | None = None) -> tupl
     t["step5"] = t["step4"] & t["mkt_with"] & t["calm_yday"]
     t["suggest"] = t["step5"]
     t["Watch"] = np.where(t["step5"], np.where(side > 0, "LONG", "SHORT"), np.where(t["step4"], "on watch", ""))
+    # quality flags (research/funnel_winners.py, 1,890 signals: all three = 72% wins, +0.30R vs +0.05R; to be confirmed
+    # live): market moving with the trade from the open, the stock did not gap the trade's way, not chasing a spike
+    t["mkt_prev"] = float(t["chg_pct"].mean()) if "chg_pct" in t else np.nan
+    gap_atr = side * t["gap_pct"].fillna(0) / 100 * t["price"] / t["atr14"].replace(0, np.nan)
+    t["gap_atr"] = gap_atr
+    t["q_mkt"] = (side * mkt) >= QUALITY["mkt_with"]
+    t["q_gap"] = gap_atr.fillna(0) <= QUALITY["gap_atr"]
+    t["q_calm"] = t["now_x"].fillna(0) <= QUALITY["now_x"]
+    t["quality"] = t[["q_mkt", "q_gap", "q_calm"]].sum(axis=1).astype(int)
 
     def why(r):
         out = [f"ATR {r['day_x']:.1f}x and range {r['range_x']:.1f}x usual"]
@@ -171,6 +180,7 @@ def build(bars: dict, per: dict, sectors: dict, cfg: dict | None = None) -> tupl
                        "wide day yesterday (continuation often fails)" if r["prev_rng_atr"] >= 1.25 else "")
         return " · ".join(x for x in out if x)
     t["why"] = t.apply(why, axis=1)
+    t["quality_note"] = t.apply(quality_note, axis=1)
     plans = [trade_plan(int(r["side"]), float(r["price"]), r.get("atr14"), r.get("swing_low"), r.get("swing_high"))
              for _, r in t.iterrows()]
     for k in ("entry", "sl", "tp1", "tp2", "risk_pct"):
@@ -182,6 +192,19 @@ def build(bars: dict, per: dict, sectors: dict, cfg: dict | None = None) -> tupl
 
 
 PLAN = {"min_atr": 0.3, "max_atr": 0.6, "buffer_atr": 0.1, "tp1_r": 1.0, "tp2_r": 2.0}
+
+
+QUALITY = {"mkt_with": 0.55, "gap_atr": 0.13, "now_x": 1.82}
+
+
+def quality_note(r) -> str:
+    """'Q2/3: market ✓ · no gap ✓ · calm ✗' for a funnel row (the three quality flags)."""
+    try:
+        parts = [f"market {'✓' if r['q_mkt'] else '✗'}", f"no gap {'✓' if r['q_gap'] else '✗'}",
+                 f"calm {'✓' if r['q_calm'] else '✗'}"]
+        return f"Q{int(r['quality'])}/3: " + " · ".join(parts)
+    except Exception:
+        return ""
 
 
 def trade_plan(side: int, entry: float, atr14: float, swing_low: float, swing_high: float, cfg: dict | None = None) -> dict | None:

@@ -709,6 +709,11 @@ def watch_card(r: dict, show_why: bool = False) -> str:
             f"<div><small>Stock net</small><b style='color:{tone_color(r['net'])}'>₹{r['net']:+,.1f} Cr {rising}</b></div></div>"
             + (plan_html({k: r[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")}, r.get("live"))
                if r.get("entry") == r.get("entry") and r.get("entry") is not None and r.get("sl") == r.get("sl") else "")
+            + (("<div class='votes' style='margin-top:7px'>" + "".join(
+                f"<span style='--v:{UP if r.get(k) else DOWN}'>{lab} {'✓' if r.get(k) else '✗'}</span>"
+                for k, lab in (("q_mkt", "market with"), ("q_gap", "no gap with"), ("q_calm", "not chasing")))
+                + f"<span style='--v:{UP if int(r.get('quality') or 0) == 3 else WARN if int(r.get('quality') or 0) == 2 else DOWN}'>"
+                f"quality {int(r.get('quality') or 0)}/3</span></div>") if r.get("quality") is not None and r.get("quality") == r.get("quality") else "")
             + (f"<div class='px' style='margin-top:7px;font-family:Inter,sans-serif;font-size:var(--fs-xs)'>{_e(r['why'])}</div>"
                if r.get("why") and show_why else "") + "</div>")
 
