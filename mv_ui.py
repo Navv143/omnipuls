@@ -530,3 +530,111 @@ def sector_card(name: str, g: pd.DataFrame, flow: dict, selected: bool = False) 
 
 def sector_grid(cards: list[str]) -> str:
     return "<div class='sx-grid'>" + "".join(cards) + "</div>"
+
+
+# ---------------------------------------------------------------- AI Desk (six agents)
+
+AGENT_COLOR = {"ATLAS": "#3B82F6", "VEGA": "#A855F7", "ORION": "#F97316", "LUNA": "#22D3EE", "TITAN": "#F59E0B",
+               "NOVA": "#FACC15"}
+DESK_CSS = """<style>
+.dk6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:6px 0 4px}
+@media (max-width:1100px){.dk6{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:640px){.dk6{grid-template-columns:repeat(2,1fr)}}
+.ag{position:relative;border:1px solid color-mix(in srgb,var(--a) 55%,transparent);border-radius:14px;padding:11px 12px 12px;
+  background:radial-gradient(120% 80% at 50% 0%,color-mix(in srgb,var(--a) 20%,transparent),transparent 70%),#0A1020;
+  box-shadow:0 0 18px color-mix(in srgb,var(--a) 18%,transparent),inset 0 0 12px color-mix(in srgb,var(--a) 8%,transparent)}
+.ag .nm{font-family:Sora,Inter,sans-serif;font-weight:800;letter-spacing:.12em;color:var(--a);font-size:var(--fs-md);
+  text-shadow:0 0 10px color-mix(in srgb,var(--a) 60%,transparent)}
+.ag .rl{font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--om-muted);margin-top:1px}
+.ag .st{font-family:var(--font-num);font-weight:700;font-size:var(--fs-md);color:var(--om-text);margin-top:8px;line-height:1.2}
+.ag .tx{font-size:var(--fs-xs);color:var(--om-text-3);margin-top:4px;line-height:1.35}
+.ag .live{position:absolute;top:11px;right:11px;width:7px;height:7px;border-radius:50%;background:var(--a);
+  box-shadow:0 0 8px var(--a);animation:agp 2s infinite}
+@keyframes agp{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.ag .live{animation:none}}
+.nv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 2px}
+.nv div{border:1px solid color-mix(in srgb,var(--c) 60%,transparent);border-radius:12px;padding:8px 10px;text-align:center;
+  background:color-mix(in srgb,var(--c) 10%,#0A1020)}
+.nv b{display:block;font-family:Sora,Inter,sans-serif;font-size:var(--fs-xl);color:var(--c);letter-spacing:.08em}
+.nv span{font-size:var(--fs-xs);color:var(--om-text-3)}
+.dc{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:10px}
+.dcard{border:1px solid color-mix(in srgb,var(--c) 50%,var(--om-border));border-radius:14px;padding:12px 14px;background:var(--om-surface)}
+.dcard .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.dcard .nm{font-weight:700;font-size:var(--fs-md)}
+.dcard .cl{font-size:var(--fs-2xs);color:var(--om-muted);letter-spacing:.06em;text-transform:uppercase}
+.dcard .call{font-family:Sora,Inter,sans-serif;font-weight:800;letter-spacing:.1em;font-size:var(--fs-sm);padding:2px 10px;
+  border-radius:8px;color:var(--c);border:1px solid var(--c);background:color-mix(in srgb,var(--c) 12%,transparent)}
+.dcard .why{font-size:var(--fs-xs);color:var(--om-text-3);margin:6px 0 8px}
+.lv{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0}
+.lv div{background:var(--om-sunken);border:1px solid var(--om-border-soft);border-radius:8px;padding:4px 7px}
+.lv small{display:block;font-size:.58rem;letter-spacing:.07em;text-transform:uppercase;color:var(--om-faint)}
+.lv b{font-family:var(--font-num);font-size:var(--fs-xs)}
+.votes{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.votes span{font-size:.62rem;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:6px;
+  color:var(--v);border:1px solid color-mix(in srgb,var(--v) 60%,transparent);background:color-mix(in srgb,var(--v) 10%,transparent)}
+.rr{margin-top:8px;border-top:1px dashed var(--om-border);padding-top:7px}
+.rr .r{display:grid;grid-template-columns:120px 1fr 44px;gap:8px;align-items:center;font-size:var(--fs-2xs);margin:3px 0;color:var(--om-text-3)}
+.rr .bar{height:6px;border-radius:3px;background:var(--om-border-soft);position:relative}
+.rr .bar span{position:absolute;left:0;top:0;height:6px;border-radius:3px;background:#F59E0B}
+.rr .ok{font-weight:700;color:var(--om-up)}.rr .no{font-weight:700;color:var(--om-down)}
+</style>"""
+CALL_COLOR = {"TRADE": UP, "WAIT": "#FACC15", "REJECT": DOWN, "NO SETUP": NEUTRAL}
+
+
+def agent_cards(cards: dict) -> str:
+    """cards: {agent: (status line, detail)}"""
+    out = []
+    for k, (stt, tx) in cards.items():
+        role = {"ATLAS": "Market", "VEGA": "Charts", "ORION": "News", "LUNA": "Crowd", "TITAN": "Risk", "NOVA": "Final call"}[k]
+        out.append(f"<div class='ag' style='--a:{AGENT_COLOR[k]}'><span class='live'></span><div class='nm'>{k}</div>"
+                   f"<div class='rl'>{role}</div><div class='st'>{_e(stt)}</div><div class='tx'>{_e(tx)}</div></div>")
+    return "<div class='dk6'>" + "".join(out) + "</div>"
+
+
+def nova_counts(calls: dict) -> str:
+    return "<div class='nv'>" + "".join(
+        f"<div style='--c:{CALL_COLOR[k]}'><b>{k}</b><span>{calls.get(k, 0)} markets</span></div>"
+        for k in ("TRADE", "WAIT", "REJECT")) + "</div>"
+
+
+def _fmt_px(x) -> str:
+    if x is None or not np.isfinite(x):
+        return "—"
+    return f"{x:,.2f}" if abs(x) >= 10 else f"{x:,.4f}"
+
+
+def decision_card(r: dict, risk: bool = True) -> str:
+    nv = r["nova"]
+    c = CALL_COLOR.get(nv["call"], NEUTRAL)
+    side = "LONG" if r["side"] > 0 else "SHORT"
+    t = r.get("titan") or {}
+    lv = ""
+    if t:
+        lv = (f"<div class='lv'><div><small>Entry</small><b>{_fmt_px(t['entry'])}</b></div>"
+              f"<div><small>Stop</small><b style='color:var(--om-down)'>{_fmt_px(t['stop'])}</b></div>"
+              f"<div><small>Target</small><b style='color:var(--om-up)'>{_fmt_px(t['target'])}</b></div>"
+              f"<div><small>Reward/risk</small><b>{t['rr']:.1f}R</b></div></div>")
+    vt = []
+    for k in ("ATLAS", "VEGA", "ORION", "LUNA"):
+        x = nv.get("votes", {}).get(k, 0)
+        mark = "✓" if x == r["side"] else "✗" if x == -r["side"] else "–"
+        col = UP if x == r["side"] else DOWN if x == -r["side"] else NEUTRAL
+        vt.append(f"<span style='--v:{col}'>{k} {mark}</span>")
+    if t:
+        vt.append(f"<span style='--v:{UP if t['pass'] else DOWN}'>TITAN {'✓' if t['pass'] else '✗'}</span>")
+    rr = ""
+    if risk and t:
+        rr = "<div class='rr'>" + "".join(
+            f"<div class='r'><span>{_e(ch['name'])}</span><div class='bar' title='{_e(ch['text'])}'>"
+            f"<span style='width:{min(ch['load'], 1) * 100:.0f}%;background:{'#F59E0B' if ch['pass'] else 'var(--om-down)'}'></span></div>"
+            f"<span class='{'ok' if ch['pass'] else 'no'}'>{'PASS' if ch['pass'] else 'FAIL'}</span></div>" for ch in t["checks"]) + "</div>"
+    head = (f"<div class='top'><div><div class='nm'>{_e(r['name'])} · {side}</div><div class='cl'>{_e(r['class'])} · "
+            f"{_fmt_px(r['price'])} · {_sgn(r['chg_1d'])} today</div></div><span class='call' style='--c:{c}'>{nv['call']}</span></div>")
+    return (f"<div class='dcard' style='--c:{c}'>{head}<div class='why'>{_e(r['setup'])}. {_e(nv['why'])}</div>{lv}"
+            f"<div class='votes'>{''.join(vt)}</div>{rr}</div>")
+
+
+def decision_cards(rows: list, risk: bool = True, limit: int = 12) -> str:
+    if not rows:
+        return "<div class='mx-quiet'>None right now.</div>"
+    return "<div class='dc'>" + "".join(decision_card(r, risk) for r in rows[:limit]) + "</div>"

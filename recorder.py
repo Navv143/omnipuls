@@ -347,26 +347,26 @@ def _git_head() -> str:
         return ""
 
 
-class Bots:
-    """bots.py (the five live bots plus the nightly Setup Finder research) as a child process, restarted if it dies.
-    Its own process: a crash or the research run's memory can't touch the recorder."""
+class Child:
+    """A helper process (bots.py: the live bots and nightly research; agents.py: the AI Desk) kept alive by the
+    recorder. Its own process: a crash or its memory can't touch the recorder."""
 
-    def __init__(self):
-        self.proc, self.started = None, 0.0
+    def __init__(self, script: str, env_flag: str):
+        self.script, self.flag, self.proc, self.started = script, env_flag, None, 0.0
 
     def keep_alive(self):
-        if os.environ.get("REC_BOT", "1") != "1":
+        if os.environ.get(self.flag, "1") != "1":
             return
         if self.proc is not None and self.proc.poll() is None:
             return
         if self.proc is not None:
-            log(f"bots stopped (exit {self.proc.returncode}): restarting")
+            log(f"{self.script} stopped (exit {self.proc.returncode}): restarting")
         if time.time() - self.started < 60:  # crash loop guard
             return
         self.started = time.time()
-        self.proc = subprocess.Popen([sys.executable, str(paths.HERE / "bots.py")], cwd=str(paths.HERE))
-        STATUS["bots"] = {"time": datetime.now(IST), "pid": self.proc.pid}
-        log(f"bots started (pid {self.proc.pid})")
+        self.proc = subprocess.Popen([sys.executable, str(paths.HERE / self.script)], cwd=str(paths.HERE))
+        STATUS[self.script] = {"time": datetime.now(IST), "pid": self.proc.pid}
+        log(f"{self.script} started (pid {self.proc.pid})")
 
     def stop(self):
         if self.proc is not None and self.proc.poll() is None:
@@ -391,14 +391,15 @@ def run():
     head = _git_head()
     restart_on_update = os.environ.get("REC_RESTART_ON_UPDATE") == "1"
     chain, quotes = Snapshots("option_chain"), Snapshots("quotes")
-    bots = Bots()
+    children = [Child("bots.py", "REC_BOT"), Child("agents.py", "REC_AGENTS")]
     uni, uni_day, exps, holiday = None, None, {}, None
     last_chain = last_quote = last_backfill_try = last_head_check = 0.0
     while True:
         now = datetime.now(IST)
         today = now.date()
         try:
-            bots.keep_alive()
+            for ch in children:
+                ch.keep_alive()
             if not D.configured(dh.cfg):
                 dh.cfg = D.load_config()
                 time.sleep(30)
@@ -456,7 +457,8 @@ def run():
                 chain.flush(force=True)
                 quotes.flush(force=True)
                 log("new code pulled: restarting")
-                bots.stop()
+                for ch in children:
+                    ch.stop()
                 sys.exit(0)  # Docker restarts the service with the new code
         time.sleep(1 if market_open(now) else 20)
 

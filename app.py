@@ -51,6 +51,7 @@ import desk as DK
 import twelve as TW
 import market_view as MV
 import mv_ui as MX
+import desk_agents as DA
 import bot as BOT
 import paths as PATHS
 import cryptocom as CC
@@ -1401,6 +1402,7 @@ HOWTO = {  # one line under each page's status bar: what the page is for and how
     "view": "Start here. Trade only what the top box calls a tested signal; the rest helps you pick the side.",
     "dashboard": "The full desk: mood, index plans and focus lists. Today's plan card lists the tested setups.",
     "scanners": "Each tab is one setup with today's signals. Follow entry, stop and exit exactly as shown.",
+    "agents": "Six agents read every market (indices, stocks, crypto, gold, commodities, forex). TRADE only when all agree and risk passes; paper-track first.",
     "bot": "Live radar of every F&O stock: sudden changes vs its own usual, with past-days odds. Tested = trade; good odds = paper-trade first.",
     "options": "Pick an index and expiry. Most puts written = support, most calls written = resistance.",
     "apex": "Trade with the side that dominates the first hour; 'Since yesterday' adds yesterday's positions.",
@@ -6374,8 +6376,134 @@ def page_view():
     market_view_body(svc, t)
 
 
+# ---------------------------------------------------------------- AI Desk: six agents over every market
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _desk_live() -> dict:
+    """The desk computed here when the server's agents.py has no fresh result (e.g. on Streamlit Cloud)."""
+    import agents as AG
+    daily, hourly = AG.load_data()
+    if len(daily) < 10:
+        raise RuntimeError("market data unavailable right now (Yahoo)")
+    st_ = DA.run_desk(daily, hourly, AG.news, AG.fear_greed())
+    return json.loads(json.dumps(st_, default=lambda o: o.item() if hasattr(o, "item") else str(o)))
+
+
+def _desk_state() -> dict | None:
+    try:
+        s = json.loads((PATHS.DATA / "agents" / "state.json").read_text())
+        if (datetime.now(IST) - datetime.fromisoformat(s["updated"])).total_seconds() < 3600:
+            return s
+    except Exception:
+        pass
+    try:
+        with st.spinner("The desk is reading every market (about a minute the first time)…"):
+            return _desk_live()
+    except Exception as e:
+        st.warning(f"AI Desk: {e}")
+        return None
+
+
+def page_agents():
+    status_strip()
+    st.header("AI Desk")
+    st.markdown(MX.CSS + MX.DESK_CSS, unsafe_allow_html=True)
+    s = _desk_state()
+    if not s:
+        return
+    rows, a = s.get("rows", []), s.get("atlas", {})
+    by = lambda call: [r for r in rows if r["nova"]["call"] == call]  # noqa: E731
+    setups = [r for r in rows if r["status"] == "SETUP"]
+    hi = [r for r in rows if r.get("orion") and r["orion"].get("high_impact")]
+    hype = [r for r in rows if r["luna"]["hype"]]
+    tit = [r for r in rows if r.get("titan")]
+    rej = [r for r in tit if not r["titan"]["pass"]]
+    fng = s.get("fng") or {}
+    st.caption(f"Six agents read {len(rows)} markets: indices, stocks, crypto, gold & metals, commodities and forex. "
+               f"Updated {s.get('updated', '')[11:16]} IST · paper calls only, not tested setups.")
+    st.markdown(MX.agent_cards({
+        "ATLAS": (a.get("regime", "—"), " · ".join(a.get("notes", [])[:3])),
+        "VEGA": (f"{len(setups)} setups found", (setups[0]["name"] + ": " + setups[0]["setup"]) if setups else "No clean setup now."),
+        "ORION": (f"{len(hi)} high-impact", (hi[0]["orion"]["high_impact"][0]["title"][:90]) if hi else "No high-impact catalyst on the setups."),
+        "LUNA": (f"{len(hype)} crowded / hype", f"Crypto fear & greed {fng.get('value')} ({fng.get('label')})" if fng else "Crowd readings per market."),
+        "TITAN": (f"{len(rej)} rejected · {len(tit) - len(rej)} passed", "Position size, max loss, correlation, exposure, R/R, volatility."),
+        "NOVA": (f"{len(by('TRADE'))} TRADE", "All five reports, one decision. No consensus, no trade."),
+    }) + MX.nova_counts(s.get("calls", {})), unsafe_allow_html=True)
+
+    st.markdown(MX.section("NOVA: trade", "setup + market + news + crowd agree, and TITAN passed")
+                + MX.decision_cards(by("TRADE")), unsafe_allow_html=True)
+    c1, c2 = st.columns(2) if not MOBILE else (st.container(), st.container())
+    with c1:
+        st.markdown(MX.section("Wait: signals conflict") + MX.decision_cards(by("WAIT"), risk=False, limit=8),
+                    unsafe_allow_html=True)
+    with c2:
+        st.markdown(MX.section("Rejected", "no trade is also a decision") + MX.decision_cards(by("REJECT"), limit=8),
+                    unsafe_allow_html=True)
+
+    st.markdown(MX.section("Every market", "VEGA's chart read with LUNA's crowd and NOVA's call"), unsafe_allow_html=True)
+    tabs = st.tabs(list(DA.UNIVERSE))
+    for tab, cls in zip(tabs, DA.UNIVERSE):
+        with tab:
+            xs = [r for r in rows if r["class"] == cls]
+            br = (s.get("breadth") or {}).get(cls)
+            st.caption(f"ATLAS bias for {cls.lower()}: {['bearish', 'neutral', 'bullish'][a.get('bias', {}).get(cls, 0) + 1]}"
+                       + (f" · {br:.0f}% above their 50-day average" if br is not None else ""))
+            if xs:
+                st.dataframe(pd.DataFrame([{
+                    "Market": r["name"], "Price": r["price"], "1d %": r["chg_1d"], "5d %": r["chg_5d"],
+                    "20d %": r["chg_20d"], "Trend": {1: "▲ up", -1: "▼ down", 0: "sideways"}[r["trend"]],
+                    "Last 60 days": r.get("spark") or [], "Setup": r["setup"] or "—",
+                    "ATR ×avg": r["atr_x"], "Vol ×avg": r["vol_x"], "RSI": r["rsi"], "Support": r["support"],
+                    "Resistance": r["resistance"], "Crowd": r["luna"]["label"], "NOVA": r["nova"]["call"]} for r in xs]),
+                    hide_index=True, width="stretch", column_config={
+                        "Price": st.column_config.NumberColumn(format="%.4g"),
+                        "1d %": st.column_config.NumberColumn(format="%+.2f"), "5d %": st.column_config.NumberColumn(format="%+.2f"),
+                        "20d %": st.column_config.NumberColumn(format="%+.2f"),
+                        "Last 60 days": st.column_config.LineChartColumn(width="small"),
+                        "ATR ×avg": st.column_config.NumberColumn(format="%.2f"), "Vol ×avg": st.column_config.NumberColumn(format="%.2f"),
+                        "RSI": st.column_config.NumberColumn(format="%.0f"),
+                        "Support": st.column_config.NumberColumn(format="%.4g"), "Resistance": st.column_config.NumberColumn(format="%.4g"),
+                        "Setup": st.column_config.TextColumn(width="medium")})
+    news_rows = [(r, h) for r in rows if r.get("orion") for h in r["orion"].get("headlines", [])]
+    if news_rows:
+        with st.expander("ORION: headlines behind the setups", icon=":material/newspaper:"):
+            for r, h in news_rows[:30]:
+                tag = "🟢" if h["score"] > 0 else "🔴" if h["score"] < 0 else "⚪"
+                st.markdown(f"{tag} **{r['name']}** · [{h['title']}]({h.get('url') or '#'})" + (" · ⚡ high impact" if h["impact"] else ""))
+
+    rec = s.get("record") or {}
+    st.markdown(MX.section("Paper record", "every TRADE call: target first = win, stop first = loss, 3 days = time-out"),
+                unsafe_allow_html=True)
+    if rec:
+        st.markdown(MX.kpis([
+            MX.kpi("Calls", f"{rec.get('calls', 0)}", f"{rec.get('open', 0)} open"),
+            MX.kpi("Closed", f"{rec.get('closed', 0)}", "scored"),
+            MX.kpi("Wins", f"{rec.get('wins', 0)}", f"{(rec['wins'] / rec['closed'] * 100):.0f}% of closed" if rec.get("closed") else "—", MX.UP),
+            MX.kpi("Average", f"{rec['avg_r']:+.2f}R" if rec.get("avg_r") is not None else "—", "per closed call",
+                   MX.tone_color(rec.get("avg_r") or 0)),
+        ]), unsafe_allow_html=True)
+        rc = s.get("recent_calls") or []
+        if rc:
+            st.dataframe(pd.DataFrame([{"Time": c["time"][:16].replace("T", " "), "Market": c["name"],
+                                        "Side": "LONG" if c["side"] > 0 else "SHORT", "Entry": c["entry"], "Stop": c["stop"],
+                                        "Target": c["target"], "R/R": c["rr"], "Result": c.get("result") or "open",
+                                        "R": c.get("r")} for c in rc]), hide_index=True, width="stretch")
+    else:
+        st.caption("The record starts with the first TRADE call on the server.")
+    note("ATLAS: S&P 500 / Nasdaq vs their 50-day average, VIX level and 5-day change, dollar index trend, US 10-year "
+         "yield, India VIX → risk-on / mixed / risk-off and a bias per class. VEGA: daily EMA 20/50/200 trend + hourly "
+         "trend, 20-day breakout / breakdown with volume, pullback to the 20-day average, support / resistance from swing "
+         "points, ATR and volume vs their averages. ORION: headline words (bullish / bearish, high-impact catalysts). "
+         "LUNA: RSI extremes, 5-day move z-score, class breadth, crypto Fear & Greed; a crowded move counts against. "
+         "TITAN: 1% risk of ₹10 lakh per trade, stop beyond support / resistance (0.75-2 ATR), all stops ≤ 4%, R/R ≥ 1.5, "
+         "ATR ≤ 1.8x its average, correlation ≤ 0.75, max 6 trades / 2 per class. NOVA: TRADE needs a VEGA setup, 3 of "
+         "4 agents agreeing, none against and TITAN passing.")
+
+
 PAGE_DEFS = [  # (url, function, menu title, icon)
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
+    ("agents", page_agents, "AI Desk", ":material/groups:"),
     ("bot", page_bot, "Bots", ":material/smart_toy:"),
     ("dashboard", page_dashboard, "Trading Desk", ":material/space_dashboard:"),
     ("apex", page_apex, "Index Build-up", ":material/bar_chart:"),
@@ -6405,7 +6533,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "view"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({  # grouped by what you are doing: today's trading, the market, tools, your account
-    "Today": [P["view"], P["dashboard"], P["scanners"], P["bot"], P["options"]],
+    "Today": [P["view"], P["agents"], P["dashboard"], P["scanners"], P["bot"], P["options"]],
     "Markets": [P["indices"], P["sectors"], P["smart"], P["apex"], P["fno"], P["oi"], P["global"], P["mcx"], P["cdsfut"]],
     "Tools": [P["chart"], P["screener"], P["watchlist"], P["odds"]],
     "Account": [P["account"]] + ([P["portfolio"], P["dhan"], P["review"], P["research"]] if IS_ADMIN else []),
