@@ -353,3 +353,13 @@ Also added: ironfly.py - paper weekly Nifty iron fly on the recorder's real opti
 - So: big gaps must be caught at the open (V3); flat opens can be caught at 9:45-10:30 (footprint / grinder window).
 Also: F&O → "Flow radar" view (net flow top 10 increasing / decreasing with a plain story, index treemap of where money
 enters and leaves, sudden-change feed, all-F&O sector treemap).
+
+## Crypto: footprints at session opens, and fading the funding crowd (5 Nov 2026)
+`research/crypto_footprint.py` (BTC / ETH / SOL 5-min, 2023-10/2026, Asia / London / New York opens, decision at
+open + 45 min, hold 6 h, stop 1 ATR): following the session-open move loses (-0.08% after 0.05%); >= 4 footprints
++0.46% but only 98 cases in 4 years, 2023 and the last 6 months negative - the stock footprint edge does not carry over.
+`research/crypto_funding.py` (Binance 8-h funding, extreme = top / bottom 5% (2%) of the last 90 days, take the other
+side, hold 24 / 72 h, stop 1.5 ATR, 0.10% costs): fading crowded longs loses; following loses; buying when the crowd is
+heavily short worked in 2023 (+1.2% to +2.9%) and 2024 (+0.2% to +0.9%) but lost in 2025 and 2026 (-0.4% to -0.8%):
+an edge that rotated away - recent months decide, not the 3-year average. No new crypto setup deployed; crash buy and
+burst momentum stay on paper.
