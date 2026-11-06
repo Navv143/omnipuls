@@ -8,7 +8,7 @@
                 to the next support / resistance
   6 DECISION    TRADE or REJECT, with every reason: with the market only (longs while Nifty is up, shorts while down),
                 at most 3 trades a day and 1 per sector (best scores first); entry = next candle's open, stop = last
-                swing (0.3-1.0 ATR), target = next swing level (at least 1.5R, else 2R), profit lock after +1R, 15:20
+                swing (0.3-1.0 ATR), target 3R, profit lock after +1R, 15:20
 
 Each stage returns a table with every stock it looked at, PASS / REJECT and the reason, so any rule can be reviewed and
 changed later (all thresholds are in RULES). Recorded by bots.superbot_step: the latest table of each stage
@@ -35,6 +35,7 @@ RULES = {
     "rsi_long": (55, 80), "rsi_short": (20, 45), "room_atr": 0.5, "chart_need": 4,
     # 6 decision
     "first_entry": "09:30", "last_entry": "14:30", "max_trades": 3, "max_per_sector": 1, "stop_atr": (0.3, 1.0),
+    "target_r": 3.0,
     "min_rr": 1.5,
     # with the market: longs only while Nifty is up on the day, shorts only while it is down (research/superbot_strict.py,
     # 40 days: 3 a day + this rule = 61% wins, +0.29% a trade, t 2.24, both halves positive; without it -0.02%)
@@ -214,8 +215,10 @@ def run(S: dict, per: dict, events: pd.DataFrame, oi: pd.DataFrame, sector_of: d
         lo_a, hi_a = R["stop_atr"]
         risk = min(max(abs(px - swing), lo_a * A), hi_a * A) if A else abs(px - swing)
         stop = px - side * risk
-        tgt_lvl = res_ if np.isfinite(res_) and abs(res_ - px) >= R["min_rr"] * risk else np.nan
-        target = tgt_lvl if np.isfinite(tgt_lvl) else px + side * 2 * risk
+        # target 3R (research/superbot_exits.py: of 6 stops x 6 targets x 6 trails on the same entries, a far target
+        # beat the next swing level on the 120 picks and on all 2,313 market-aligned candidates; the swing stop and the
+        # profit lock stay as they were)
+        target = px + side * R.get("target_r", 3.0) * risk
         rr = abs(target - px) / risk if risk else np.nan
         score = nok + nk + (1 if fresh else 0) + min(u_with, 2) + (1 if side * smart >= 25 else 0)
         reasons = [r2["reason"], r3["reason"], r4["reason"], r5["reason"]]
