@@ -145,6 +145,12 @@ class EngineService:
         st = self._live()
         return None if st is None else st.get("scans")
 
+    @property
+    def plan(self):
+        """{"fade", "five", "trend", "gold"} from the engine (regular setups' heavy parts), or None."""
+        st = self._live()
+        return None if st is None else st.get("plan")
+
     def _attr(self, k: str, default=None):
         st = self._live()
         return getattr(self._fb, k, default) if st is None else st.get(k, default)
