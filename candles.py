@@ -7,7 +7,7 @@
   closed() nothing can signal before the first candle of the day has closed (09:18 on 3 minutes).
 - History for the time-of-day volume averages comes from the same 1-minute cache the nightly candle study fills
   (<bot>/cache_m1), topped up with the last days from Dhan.
-Set OMNI_TF=5 to go back to 5-minute candles everywhere.
+Default is 3 minutes (since 7 Nov 2026). Set OMNI_TF=5 to go back to 5-minute candles everywhere.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 
 IST = timezone(timedelta(hours=5, minutes=30))
-TF = int(os.environ.get("OMNI_TF", 5))   # 3 from the 6 Nov close (switched after market hours)
+TF = int(os.environ.get("OMNI_TF", 3))   # 3-minute candles from 7 Nov 2026; OMNI_TF=5 to go back
 NATIVE = (1, 5, 15, 25, 60)
 
 
