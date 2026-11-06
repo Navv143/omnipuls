@@ -100,7 +100,9 @@ def collect(bars: dict, nifty: pd.DataFrame, day: pd.Timestamp, tf: int) -> list
             shift = e - r["entry_plan"]
             tr = MP.track(s.today, nxt.index[0], sd, e, r["stop"] + shift, r["target"] + shift,
                           datetime(day.year, day.month, day.day, 15, 30))
-            f.update(result=tr["result"], pct=tr["pct"])
+            f.update(result=tr["result"], pct=tr["pct"], entry_at=nxt.index[0].strftime("%H:%M"), entry=round(e, 2),
+                     stop=round(r["stop"] + shift, 2), target=round(r["target"] + shift, 2),
+                     exit_at=tr["exit_at"], exit_px=tr["exit_px"])
             rows.append(f)
         prev_final = set(fin["stock"])
     return rows
