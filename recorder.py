@@ -314,6 +314,23 @@ def chain_rows(dh: Dhan, exps: dict, now: datetime) -> list[dict]:
     return rows
 
 
+LATEST_CHAIN = DATA / "option_chain" / "latest.parquet"
+
+
+def write_latest_chain(rows: list[dict]):
+    """This minute's chains of every index in one small file (atomic replace), so the app reads them instantly instead
+    of waiting for the 5-minute part files or calling Dhan (one chain call every 3 seconds)."""
+    if not rows:
+        return
+    try:
+        LATEST_CHAIN.parent.mkdir(parents=True, exist_ok=True)
+        tmp = LATEST_CHAIN.with_suffix(f".{os.getpid()}.tmp")
+        pd.DataFrame(rows).to_parquet(tmp)
+        os.replace(tmp, LATEST_CHAIN)
+    except Exception as e:
+        _error("latest chain", e)
+
+
 def quote_rows(dh: Dhan, items: list[dict], now: datetime) -> list[dict]:
     q = dh(D.quotes, [(it["segment"], it["security_id"]) for it in items])
     rows = []
@@ -434,6 +451,7 @@ def run():
                         rows = chain_rows(dh, exps, now)
                         chain.rows += rows
                         STATUS["chain"] = {"time": now, "rows": len(rows)}
+                        write_latest_chain(rows)
             chain.flush()
             quotes.flush()
             if now.strftime("%H:%M") >= "15:35" or now.weekday() >= 5:
