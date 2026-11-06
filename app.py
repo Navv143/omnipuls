@@ -76,6 +76,20 @@ import desk as DK
 import twelve as TW
 import market_view as MV
 import mv_ui as MX
+import table_theme as TT
+
+# App-wide theme: every table coloured by its data, every subheader a coloured section header (mv_ui.section).
+TT.install(st)
+if not getattr(st.subheader, "_themed", False):
+    def _themed_subheader(body, anchor=None, *, help=None, divider=None, **_k):
+        st.markdown(MX.section(str(body)), unsafe_allow_html=True)
+    _themed_subheader._themed = True
+    st.subheader = _themed_subheader
+
+    def _themed_title(body, anchor=None, *, help=None, **_k):
+        st.markdown(MX.page_title(str(body)), unsafe_allow_html=True)
+    _themed_title._themed = True
+    st.header = st.title = _themed_title
 import desk_agents as DA
 import funnel as FN
 import index_funnel as IF
@@ -8440,7 +8454,8 @@ def _trade_monitor(d: pd.DataFrame, ltp: dict, now: datetime, key: str):
                        minutes=int(str(r["entry_at"])[3:5])) - pd.Timestamp(now.replace(tzinfo=None))).total_seconds() // -60)
         except Exception:
             mins = None
-        rows.append({"Setup": r["family"], "Symbol": r["symbol"], "Side": "BUY" if sd > 0 else "SELL", "Entry at": r.get("entry_at"),
+        rows.append({"Setup": r["family"], "Symbol": r["symbol"], "Side": "BUY" if sd > 0 else "SELL", "Signal": r.get("signal_at"),
+                     "Entry at": r.get("entry_at"),
                      "Entry": e, "Stop": sl, "Now": pr, "P&L %": pnl,
                      "R": sd * (pr - e) / risk if risk and pr else None,
                      "To stop %": (sd * (pr - sl) / pr * 100) if pr and pd.notna(sl) else None,
@@ -8578,6 +8593,11 @@ def _desk_body():
                                             "Now": st.column_config.NumberColumn(format="%.2f")})
                 st.caption("Each hour after entry: price at the hour's end (H = high, L = low inside that hour). Hour-1 call "
                            "from 276 past breakouts: below -0.25% after 1 hour = exit, else hold to 15:20.")
+            rec = core[core["family"] == "V3 early pick"] if not core.empty else core
+            if not rec.empty:                     # the recorded trade is the pick (same as the table at the top)
+                r0 = rec.sort_values("signal_at").iloc[0]
+                early = {"Stock": r0["symbol"], "Side": "BUY" if r0["side"] > 0 else "SELL", "Signal": r0.get("signal_at"),
+                         "Entry": r0.get("entry"), "Stop": r0.get("sl")}
             if early:
                 st.markdown(f"<div class='dk-now' style='--c:{UP}'><b>V3 early pick: {MX._e(str(early.get('Stock')))}</b> · "
                             f"{MX._e(str(early.get('Side')))} · signal {MX._e(str(early.get('Signal')))} · entry {float(early.get('Entry') or 0):,.2f} · "

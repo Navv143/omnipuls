@@ -146,6 +146,21 @@ def head_colors(title: str) -> tuple[str, str]:
     return HEAD_PAIRS[zlib.crc32(t.encode()) % len(HEAD_PAIRS)]
 
 
+PAGE_PAIRS = (("#22D3EE", "#A78BFA"), ("#F59E0B", "#EC4899"), ("#22C55E", "#22D3EE"), ("#3B82F6", "#A78BFA"),
+              ("#EC4899", "#F59E0B"), ("#14B8A6", "#3B82F6"), ("#A78BFA", "#EC4899"), ("#F97316", "#FACC15"))
+
+
+def page_title(title: str, sub: str = "") -> str:
+    """A page title in its own gradient (stable per page), bold, with a short gradient bar under it."""
+    a, b = PAGE_PAIRS[zlib.crc32(str(title).lower().encode()) % len(PAGE_PAIRS)]
+    g = f"linear-gradient(90deg,{a},{b})"
+    return (f"<div style='margin:2px 0 12px'><div style='display:flex;align-items:baseline;gap:14px;flex-wrap:wrap'>"
+            f"<span style='font-size:1.7rem;font-weight:800;letter-spacing:.2px;line-height:1.15;background:{g};"
+            f"-webkit-background-clip:text;background-clip:text;color:transparent'>{_e(title)}</span>"
+            + (f"<span style='opacity:.6;font-size:.85rem'>{_e(sub)}</span>" if sub else "")
+            + f"</div><div style='width:84px;height:3px;border-radius:3px;margin-top:6px;background:{g}'></div></div>")
+
+
 def section(title: str, note: str = "") -> str:
     a, b = head_colors(title)
     return (f"<div class='mx-sec' style='--h1:{a};--h2:{b}'><i></i><h4>{_e(title)}</h4>"

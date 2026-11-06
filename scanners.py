@@ -225,6 +225,7 @@ def _row(stock, side, signal_t, entry_t, entry, stop, extra=None, trail=None):
     r = {"Stock": stock.sym, "Side": "BUY / CE" if side > 0 else "SELL / PE", "Signal": signal_t.strftime("%H:%M"),
          "O=H/L": ind.ohl_flag(stock.open, stock.today["High"].max(), stock.today["Low"].min()),
          "Entry": entry, "Stop": stop}
+    r["Entry at"] = entry_t.strftime("%H:%M") if entry_t is not None else ""
     if entry_t is None:
         r.update({"Status": "Waiting for next bar", "Exit/LTP": stock.ltp, "P&L %": 0.0, "Exit time": ""})
     else:
