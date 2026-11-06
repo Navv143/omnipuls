@@ -29,8 +29,47 @@
 <script>
 const send = (type, data) => window.parent.postMessage(Object.assign({isStreamlitMessage: true, type}, data), "*");
 const wrap = document.getElementById("wrap"), box = document.getElementById("chart");
+(() => { const s = document.createElement("div"); s.id = "livetag";
+  s.style.cssText = "position:absolute;right:70px;top:4px;z-index:5;font:600 10px Sora,system-ui;color:#758696;letter-spacing:.5px";
+  wrap.appendChild(s); })();
 const LW = window.LightweightCharts;
 let chart = null, lastRev = null, lastSig = null, legends = [], main = null, args = null, light = false;
+// live ticks: the forming candle moves with every tick from the relay (wss://<host>/ticks)
+let tws = null, wsKey = null, liveBar = null, liveVol = null, volSeries = null, volBase = null;
+const IST = 19800, OPEN_S = 9 * 3600 + 15 * 60, CLOSE_S = 15 * 3600 + 30 * 60;
+function liveConnect(a) {
+  if (!a || !a.tick_key || !a.intraday || !a.tf_sec) { if (tws) { tws.onclose = null; tws.close(); tws = null; wsKey = null; } return; }
+  if (tws && wsKey === a.tick_key) { if (tws.readyState === 1) tws.send(JSON.stringify({key: a.wskey || "", keys: [a.tick_key]})); return; }
+  if (tws) { tws.onclose = null; tws.close(); }
+  wsKey = a.tick_key;
+  const url = location.protocol === "https:" ? `wss://${location.host}/ticks` : `ws://${location.hostname || "127.0.0.1"}:${a.port || 8765}`;
+  try { tws = new WebSocket(url); } catch (e) { tws = null; return; }
+  tws.onopen = () => tws.send(JSON.stringify({key: a.wskey || "", keys: [a.tick_key]}));
+  tws.onmessage = (e) => { try { const d = JSON.parse(e.data); if (d[wsKey]) onTick(d[wsKey]); } catch (err) {} };
+  tws.onclose = () => { tws = null; const k = wsKey; wsKey = null; setTimeout(() => { if (args && args.tick_key === k) liveConnect(args); }, 3000); };
+}
+function onTick(t) {
+  const ltp = t[0], cum = t[2];
+  if (!main || ltp == null || !args || !args.bars.length) return;
+  const now = Math.floor(Date.now() / 1000) + IST, sod = now % 86400;
+  if (sod < OPEN_S || sod > CLOSE_S) return;                       // market closed: leave the chart as it is
+  const tf = args.tf_sec, lb = args.bars[args.bars.length - 1];
+  const day0 = now - sod, start = day0 + OPEN_S;
+  let bt = (lb[0] >= day0) ? lb[0] : start;                         // last bar today, else the session's first slot
+  if (now >= bt + tf) bt = start + Math.floor((now - start) / tf) * tf;
+  if (!liveBar || liveBar.time !== bt) {
+    if (bt === lb[0]) liveBar = {time: bt, open: lb[1], high: lb[2], low: lb[3], close: lb[4]};
+    else liveBar = {time: bt, open: ltp, high: ltp, low: ltp, close: ltp};
+    volBase = (cum != null) ? cum - (bt === lb[0] ? (lb[5] || 0) : 0) : null;
+  }
+  liveBar.high = Math.max(liveBar.high, ltp); liveBar.low = Math.min(liveBar.low, ltp); liveBar.close = ltp;
+  try { main.update(liveBar); } catch (e) { return; }
+  if (volSeries && cum != null && volBase != null) {
+    try { volSeries.update({time: bt, value: Math.max(cum - volBase, 0),
+                            color: liveBar.close >= liveBar.open ? "rgba(38,166,154,.45)" : "rgba(239,83,80,.45)"}); } catch (e) {}
+  }
+  const lv = document.getElementById("livetag"); if (lv) { lv.classList.add("on"); lv.textContent = "● LIVE " + (t[7] || ""); }
+}
 
 const fmt = (v, p) => v == null || isNaN(v) ? "—" : Number(v).toLocaleString("en-IN", {minimumFractionDigits: p, maximumFractionDigits: p});
 const fmtVol = (v) => v == null ? "—" : v >= 1e7 ? (v / 1e7).toFixed(2) + " Cr" : v >= 1e5 ? (v / 1e5).toFixed(2) + " L" :
@@ -84,12 +123,14 @@ function build(a) {
   main.setData(a.bars.map(([t, o, h, l, cl]) => ({time: t, open: o, high: h, low: l, close: cl})));
 
   let vol = null;
+  liveBar = null; volSeries = null;
   if (a.vol) {
     vol = chart.addSeries(LW.HistogramSeries, {priceScaleId: "vol", priceFormat: {type: "volume"},
                                                lastValueVisible: false, priceLineVisible: false});
     vol.priceScale().applyOptions({scaleMargins: {top: 0.82, bottom: 0}});
     vol.setData(a.bars.map(([t, o, h, l, cl, v]) => ({time: t, value: v || 0,
       color: cl >= o ? "rgba(38,166,154,.45)" : "rgba(239,83,80,.45)"})));
+    volSeries = vol;
   }
 
   const lineOpts = (l) => ({color: l.color, lineWidth: l.width || 1, lineStyle: l.style || 0, priceFormat: pf,
@@ -186,6 +227,7 @@ window.addEventListener("message", (e) => {
   if (sig === lastSig) return;  // nothing changed since the last rerun: keep the user's zoom and crosshair
   lastSig = sig; light = lt;
   build(args);
+  liveConnect(args);
 });
 window.addEventListener("resize", () => { if (chart) placeLegends(); });
 send("streamlit:componentReady", {apiVersion: 1});
