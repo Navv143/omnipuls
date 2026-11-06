@@ -417,7 +417,11 @@ def event_cards(events: list, limit: int = 12) -> str:
         out.append(f"<div class='mx-e' style='--c:{c}'><div class='top'><span class='nm'>{_e(r['stock'])}{tv_link(r['stock'])}</span>"
                    f"<span class='px'>{_num(r['price'])} <span class='mx-chip' style='--c:{c}'>{_sgn(r['chg'])}</span></span></div>"
                    f"<div class='mx-quiet' style='margin:1px 0 0'>{_e(r['sector'])} · {_e(r['time'])} · score {r['score']}</div>"
-                   "<ul>" + "".join(f"<li>{_e(t)}</li>" for t in r["events"]) + "</ul>" + odds_bar(r.get("odds"))
+                   + (f"<div class='mx-quiet' style='margin:1px 0 0'>first seen <b>{_e(r['first_t'])}</b> at "
+                      f"{_num(r['first_px'])} · now {_num(r['price'])} "
+                      f"({(r['price'] / r['first_px'] - 1) * 100:+.2f}% since)</div>"
+                      if r.get("first_t") and r.get("first_px") and r.get("price") else "")
+                   + "<ul>" + "".join(f"<li>{_e(t)}</li>" for t in r["events"]) + "</ul>" + odds_bar(r.get("odds"))
                    + plan_html(r.get("plan")) + "</div>")
     return "<div class='mx-ev'>" + "".join(out) + "</div>"
 
@@ -492,7 +496,8 @@ def _act_color(x) -> str:
     return "var(--om-text-2)" if x is None or not np.isfinite(x) else ACCENT if x >= 200 else UP if x >= 130 else NEUTRAL
 
 
-def sector_card(name: str, g: pd.DataFrame, flow: dict, selected: bool = False) -> str:
+def sector_card(name: str, g: pd.DataFrame, flow: dict, selected: bool = False, sort_by: str = "Chg %",
+                asc: bool = False) -> str:
     """One sector: header (name, average change, R-factor, smart score, activity), its stocks, then the count of
     stocks up / down and the sector's money in / out / net."""
     avg = float(g["Chg %"].mean()) if len(g) else np.nan
@@ -505,7 +510,8 @@ def sector_card(name: str, g: pd.DataFrame, flow: dict, selected: bool = False) 
              f"<div style='--v:{_act_color(ac)}'><small>Activity</small><b>{_n(ac, 0, suf='%')}</b></div>"
              f"<div><small>Stocks</small><b>{len(g)}</b></div>")
     rows = []
-    for _, r in g.sort_values("Chg %", ascending=False).iterrows():
+    key = sort_by if sort_by in g else "Chg %"
+    for _, r in g.sort_values(key, ascending=asc, na_position="last").iterrows():
         cc = _cv(r["Chg %"])
         _u = tv_url(r['Stock'])
         _nm = f"<a href='{_u}' target='_blank' rel='noopener' style='color:inherit;text-decoration:none'>{_e(r['Stock'])} ↗</a>" if _u else _e(r['Stock'])
