@@ -17,6 +17,7 @@ import pandas as pd
 UP, DOWN, BLUE, AMBER, CYAN, PINK, VIOLET = "#22C55E", "#F43F5E", "#3B82F6", "#F59E0B", "#22D3EE", "#EC4899", "#A78BFA"
 _W = "font-weight:600"
 MAX_ROWS = 1500
+ZEBRA = "background-color: rgba(148,170,210,0.10)"
 
 _SIGNED = re.compile(r"(%|p&l|chg|change|net|flow|money|smart|^r$|^r |\br$| r$|best r|worst r|from open|move|pnl|profit|"
                      r"gain|return|edge|avg r)", re.I)
@@ -28,8 +29,8 @@ _NAME = ("Stock", "Symbol", "Setup", "Index", "Sector", "Name", "Instrument", "C
 _GAP = {"0-0.5%": CYAN, "0.5-1%": BLUE, "1-3%": AMBER, ">3%": PINK}
 
 _RED_WORDS = ("stop", "exit", "below", "loss", "sell", "bear", "short", "reject", "fail", "avoid", "down", "out", "trap")
-_GREEN_WORDS = ("target", "hold", "above", "win", "buy", "bull", "long", "traded", "core", "up", "in ", "profit", "trail")
-_BLUE_WORDS = ("open", "inside", "live", "testing", "running")
+_GREEN_WORDS = ("signal", "target", "hold", "above", "win", "buy", "bull", "long", "traded", "core", "up", "in ", "profit", "trail")
+_BLUE_WORDS = ("done", "squared", "open", "inside", "live", "testing", "running")
 _AMBER_WORDS = ("wait", "time", "closed", "mixed", "neutral", "watch", "pending")
 
 
@@ -64,6 +65,16 @@ def _status_css(v) -> str:
     return ""
 
 
+def _signstr_css(v) -> str:
+    """Text like '+0.87%' or '-328 pts': green / red by its sign."""
+    t = str(v).strip()
+    if t[:1] == "+":
+        return f"color:{UP};{_W}"
+    if t[:1] in ("-", "−"):
+        return f"color:{DOWN};{_W}"
+    return ""
+
+
 def _gap_css(v) -> str:
     c = _GAP.get(str(v))
     return f"color:{c};{_W}" if c else ""
@@ -81,32 +92,33 @@ def _fmt(v) -> str:
 def style(df: pd.DataFrame, formatted=()):
     """A pandas Styler with the theme colours, or the frame unchanged when nothing applies. Float columns without a
     column_config format (`formatted`) get a plain 2-decimal format, so the Styler doesn't show 6 decimals."""
-    if not isinstance(df, pd.DataFrame) or df.empty or len(df) > MAX_ROWS or not df.columns.is_unique:
+    if not isinstance(df, pd.DataFrame) or df.empty or len(df) > MAX_ROWS or not df.columns.is_unique \
+            or not df.index.is_unique:
         return df
     sty = df.style
-    used = False
     for c in df.columns:
         name = str(c)
         col = df[c]
         if name in _NAME:
             sty = sty.map(lambda v: _W, subset=[c])
-            used = True
         elif name.lower() == "gap group":
             sty = sty.map(_gap_css, subset=[c])
-            used = True
         elif pd.api.types.is_numeric_dtype(col) and not pd.api.types.is_bool_dtype(col):
             if _SIGNED.search(name) and not _NOT_SIGNED.search(name):
                 sty = sty.map(_num_css, subset=[c])
-                used = True
         elif col.dtype == object or pd.api.types.is_string_dtype(col):
             if _SIDE.match(name):
                 sty = sty.map(_side_css, subset=[c])
-                used = True
+            elif _SIGNED.search(name) and not _NOT_SIGNED.search(name):
+                sty = sty.map(_signstr_css, subset=[c])
             elif _STATUS.search(name):
                 sty = sty.map(_status_css, subset=[c])
-                used = True
-    if not used:
-        return df
+    # alternate rows shaded, so long tables read like a professional grid
+    def _zebra(d):
+        css = pd.DataFrame("", index=d.index, columns=d.columns)
+        css.iloc[1::2, :] = ZEBRA
+        return css
+    sty = sty.apply(_zebra, axis=None)
     floats = [c for c in df.columns if pd.api.types.is_float_dtype(df[c]) and str(c) not in formatted]
     if floats:
         sty = sty.format(_fmt, subset=floats)

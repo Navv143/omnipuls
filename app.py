@@ -238,7 +238,7 @@ st.markdown(
   /* ---------- Omnipuls design tokens: every colour, size and corner in the app comes from here ---------- */
   :root {
     --om-bg:#0B1220; --om-surface:#121C2E; --om-surface-2:#162238; --om-sunken:#101A2B;
-    --om-border:#22314A; --om-border-soft:#1C2A42; --om-border-strong:#2A3A56;
+    --om-border:#34496E; --om-border-soft:#283A5C; --om-border-strong:#46608C;
     --om-text:#E6EDF7; --om-text-2:#C9D6EA; --om-text-3:#AFC0DA; --om-muted:#8EA1BF; --om-faint:#7F93B2;
     --om-up:#26A69A; --om-down:#EF5350; --om-warn:#E8B33A; --om-accent:#3B82F6; --om-neutral:#94A3B8;
     --om-up-soft:rgba(38,166,154,.16); --om-down-soft:rgba(239,83,80,.16); --om-accent-soft:rgba(59,130,246,.16);
@@ -250,6 +250,19 @@ st.markdown(
   html, body, [data-testid="stAppViewContainer"] {font-feature-settings:"tnum" 1, "cv11" 1;}
   [data-testid="stDataFrame"], [data-testid="stTable"], .cell, .tape {font-variant-numeric: tabular-nums;}
   h1, h2, h3 {letter-spacing:-.01em;}
+  /* ---------- boxes and tables: every one framed, rows striped ---------- */
+  [data-testid="stDataFrame"] {border:1px solid var(--om-border-strong); border-radius:12px; overflow:hidden;
+    box-shadow:0 2px 10px rgba(0,0,0,.25);}
+  [data-testid="stMetric"] {border:1px solid var(--om-border); border-radius:12px; padding:10px 12px;
+    background:linear-gradient(180deg,var(--om-surface),var(--om-sunken));}
+  [data-testid="stVerticalBlockBorderWrapper"] {border-color:var(--om-border-strong) !important;}
+  [data-testid="stExpander"] details {border:1px solid var(--om-border) !important; border-radius:12px;}
+  .mx-k {border-top:2px solid var(--c, var(--om-accent)) !important;}
+  .mx-heat div {border:1px solid rgba(255,255,255,.14);}
+  .sx-card {border:1px solid var(--om-border-strong) !important; box-shadow:0 2px 12px rgba(0,0,0,.28);}
+  .sx-list .sx-r:nth-child(odd) {background:rgba(148,170,210,.06);}
+  .sx-list .sx-r:hover {background:color-mix(in srgb,var(--om-accent) 14%,transparent) !important;}
+  .dk-now {border:1px solid var(--om-border); border-left:3px solid var(--c);}
   /* bold, colourful headings: page titles and st.subheader */
   [data-testid="stHeading"] h2, [data-testid="stHeading"] h3, [data-testid="stMarkdownContainer"] h3 {font-weight:800 !important;
     background:linear-gradient(90deg,#22D3EE,#A78BFA 60%,#EC4899);-webkit-background-clip:text;background-clip:text;
@@ -2547,8 +2560,9 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
     hm = now.strftime("%H:%M")
     rows = []
 
-    def add(name, state, text, where):
-        rows.append({"name": name, "state": state, "text": text, "where": where})
+    def add(name, state, text, where, legs=None):
+        """legs: the trades behind the row, for the Desk table: [{sym, side, at, entry, stop, target, pnl, status}]"""
+        rows.append({"name": name, "state": state, "text": text, "where": where, "legs": legs or []})
 
     # 1. opening setups: decided at 9:15, entered at the opening price
     try:
@@ -2563,13 +2577,16 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
                 if df is None or df.empty:
                     add(meta["name"], "none", "No signal today.", "Scanners → Opening setups")
                     continue
-                parts = []
+                parts, legs = [], []
                 for _, r in df.iterrows():
                     buy = str(r["side"]).upper().startswith("BUY")
                     parts.append(f"**{r['sym']} {'BUY' if buy else 'SELL'}** at the open ₹{float(r['entry']):,.2f}, "
                                  f"stop ₹{float(r['stop_px']):,.2f}, exit 15:20 (now {float(r['pnl_now%']):+.2f}%)")
+                    legs.append({"sym": r["sym"], "side": "BUY" if buy else "SELL", "at": "09:15 open",
+                                 "entry": float(r["entry"]), "stop": float(r["stop_px"]), "target": "exit 15:20",
+                                 "pnl": f"{float(r['pnl_now%']):+.2f}%", "status": "Closed 15:20" if hm >= "15:20" else "Open"})
                 add(meta["name"], "fired", "; ".join(parts) + ". Only valid at the opening price.",
-                    "Scanners → Opening setups")
+                    "Scanners → Opening setups", legs)
     except Exception as e:
         add("Opening setups", "nodata", f"Not available ({str(e)[:80]}).", "Scanners → Opening setups")
 
@@ -2583,7 +2600,9 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
             add("Bank Nifty failed-break fade", "fired" if tr["state"] == "open" else "closed",
                 f"**{'BUY' if tr['side'] > 0 else 'SELL'}** at {tr['time']} from {tr['entry']:,.0f} "
                 f"({tr['level'].lower()} broken at {tr['break_time']}, back inside), stop {tr['stop']:,.0f}, "
-                f"target {tr['target']:,.0f}: {tr['state']} {pts}.", "Scanners → Bank Nifty fade")
+                f"target {tr['target']:,.0f}: {tr['state']} {pts}.", "Scanners → Bank Nifty fade",
+                [{"sym": "BANKNIFTY", "side": "BUY" if tr["side"] > 0 else "SELL", "at": tr["time"], "entry": tr["entry"],
+                  "stop": tr["stop"], "target": f"{tr['target']:,.0f}", "pnl": pts, "status": str(tr["state"]).capitalize()}])
         elif r.get("status") == "ok":
             late = hm > "15:00"
             add("Bank Nifty failed-break fade", "none" if late else "wait",
@@ -2603,7 +2622,10 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
             add("Bank Nifty 5-STAR momentum", "fired" if sg["state"] == "open" else "closed",
                 f"**{'BUY' if sg['side'] > 0 else 'SELL'}** at {sg['time']} from {sg['entry']:,.0f}, stop "
                 f"{sg['stop']:,.0f} (trail with Supertrend, exit by 15:15): {sg['state']} {sg['pts']:+.0f} pts.",
-                "Scanners → Bank Nifty 5-STAR")
+                "Scanners → Bank Nifty 5-STAR",
+                [{"sym": "BANKNIFTY", "side": "BUY" if sg["side"] > 0 else "SELL", "at": sg["time"], "entry": sg["entry"],
+                  "stop": sg["stop"], "target": "trail · 15:15", "pnl": f"{sg['pts']:+.0f} pts",
+                  "status": str(sg["state"]).capitalize()}])
         elif r.get("last"):
             last = r["last"]
             done = hm > "15:00"
@@ -2622,7 +2644,9 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
             if r.get("status") == "SIGNAL":
                 add(name, "fired", f"**BUY {r['side']} {r['strike']:,.0f}** (signal {r.get('sig_time', '')} at "
                     f"{r.get('sig_px', float('nan')):,.0f}): ATM option, stop −30%, trail 30% from the peak after +30%, "
-                    "exit 15:15.", "Scanners → Index trend-day")
+                    "exit 15:15.", "Scanners → Index trend-day",
+                    [{"sym": f"{k} {r['strike']:,.0f} {r['side']}", "side": "BUY", "at": r.get("sig_time", ""),
+                      "entry": r.get("sig_px"), "stop": "option −30%", "target": "trail 30%", "pnl": "", "status": "Open"}])
             else:
                 mv = (f" Move {r['move_atr']:+.2f} ATR, needs ±{r['thr']:.1f}." if pd.notna(r.get("move_atr")) else "")
                 add(name, "none" if hm > "13:00" else "wait", f"{str(r.get('status', '—')).capitalize()}.{mv}",
@@ -2639,7 +2663,10 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
         if tr is not None and tr["state"] == "open":
             add("Gold Order Flow (15-min)", "fired",
                 f"**{'BUY' if tr['side'] > 0 else 'SELL'}** from {tr['entry']:,.1f}, stop {tr['stop']:,.1f}, target "
-                f"{tr['target']:,.1f}: open, {tr['pct']:+.2f}%.", "Scanners → Gold Order Flow")
+                f"{tr['target']:,.1f}: open, {tr['pct']:+.2f}%.", "Scanners → Gold Order Flow",
+                [{"sym": "GOLD", "side": "BUY" if tr["side"] > 0 else "SELL", "at": str(tr.get("entry_time", ""))[5:16],
+                  "entry": tr["entry"], "stop": tr["stop"], "target": f"{tr['target']:,.1f}", "pnl": f"{tr['pct']:+.2f}%",
+                  "status": "Open"}])
         else:
             add("Gold Order Flow (15-min)", "wait",
                 f"No open trade. Flow: {stt.get('flow', '—')}, structure: {stt.get('structure', '—')}"
@@ -2657,8 +2684,6 @@ def todays_plan(svc, idx_b: dict, og, trend: list):
     hm = datetime.now(IST).strftime("%H:%M")
     fired = [r for r in rows if r["state"] == "fired"]
     waiting = [r for r in rows if r["state"] == "wait"]
-    icon = {"fired": ":green[● SIGNAL]", "closed": ":blue[● DONE]", "wait": ":orange[○ waiting]",
-            "none": ":gray[– none today]", "nodata": ":gray[? no data]"}
     with st.container(border=True):
         st.subheader("Today's plan: tested setups only")
         if fired:
@@ -2669,10 +2694,7 @@ def todays_plan(svc, idx_b: dict, og, trend: list):
             st.markdown("#### No tested setup today. No trade is the right call.")
         else:
             st.markdown("#### Market closed: the last session's tested setups")
-        order = {"fired": 0, "closed": 1, "wait": 2, "none": 3, "nodata": 4}
-        for r in sorted(rows, key=lambda r: order[r["state"]]):
-            st.markdown(f"{icon[r['state']]} &nbsp; **{r['name']}**: {r['text']} "
-                        f"<span class='muted'>({r['where']})</span>", unsafe_allow_html=True)
+        _render_plan(rows, "dash_plan")
         st.caption("Only setups that made money after costs in testing (research/FINAL_SETUPS.md); most days have one "
                    "or none, and no signal means no edge. Paper-trade them first: every signal and result is saved to "
                    "the desk log. Not investment advice.")
@@ -3572,9 +3594,8 @@ def _sector_data(t: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
                 for c in ("Inflow Cr", "Outflow Cr", "Net Flow Cr"):
                     t[c] = t["Stock"].map(fl[c])
                 flow["Sector"] = flow["Stock"].map(dict(zip(t["Stock"], t["Sector"]))).fillna("Other")
-                secflow = A.sector_flow(flow).reset_index().rename(columns={"index": "Sector"})
-                if "Sector" not in secflow:
-                    secflow = secflow.rename(columns={secflow.columns[0]: "Sector"})
+                secflow = A.sector_flow(flow)          # already has a "Sector" column (reset_index inside)
+                secflow = secflow.loc[:, ~secflow.columns.duplicated()]
     except Exception:
         pass
     return t, secflow
@@ -3634,13 +3655,10 @@ def page_sectors():
     if st.session_state.get("sx_pick") not in order:
         st.session_state.sx_pick = order[0]
     pick = st.session_state.sx_pick
-    st.markdown(MX.section("All sectors", "R = R-factor (0-100) · Smart = smart score · Activity = volume vs usual by now")
-                + MX.sector_grid([MX.sector_card(s, t[t["Sector"] == s], fl_of.get(s) or {}, s == pick,
-                                                 _stock_keys[ssort], asc) for s in order]),
-                unsafe_allow_html=True)
 
-    # ---- the chosen sector as a full live table
-    st.markdown(MX.section("Sector detail", "pick a sector"), unsafe_allow_html=True)
+    # ---- tap a sector: its stocks open right here (sortable, live)
+    st.markdown(MX.section("Open a sector", "tap a sector to see its stocks · sort with the boxes above"),
+                unsafe_allow_html=True)
     pick = st.pills("Sector", order, default=pick, key="sx_pill", label_visibility="collapsed") or pick
     st.session_state.sx_pick = pick
     _k = _stock_keys[ssort] if _stock_keys[ssort] in t else "Chg %"
@@ -3675,6 +3693,10 @@ def page_sectors():
                "same time on the last 20 sessions (0-100). Smart score: unusual-activity score (+ bullish, − bearish). "
                "Activity: volume so far vs the usual by this time (100% = normal). Money in / out: turnover split by "
                "where each candle closed.")
+    st.markdown(MX.section("All sectors", "R = R-factor (0-100) · Smart = smart score · Activity = volume vs usual by now")
+                + MX.sector_grid([MX.sector_card(s, t[t["Sector"] == s], fl_of.get(s) or {}, s == pick,
+                                                 _stock_keys[ssort], asc) for s in order]),
+                unsafe_allow_html=True)
     check_alerts(dict(zip(t["Symbol"], t["Price"])))
 
 
@@ -8512,8 +8534,6 @@ def _gap_group(g) -> str:
 
 
 _PLAN_CACHE = _memo("deskplan")
-_PLAN_STATE = {"fired": ("● SIGNAL", UP), "closed": ("● DONE", "#3B82F6"), "wait": ("○ WAITING", GOLD),
-               "none": ("– NONE TODAY", "#64748B"), "nodata": ("? NO DATA", "#64748B")}
 
 
 def _desk_plan(svc):
@@ -8538,19 +8558,40 @@ def _desk_plan(svc):
     except Exception as ex:
         st.caption(f"Regular setups unavailable: {str(ex)[:120]}")
         return
+    st.markdown(MX.section("Regular setups · today", "gap fade, sector overreaction, panic gap-down, Bank Nifty fade / "
+                           "5-STAR, trend day + OI, Gold Order Flow"), unsafe_allow_html=True)
+    _render_plan(rows, "dk_plan")
+
+
+def _render_plan(rows: list, kp: str):
+    """Regular setups as count boxes, a table of today's trades and a table of the rest (no paragraphs)."""
     rows = rows or []
-    fired = sum(r["state"] == "fired" for r in rows)
-    st.markdown(MX.section("Regular setups · today", f"{fired} live signal{'s' if fired != 1 else ''} · gap fade, sector "
-                           "overreaction, Bank Nifty fade / 5-STAR, trend day + OI, Gold Order Flow"), unsafe_allow_html=True)
+    cnt = {k: sum(r["state"] == k for r in rows) for k in ("fired", "closed", "wait", "none", "nodata")}
+    st.markdown(MX.kpis([MX.kpi("Live signals", str(cnt["fired"]), "open now", UP),
+                         MX.kpi("Done today", str(cnt["closed"]), "closed trades", "#3B82F6"),
+                         MX.kpi("Waiting", str(cnt["wait"]), "window still open", GOLD),
+                         MX.kpi("No signal", str(cnt["none"] + cnt["nodata"]), "nothing today", "#64748B")]),
+                unsafe_allow_html=True)
+    label = {"fired": "● Signal", "closed": "● Done", "wait": "○ Waiting", "none": "– None today", "nodata": "? No data"}
     order = {"fired": 0, "closed": 1, "wait": 2, "none": 3, "nodata": 4}
-    html_rows = []
+    trades, others = [], []
     for r in sorted(rows, key=lambda r: order.get(r["state"], 9)):
-        lab, col = _PLAN_STATE.get(r["state"], ("", "#64748B"))
-        txt = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", MX._e(r["text"]))
-        dim = "" if r["state"] in ("fired", "closed") else "opacity:.72;"
-        html_rows.append(f"<div class='dk-now' style='--c:{col};{dim}'><span class=dk-tag style=--c:{col}>{lab}</span> "
-                         f"<b>{MX._e(r['name'])}</b><br>{txt} <span style='opacity:.55'>({MX._e(r['where'])})</span></div>")
-    st.markdown("".join(html_rows) or "<div class='mx-quiet'>Loading…</div>", unsafe_allow_html=True)
+        if r.get("legs"):
+            for lg in r["legs"]:
+                trades.append({"Setup": r["name"], "Instrument": lg.get("sym"), "Side": lg.get("side"),
+                               "Signal at": lg.get("at"), "Entry": lg.get("entry"), "Stop": lg.get("stop"),
+                               "Target / exit": lg.get("target"), "P&L now": lg.get("pnl"), "Status": lg.get("status")})
+        else:
+            others.append({"Status": label.get(r["state"], ""), "Setup": r["name"],
+                           "Detail": re.sub(r"\*\*(.+?)\*\*", r"\1", r["text"]), "Page": r["where"]})
+    if trades:
+        t = pd.DataFrame(trades)
+        for c in ("Entry", "Stop"):
+            t[c] = t[c].map(lambda v: f"{v:,.2f}" if isinstance(v, (int, float)) and np.isfinite(v) else (v or ""))
+        st.dataframe(t, hide_index=True, width="stretch", height=_h(len(t), 360), key=f"{kp}_tr")
+    if others:
+        st.dataframe(pd.DataFrame(others), hide_index=True, width="stretch", height=_h(len(others), 300), key=f"{kp}_ot",
+                     column_config={"Detail": st.column_config.TextColumn(width="large")})
 
 
 @st.fragment(run_every=LIVE_EVERY)

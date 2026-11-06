@@ -185,6 +185,10 @@ def stock_candles(sym: str, bars: pd.DataFrame, session, fut: pd.DataFrame | Non
         t["Turnover x (time)"] = rr(turn.cumsum(), b["cumturn"])
         t["Candle Range x"] = rr(t["High"] - t["Low"], b["rng"])
         t["Range x (time)"] = rr(t["High"].cummax() - t["Low"].cummin(), b["rng_sofar"])
+    # running ratios: a candle whose time slot has no history (late / odd slots) keeps the last known value, so the
+    # stock's latest "Activity" isn't blank
+    for _c in ("Vol x (time)", "Turnover x (time)", "Range x (time)"):
+        t[_c] = pd.Series(t[_c].values, index=t.index).ffill().values
     o = float(t["Open"].iloc[0])
     gap = o / b["prev_close"] - 1 if b["prev_close"] else np.nan
     t["Gap %"] = gap * 100
