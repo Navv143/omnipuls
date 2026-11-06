@@ -9328,10 +9328,215 @@ def page_superbot():
     _superbot_body()
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _rb_news(query: str) -> list:
+    import research_bot as RB
+    return RB.news(query)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _rb_data(sym: str):
+    """Daily (a year+) and 5-minute candles (last days) for the Research Bot, Dhan first, then Yahoo."""
+    daily, _ = safe(fetch_daily, (sym,))
+    ddf = (daily or {}).get(sym)
+    intra, src = None, ""
+    try:
+        intra, src = chart_data(sym, "5m", *TIMEFRAMES["5m"])
+    except Exception:
+        pass
+    if intra is not None and not intra.empty:
+        idx = pd.DatetimeIndex(intra.index)
+        if idx.tz is not None:
+            idx = idx.tz_convert(IST).tz_localize(None)
+        intra = intra.copy()
+        intra.index = idx
+    return ddf, intra, src
+
+
+def _rb_oi(sym: str) -> tuple[dict, dict]:
+    """Futures OI for an F&O stock; option-chain readings (PCR, max pain, walls) for an index."""
+    import research_bot as RB
+    oi, ch = {}, {}
+    if not DHAN_DATA:
+        return oi, ch
+    try:
+        inv = {v: k for k, v in U.OC_INDEX_SYMBOL.items()}
+        if sym in inv:
+            sid, seg = U.OC_INDICES[inv[sym]]
+            spot, chain, _mp = _mv_chain(sid, seg)
+            ch = RB.chain_summary(chain, spot)
+        elif sym.endswith(".NS"):
+            f = fno_futures_oi([sym[:-3]])
+            if not f.empty:
+                r = f.iloc[0]
+                oi = {"Futures OI": r.get("OI"), "OI change %": r.get("OI Chg %"), "Futures change %": r.get("Fut Chg %"),
+                      "buildup": r.get("Buildup") or "", "Expiry": r.get("Fut Expiry")}
+    except Exception:
+        pass
+    return oi, ch
+
+
+def _rb_chart(r: dict, df: pd.DataFrame, intraday: bool, key: str, height: int, full: pd.DataFrame | None = None):
+    """Candles with EMAs, VWAP, pivots, support / resistance zones and the bias side's plan. EMAs come from `full`
+    (all the history) so a 200-day EMA shows on a 6-month chart."""
+    fig = go.Figure(go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
+                                   increasing_line_color="#22C55E", decreasing_line_color="#F43F5E", name="price"))
+    c = (full if full is not None else df)["Close"]
+    for n, col in ((20, "#22D3EE"), (50, "#A78BFA"), (200, "#F59E0B")) if not intraday else ((20, "#22D3EE"),):
+        if len(c) >= n:
+            e = c.ewm(span=n, adjust=False).mean().reindex(df.index)
+            fig.add_trace(go.Scatter(x=df.index, y=e, name=f"EMA {n}", line=dict(color=col, width=1.3)))
+    if intraday and r.get("vwap_series") is not None:
+        vw = r["vwap_series"]
+        fig.add_trace(go.Scatter(x=vw.index, y=vw, name="VWAP", line=dict(color="#F8FAFC", width=1.4, dash="dot")))
+    x0, x1 = df.index[0], df.index[-1]
+    for z in r["support"]:
+        fig.add_hrect(y0=z["lo"] - 1e-9, y1=z["hi"] + 1e-9, fillcolor="#22C55E", opacity=0.05 + 0.025 * min(z["score"], 6),
+                      line_width=0.6, line_color="#22C55E")
+    for z in r["resistance"]:
+        fig.add_hrect(y0=z["lo"] - 1e-9, y1=z["hi"] + 1e-9, fillcolor="#F43F5E", opacity=0.05 + 0.025 * min(z["score"], 6),
+                      line_width=0.6, line_color="#F43F5E")
+    if intraday:
+        for k, col in (("P", "#E2E8F0"), ("R1", "#F43F5E"), ("S1", "#22C55E"), ("R2", "#F43F5E"), ("S2", "#22C55E")):
+            v = r["pivots"][k]
+            if df["Low"].min() * 0.99 <= v <= df["High"].max() * 1.01:
+                fig.add_hline(y=v, line=dict(color=col, width=1, dash="dash"), opacity=0.6,
+                              annotation_text=f"{k} {v:,.1f}", annotation_position="right")
+        p = next((x for x in r["plans"] if (x["side"] == "BUY") == (r["bias"] != "Bearish")), r["plans"][0])
+        for nm, v, col in (("entry", p["entry"], "#3B82F6"), ("stop", p["stop"], "#F43F5E"), ("T1", p["t1"], "#22C55E")):
+            if np.isfinite(v):
+                fig.add_hline(y=v, line=dict(color=col, width=2), annotation_text=f"{p['side']} {nm} {v:,.2f}",
+                              annotation_position="left")
+    fig.update_layout(template=plot_template(), height=height, margin=dict(l=4, r=4, t=10, b=4), showlegend=True,
+                      legend=dict(orientation="h", y=1.02, x=0), xaxis_rangeslider_visible=False,
+                      xaxis=dict(range=[x0, x1], rangebreaks=[dict(bounds=["sat", "mon"])] +
+                                 ([dict(bounds=[15.5, 9.25], pattern="hour")] if intraday else [])))
+    st.plotly_chart(fig, width="stretch", key=key)
+
+
+def page_research_bot():
+    import research_bot as RB
+    st.markdown(MX.page_title("Research Bot", "type any stock or index · levels, trend, OI, news and a plan · "
+                              "information, not advice"), unsafe_allow_html=True)
+    names = U.all_names()
+    opts = [s for s in names if s.endswith(".NS") or s.startswith("^") or s in U.GROUPS.get("Indian Indices", {})]
+    c1, c2 = st.columns([3, 1], vertical_alignment="bottom")
+    pick = c1.selectbox("Stock or index", sorted(set(opts)), index=None, placeholder="Type a name, e.g. RELIANCE or Nifty",
+                        format_func=lambda s: f"{names.get(s, s)}  ·  {s}", key="rb_pick")
+    typed = c2.text_input("…or a symbol", key="rb_typed", placeholder="e.g. tcs")
+    sym = U.normalize(typed) if typed else pick
+    if not sym:
+        st.info("Pick a stock or index to research it: support and resistance, trend, EMAs, VWAP, pivots, momentum, "
+                "futures OI or option chain, latest news and a trade plan for both directions.",
+                icon=":material/travel_explore:")
+        return
+    name = names.get(sym) or name_of(sym)
+    with st.spinner(f"Researching {name}…"):
+        ddf, intra, src = _rb_data(sym)
+        if ddf is None or len(ddf) < 30:
+            st.error(f"Not enough price history for {sym}.")
+            return
+        oi, ch = _rb_oi(sym)
+        try:
+            r = RB.analyze(ddf, intra, oi=oi, chain=ch)
+        except Exception as ex:
+            st.error(f"Could not analyse {sym}: {ex}")
+            return
+        nw = _rb_news(RB.clean_query(f"{name} stock news"))
+    i, m = r["info"], r["momentum"]
+    up = lambda v: MX.UP if v > 0 else MX.DOWN if v < 0 else MX.NEUTRAL  # noqa: E731
+    bias_c = MX.UP if r["bias"] == "Bullish" else MX.DOWN if r["bias"] == "Bearish" else MX.WARN
+    vwap = i.get("VWAP", np.nan)
+    st.markdown(MX.kpis([
+        MX.kpi(name[:22], f"{r['price']:,.2f}", f"{i['Change %']:+.2f}% today", up(i["Change %"])),
+        MX.kpi("Bias", r["bias"], f"score {r['score']:+d} · trend + VWAP + momentum + OI", bias_c),
+        MX.kpi("Trend", r["trend"], f"{r['strength']} · ADX {m['ADX 14']:.0f} · above {r['above_emas']}/{r['n_emas']} EMAs",
+               up(r["tone"])),
+        MX.kpi("VWAP", f"{vwap:,.2f}" if np.isfinite(vwap) else "—",
+               ("price above" if r["price"] > vwap else "price below") if np.isfinite(vwap) else "no intraday data",
+               up(r["price"] - vwap) if np.isfinite(vwap) else MX.NEUTRAL),
+        MX.kpi("RSI 14", f"{m['RSI 14']:.0f}", "overbought > 70 · oversold < 30",
+               MX.DOWN if m["RSI 14"] > 70 else MX.UP if m["RSI 14"] < 30 else MX.ACCENT),
+        MX.kpi("ATR 14", f"{m['ATR 14']:,.2f}", f"{m['ATR %']:.2f}% a day", MX.ACCENT),
+        MX.kpi("52-week", f"{i['From 52w high %']:+.1f}%", f"from the high {i['52w high']:,.2f} · low {i['52w low']:,.2f}",
+               MX.NEUTRAL)]), unsafe_allow_html=True)
+    # ---- the plan for both directions
+    st.markdown(MX.section("Trade plan", "both directions · the bias side first · entry, stop at the swing / support, "
+                           "targets at the next levels"), unsafe_allow_html=True)
+    plans = sorted(r["plans"], key=lambda p: 0 if (p["side"] == "BUY") == (r["bias"] != "Bearish") else 1)
+    pt = pd.DataFrame([{"Side": p["side"], "Entry": p["entry"], "Stop": p["stop"], "Target 1": p["t1"], "Target 2": p["t2"],
+                        "Risk %": p["risk_pct"], "Reward : risk": p["rr1"], "When": p["how"]} for p in plans])
+    st.dataframe(pt, hide_index=True, width="stretch", key="rb_plan", column_config={
+        c: st.column_config.NumberColumn(format="%.2f") for c in ("Entry", "Stop", "Target 1", "Target 2", "Risk %", "Reward : risk")}
+        | {"When": st.column_config.TextColumn(width="large")})
+    # ---- charts
+    if intra is not None and not intra.empty:
+        last2 = intra[intra.index.normalize() >= sorted(set(intra.index.normalize()))[-min(2, len(set(intra.index.normalize())))]]
+        st.markdown(MX.section("Intraday chart", f"5-minute · VWAP, EMA 20, pivots, support (green) / resistance (red) "
+                               f"zones, the plan · {src}"), unsafe_allow_html=True)
+        _rb_chart(r, last2, True, f"rb_intra_{sym}", 420 if MOBILE else 520)
+    st.markdown(MX.section("Daily chart", "6 months · EMA 20 / 50 / 200 · support and resistance zones"),
+                unsafe_allow_html=True)
+    _rb_chart(r, ddf.tail(130), False, f"rb_daily_{sym}", 380 if MOBILE else 460, full=ddf)
+    # ---- levels
+    c1, c2 = st.columns(2) if not MOBILE else (st.container(), st.container())
+    with c1:
+        st.markdown(MX.section("Support and resistance", "zones where several levels meet are stronger"),
+                    unsafe_allow_html=True)
+        lv = [{"Level": "Resistance", "Price": z["px"], "Away %": (z["px"] / r["price"] - 1) * 100, "Strength": z["score"],
+               "Made of": z["src"]} for z in reversed(r["resistance"])] + \
+             [{"Level": "Support", "Price": z["px"], "Away %": (z["px"] / r["price"] - 1) * 100, "Strength": z["score"],
+               "Made of": z["src"]} for z in r["support"]]
+        if lv:
+            st.dataframe(pd.DataFrame(lv), hide_index=True, width="stretch", key="rb_levels", column_config={
+                "Price": st.column_config.NumberColumn(format="%.2f"), "Away %": st.column_config.NumberColumn(format="%+.2f"),
+                "Strength": st.column_config.ProgressColumn(min_value=0, max_value=10, format="%d")})
+    with c2:
+        st.markdown(MX.section("Pivots and CPR", "from yesterday's high / low / close"), unsafe_allow_html=True)
+        st.dataframe(pd.DataFrame([{"Level": k, "Price": v, "Away %": (v / r["price"] - 1) * 100} for k, v in
+                                   sorted(r["pivots"].items(), key=lambda kv: -kv[1])]), hide_index=True, width="stretch",
+                     key="rb_piv", column_config={"Price": st.column_config.NumberColumn(format="%.2f"),
+                                                  "Away %": st.column_config.NumberColumn(format="%+.2f")})
+    c3, c4 = st.columns(2) if not MOBILE else (st.container(), st.container())
+    with c3:
+        st.markdown(MX.section("EMA levels", "price above an EMA = that EMA is support"), unsafe_allow_html=True)
+        st.dataframe(pd.DataFrame([{"EMA": f"EMA {n}", "Price": v, "Away %": (r["price"] / v - 1) * 100,
+                                    "Status": "price above" if r["price"] > v else "price below"} for n, v in r["ema"].items()]),
+                     hide_index=True, width="stretch", key="rb_ema", column_config={
+                         "Price": st.column_config.NumberColumn(format="%.2f"),
+                         "Away %": st.column_config.NumberColumn(format="%+.2f")})
+    with c4:
+        st.markdown(MX.section("Today and momentum", "intraday levels, MACD, ADX"), unsafe_allow_html=True)
+        rows = [{"Reading": k, "Value": v} for k, v in i.items() if k not in ("Price",) and isinstance(v, (int, float))
+                and np.isfinite(v)] + [{"Reading": k, "Value": v} for k, v in m.items() if np.isfinite(v)]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", key="rb_mom",
+                     column_config={"Value": st.column_config.NumberColumn(format="%.2f")})
+    # ---- OI
+    if r["oi"] or r["chain"]:
+        st.markdown(MX.section("Open interest", "futures OI and build-up" if r["oi"] else "option writers (nearest expiry)"),
+                    unsafe_allow_html=True)
+        z = r["oi"] or r["chain"]
+        st.markdown(MX.kpis([MX.kpi(k, (f"{v:,.2f}" if isinstance(v, (int, float, np.floating)) and np.isfinite(v) else str(v or "—")),
+                                    "", MX.ACCENT) for k, v in z.items()]), unsafe_allow_html=True)
+    # ---- news
+    st.markdown(MX.section("Latest news", "Google News · India"), unsafe_allow_html=True)
+    if nw:
+        st.dataframe(pd.DataFrame([{"Time": (x["time"].strftime("%d %b %H:%M") if x["time"] is not None else ""),
+                                    "Source": x["source"], "Headline": x["title"], "Open": x["link"]} for x in nw]),
+                     hide_index=True, width="stretch", key="rb_news", column_config={
+                         "Headline": st.column_config.TextColumn(width="large"),
+                         "Open": st.column_config.LinkColumn("Open", display_text="Read ↗")})
+    else:
+        st.caption("No recent news found.")
+    st.caption("Levels and plans are mechanical readings of the chart, not tested signals and not investment advice. "
+               "Confirm on the live chart and size every trade by its stop.")
+
+
 PAGE_DEFS = [  # (url, function, menu title, icon)
     ("desk", page_desk, "Desk", ":material/monitoring:"),
     ("flow", page_flow, "Money Flow", ":material/currency_exchange:"),
     ("superbot", page_superbot, "Super Bot", ":material/neurology:"),
+    ("research_bot", page_research_bot, "Research Bot", ":material/travel_explore:"),
     ("lab", page_lab, "Research Lab", ":material/science:"),
     ("paper", page_paper, "Paper & Data", ":material/inventory_2:"),
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
@@ -9368,7 +9573,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "desk"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({  # institutional desk: the few screens that matter first, everything else under More
-    "Desk": [P["desk"], P["superbot"], P["flow"], P["options"], P["lab"], P["paper"]],
+    "Desk": [P["desk"], P["superbot"], P["research_bot"], P["flow"], P["options"], P["lab"], P["paper"]],
     "Markets": [P["view"], P["indices"], P["sectors"], P["fno"], P["oi"], P["chart"], P["global"], P["mcx"], P["cdsfut"]],
     "Old tools (untested)": [P["auto"], P["scanners"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["bot"], P["smart"], P["apex"],
              P["odds"], P["screener"], P["watchlist"]],
