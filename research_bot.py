@@ -215,7 +215,21 @@ def analyze(daily: pd.DataFrame, intra: pd.DataFrame | None = None, oi: dict | N
         plan("SELL", short_entry, short_stop, short_t,
              "trend and VWAP agree: sell a bounce that fails at VWAP / the nearest resistance" if bias == "Bearish"
              else f"only on a 5-min close below {s1:,.2f} (nearest support), stop above the resistance")]
-    return {"price": px, "trend": trend, "strength": strength, "tone": tone, "slope20": slope20, "ema": ema,
+    # intraday plan (research_bot_backtest.py: daily-level stops / targets are too wide for one day; this one is sized
+    # on today's candles): only when the bias and VWAP agree, stop at the last hour's swing, target 2R, out at 15:20
+    intraday_plan = None
+    if intra is not None and len(intra) and bias != "Neutral" and np.isfinite(info.get("VWAP", np.nan)):
+        sd = 1 if bias == "Bullish" else -1
+        t = intra[intra.index.normalize() == intra.index[-1].normalize()]
+        if sd * (px - info["VWAP"]) > 0 and len(t) >= 6:
+            sw = float(t["Low"].tail(12).min()) if sd > 0 else float(t["High"].tail(12).max())
+            if sd * (px - sw) > 0:
+                risk = abs(px - sw)
+                intraday_plan = {"side": "BUY" if sd > 0 else "SELL", "entry": px, "stop": sw, "t1": px + sd * 2 * risk,
+                                 "t2": px + sd * 3 * risk, "risk_pct": risk / px * 100, "rr1": 2.0,
+                                 "how": "intraday: at market while price holds the VWAP side; stop at the last hour's "
+                                        "swing; target 2R; out by 15:20"}
+    return {"price": px, "trend": trend, "intraday_plan": intraday_plan, "strength": strength, "tone": tone, "slope20": slope20, "ema": ema,
             "above_emas": above, "n_emas": len(ema), "momentum": mom, "info": info, "pivots": piv,
             "support": sup, "resistance": res, "bias": bias, "score": score, "plans": plans, "oi": oi or {},
             "chain": chain or {}, "vwap_series": vw}
