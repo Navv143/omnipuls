@@ -721,7 +721,24 @@ def ensure_auto_token(force: bool = False):
             if DCFG.get("access_token") and exp and exp - now > timedelta(hours=1):
                 box.update(token=DCFG["access_token"], expiry=exp)  # still valid from this computer's last run
                 fresh = True
-        if (force or not fresh) and time.time() - box["tried"] > 120:
+        if force:   # rejected: a newer token saved by the recorder (the one token owner on the server) wins
+            disk = D.load_config()
+            try:
+                dexp = datetime.fromisoformat(str(disk.get("token_expiry")))
+                dexp = dexp if dexp.tzinfo else dexp.replace(tzinfo=IST)
+            except ValueError:
+                dexp = None
+            if disk.get("access_token") and disk["access_token"] != box["token"] and dexp and dexp - now > timedelta(hours=1):
+                box.update(token=disk["access_token"], expiry=dexp, error=None)
+                DCFG.update(access_token=disk["access_token"], token_expiry=disk.get("token_expiry"))
+                return
+        # Dhan keeps one token per client: making a new one cancels the old. On the server the recorder makes them
+        # (2 hours before expiry, recorder.renew_token_ahead); the app only makes one itself when the recorder's token
+        # is missing or expired for 10+ minutes, so the processes no longer cancel each other's tokens.
+        on_server = os.environ.get("OMNIPULS_RECORDER") == "1"
+        disk_dead = not (disk_exp and disk_exp > now)
+        may_make = not on_server or (disk_dead and (disk_exp is None or now - disk_exp > timedelta(minutes=10)))
+        if (force or not fresh) and may_make and time.time() - box["tried"] > 120:
             box["tried"] = time.time()
             try:
                 tok, exp = D.generate_token(DCFG)

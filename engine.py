@@ -179,7 +179,7 @@ def main():
                 svc.set_indices(ids)
                 last_uni = time.time()
             svc.touch()                       # the loader slows down when nobody touches it
-            if time.time() - cfg_check > 300:  # pick up a renewed token
+            if time.time() - cfg_check > 60:   # pick up a token the recorder renewed
                 cfg_check = time.time()
                 new = D.load_config()
                 if new.get("access_token") != cfg.get("access_token"):
