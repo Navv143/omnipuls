@@ -429,3 +429,18 @@ at the same checkpoint: Super Bot picks +0.27% to the close, all trending +0.21%
 most of the result is the period's momentum. Stage 4 (without OI) hurt; 276 of 320 trades came at 09:30-09:45 (the
 8-trade limit fills early). Verdict: keep on paper; not a proven setup. Re-run weekly on the server's 6 months
 (Saturdays, bot_results "superbot_bt ...") and on the live record once it has a few weeks.
+
+## Today's review (6 Nov 2026): where we missed
+- Top 20 movers: two kinds. Early (ASTRAL, TIINDIA, CGPOWER, DATAPATTNS, MOTHERSON, HFCL: done by 10:00, several
+  gave part back) and late (FORTIS, YESBANK, HAVELLS, CROMPTON, SIEMENS, MCX, ICICIBANK, HDFCLIFE: most of the move
+  after 13:00, highs 14:00-15:25; YESBANK, HAVELLS, SIEMENS were negative at 10:00). Median share of the day's move
+  done: 29% by 9:30, 48% by 10:00, 72% by 11:00. No setup of ours enters after 14:30 and most only in the morning.
+- Super Bot replayed on today: 19 of the top 20 passed all five filters, but the 8-trade limit was full at 9:45
+  with ordinary picks (+2.28% in total on 8 trades); the stages are not selective (almost every trending stock
+  reaches the decision stage) and the score does not rank the real movers first.
+- Shorts against a strong market: on a Nifty +2% day the sector top-2 DOWN shorts, 5 of 6 Ignition shorts and the
+  Super Bot's CGPOWER short (-4.36%) were stopped. In the 40-day replay: Super Bot shorts with Nifty > +0.5% at entry
+  -0.46% a trade (16, 37% wins), longs with Nifty -0.5..0% -0.35% (43); with the market +0.3% to +0.6%.
+- Candidate rules to test on the server's 6 months (not adopted on 40 days): trade with the market only; spread the
+  8 trades (e.g. at most 4 by 10:00); an afternoon (13:00-14:30) breakout setup for the late movers; skip entries
+  after a move of 2.5+ ATR already made.
