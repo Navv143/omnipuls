@@ -2584,7 +2584,11 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
                                  f"stop ₹{float(r['stop_px']):,.2f}, exit 15:20 (now {float(r['pnl_now%']):+.2f}%)")
                     legs.append({"sym": r["sym"], "side": "BUY" if buy else "SELL", "at": "09:15 open",
                                  "entry": float(r["entry"]), "stop": float(r["stop_px"]), "target": "exit 15:20",
-                                 "pnl": f"{float(r['pnl_now%']):+.2f}%", "status": "Closed 15:20" if hm >= "15:20" else "Open"})
+                                 "pnl": f"{float(r['pnl_now%']):+.2f}%",
+                                 "status": ("Trailed out (profit locked)" if bool(r.get("trailed")) else
+                                            "Stopped" if bool(r.get("stopped")) else
+                                            "Closed 15:20" if hm >= "15:20" else
+                                            f"Open · lock {float(r['lock_px']):,.2f}" if pd.notna(r.get("lock_px")) else "Open")})
                 add(meta["name"], "fired", "; ".join(parts) + ". Only valid at the opening price.",
                     "Scanners → Opening setups", legs)
     except Exception as e:
@@ -5033,11 +5037,57 @@ def _flow_story(r: pd.Series) -> str:
     return " · ".join(bits)
 
 
+def _route_chart(d: pd.DataFrame, per: dict):
+    """Tap a stock from the money route: its candles today with VWAP and the 30-min money, beside its key numbers."""
+    if d is None or d.empty:
+        return
+    names = list(d["Stock"])
+    pick = st.pills("Open a chart", names, key="radar_route_pick", label_visibility="visible")
+    if not pick:
+        st.caption("Tap a stock above to open its chart here.")
+        return
+    c = per.get(pick)
+    r = d[d["Stock"] == pick].iloc[0]
+    left, right = (st.container(), st.container()) if MOBILE else st.columns([2.2, 1], gap="medium")
+    with left:
+        if c is None or c.empty:
+            st.caption("No candles for this stock yet.")
+        else:
+            x = c.copy()
+            vw = (x["Volume"] * (x["High"] + x["Low"] + x["Close"]) / 3).cumsum() / x["Volume"].cumsum().replace(0, np.nan)
+            fig = go.Figure([go.Candlestick(x=x.index, open=x["Open"], high=x["High"], low=x["Low"], close=x["Close"],
+                                            increasing_line_color="#22C55E", decreasing_line_color="#F43F5E", name=pick),
+                             go.Scatter(x=x.index, y=vw, name="VWAP", line=dict(color="#F59E0B", width=1.4, dash="dot"))])
+            if "Net Flow Cr" in x:
+                fig.add_trace(go.Bar(x=x.index, y=x["Net Flow Cr"], name="money ₹ Cr", yaxis="y2", opacity=.45,
+                                     marker_color=np.where(x["Net Flow Cr"] >= 0, "#22C55E", "#F43F5E")))
+            fig.update_layout(template=plot_template(), height=380, margin=dict(l=4, r=4, t=30, b=4), showlegend=False,
+                              title=dict(text=f"{pick} · today", font=dict(size=14)), xaxis_rangeslider_visible=False,
+                              yaxis=dict(domain=[0.28, 1]), yaxis2=dict(domain=[0, 0.22], title="₹ Cr", showgrid=False))
+            st.plotly_chart(fig, width="stretch", key=f"radar_route_chart_{pick}")
+    with right:
+        sd = 1 if r["Net 30m"] >= 0 else -1
+        lp = r.get("Price") if pd.notna(r.get("Price", np.nan)) else (float(c["Close"].iloc[-1]) if c is not None and len(c) else np.nan)
+        st.markdown(MX.kpis([
+            MX.kpi("Price", f"{float(lp):,.2f}" if pd.notna(lp) else "—",
+                   f"{float(r['Chg %']):+.2f}% today", MX.tone_color(r["Chg %"])),
+            MX.kpi("Money, last 30 min", f"₹{float(r['Net 30m']):+,.0f} Cr", f"before: ₹{float(r['Net prev 30m']):+,.0f} Cr",
+                   MX.UP if sd > 0 else MX.DOWN),
+            MX.kpi("Money, today", f"₹{float(r.get('Net Flow Cr', 0)):+,.0f} Cr", str(r.get("Sector", "")),
+                   MX.tone_color(r.get("Net Flow Cr", 0))),
+            MX.kpi("Turnover vs usual", f"{float(r['Turnover x (time)']):.1f}x" if pd.notna(r.get("Turnover x (time)")) else "—",
+                   f"smart score {float(r['Smart']):+.0f}" if pd.notna(r.get("Smart")) else "", MX.ACCENT)]),
+            unsafe_allow_html=True)
+        tv = MX.tv_url(pick)
+        if tv:
+            st.link_button("Open in TradingView ↗", tv, width="stretch")
+
+
 _UNUSUAL_COLS = (("Volume", "Candle Vol x", 3.0, "x"), ("Range", "Candle Range x", 2.5, "x"),
                  ("Size vs ATR", "Candle ATR %", 35.0, "%"), ("OI", "Candle OI x", 4.0, "x"))
 
 
-def _unusual_heatmap(ev: pd.DataFrame, day: pd.DataFrame):
+def _unusual_heatmap(ev: pd.DataFrame, day: pd.DataFrame, E_all: pd.DataFrame | None = None):
     """Unusual candles as a heat map: one row per stock (its strongest candle of the last 30 min), one column per
     reason (volume, range, size vs the daily ATR, OI), colour = how many times its threshold, so you see at a glance
     WHAT made each candle unusual. Plus counts per reason."""
@@ -5065,10 +5115,14 @@ def _unusual_heatmap(ev: pd.DataFrame, day: pd.DataFrame):
         f = net30.get(r["Stock"], np.nan)
         ylab.append(f"<b><span style='color:{c}'>{'▲' if up_ else '▼'} {r['Stock']}</span></b> {r['Time']} · "
                     f"{float(r.get('Chg %') or 0):+.2f}%" + (f" · ₹{f:+,.0f} Cr" if pd.notna(f) else ""))
-    z = ratio.clip(upper=6).fillna(0).to_numpy()
+    tot = ratio.fillna(0).sum(axis=1)
+    smart = pd.to_numeric(e.get("Smart"), errors="coerce") if "Smart" in e else pd.Series(np.nan, index=e.index)
+    z = np.c_[ratio.clip(upper=6).fillna(0).to_numpy(), tot.clip(upper=6).to_numpy(),
+              (smart.abs() / 15).clip(upper=6).fillna(0).to_numpy()]
     txt = [[("—" if pd.isna(e.iloc[i][col]) else (f"{e.iloc[i][col]:.0f}%" if u == "%" else f"{e.iloc[i][col]:.1f}x"))
-            for _, col, _t, u in _UNUSUAL_COLS] for i in range(len(e))]
-    cols = [nm for nm, *_ in _UNUSUAL_COLS]
+            for _, col, _t, u in _UNUSUAL_COLS] + [f"{tot.iloc[i]:.1f}", "—" if pd.isna(smart.iloc[i]) else f"{smart.iloc[i]:+.0f}"]
+           for i in range(len(e))]
+    cols = [nm for nm, *_ in _UNUSUAL_COLS] + ["TOTAL", "Smart score"]
     fig = go.Figure(go.Heatmap(
         z=z, x=cols, y=ylab, text=txt, texttemplate="%{text}", textfont=dict(size=13, color="#F8FAFC"),
         colorscale=[[0, "#111A2C"], [0.16, "#1E3A5F"], [0.34, "#0EA5E9"], [0.55, "#F59E0B"], [0.8, "#F97316"], [1, "#EC4899"]],
@@ -5082,8 +5136,34 @@ def _unusual_heatmap(ev: pd.DataFrame, day: pd.DataFrame):
                  hide_index=True, width="stretch", height=_h(len(e), 300), key="radar_unusual_tbl",
                  column_config={"Chg %": st.column_config.NumberColumn(format="%+.2f")})
     st.caption("Colour = how many times the threshold (volume 3x, range 2.5x, candle 35% of the daily ATR, OI 4x the "
-               "usual for that time). A single big candle often snaps back; strongest when the money of the last 30 "
-               "minutes agrees with it.")
+               "usual for that time). TOTAL = the four added up; Smart score = the stock's unusual-activity score "
+               "(+ bullish, − bearish; colour = its size). A single big candle often snaps back; strongest when the "
+               "money of the last 30 minutes and the smart score agree with it.")
+    # how many times each stock showed up today, and why
+    if E_all is not None and not E_all.empty:
+        a = E_all.copy()
+        for nm, col, thr, _u in _UNUSUAL_COLS:
+            a[nm] = (pd.to_numeric(a[col], errors="coerce") >= thr) if col in a else False
+        a["up"] = a["Candle"].isin(["Green", "Bullish"])
+        g = a.groupby("Stock").agg(Times=("Time", "size"), First=("Time", "min"), Last=("Time", "max"),
+                                   Bullish=("up", "sum"), **{f"{nm} spikes": (nm, "sum") for nm, *_ in _UNUSUAL_COLS})
+        g["Bearish"] = g["Times"] - g["Bullish"]
+        last = a.sort_values("Time").groupby("Stock").last()
+        g["Chg %"] = last["Chg %"]
+        g["Smart score"] = last["Smart"] if "Smart" in last else np.nan
+        g["Side"] = np.where(g["Bullish"] > g["Bearish"], "Bullish", np.where(g["Bearish"] > g["Bullish"], "Bearish", "Mixed"))
+        g = g.reset_index().sort_values(["Times", "Last"], ascending=[False, False]).head(25)
+        st.markdown(MX.section("Repeat unusual stocks · today", "how many unusual candles each stock had today, and why"),
+                    unsafe_allow_html=True)
+        st.dataframe(g[["Stock", "Times", "Side", "Bullish", "Bearish"] + [f"{nm} spikes" for nm, *_ in _UNUSUAL_COLS]
+                       + ["First", "Last", "Chg %", "Smart score"]],
+                     hide_index=True, width="stretch", height=_h(len(g), 460), key="radar_unusual_rep",
+                     column_config={"Times": st.column_config.ProgressColumn("Times", min_value=0,
+                                                                             max_value=int(g["Times"].max() or 1), format="%d"),
+                                    "Chg %": st.column_config.NumberColumn(format="%+.2f"),
+                                    "Smart score": st.column_config.NumberColumn(format="%+.0f")})
+        st.caption("A stock that keeps printing unusual candles in the same direction is being worked by big money; "
+                   "mixed sides = a fight.")
 
 
 @st.fragment(run_every=LIVE_EVERY)
@@ -5130,6 +5210,7 @@ def flow_radar_body(svc):
     up10 = day[(day["Net 30m"] > 0) & (day["Accel"] > 0)].sort_values("Net 30m", ascending=False).head(10)
     dn10 = day[(day["Net 30m"] < 0) & (day["Accel"] < 0)].sort_values("Net 30m").head(10)
     st.markdown(MX.money_route(up10, dn10, mobile=MOBILE), unsafe_allow_html=True)
+    _route_chart(pd.concat([up10, dn10]), per)
     st.caption("Left: sectors, net money of the last 30 minutes. Lines: thicker = more money, moving dashes show the "
                "direction. Cards: the stock's money in the last 30 min, the grey tick on the bar = the 30 min before, so a "
                "bar far past its tick = money speeding up. Money against the price move often comes before a turn.")
@@ -5164,7 +5245,7 @@ def flow_radar_body(svc):
     if ev30.empty:
         st.markdown("<div class='mx-quiet'>No unusual candles in the last 30 minutes.</div>", unsafe_allow_html=True)
     else:
-        _unusual_heatmap(ev30, day)
+        _unusual_heatmap(ev30, day, E)
 
     st.markdown(MX.section("All F&O: sectors and their stocks", "box size = turnover today · colour = buying share"),
                 unsafe_allow_html=True)
@@ -5293,17 +5374,38 @@ def flow_body(svc):
         if tl.empty:
             st.info("No data yet.")
         else:
-            order = tl.sum().sort_values().index
-            z = tl[order].T
-            lim = float(np.nanmax(np.abs(z.values))) or 1
-            fig = go.Figure(go.Heatmap(z=z.values, x=z.columns, y=z.index, colorscale=[[0, DOWN], [0.5, "#f5f5f5"], [1, UP]],
-                                       zmin=-lim, zmax=lim, text=np.round(z.values).astype("float"),
-                                       texttemplate="%{text:+,.0f}", hovertemplate="%{y} %{x}: ₹%{z:+,.0f} Cr<extra></extra>",
-                                       colorbar=dict(title="₹ Cr")))
-            fig.update_layout(height=34 * len(z) + 80, template=plot_template(), margin=dict(l=10, r=10, t=10, b=10))
+            order = tl.sum().sort_values(ascending=False).index
+            z = tl[order].T.fillna(0)
+            z["TOTAL"] = z.sum(axis=1)                                   # each sector through the day
+            z.loc["ALL SECTORS"] = z.sum(axis=0)                        # each time bucket across sectors
+            body = z.iloc[:-1, :-1].values
+            # colour scale from the typical bucket (95th percentile), so one huge bucket or the totals don't wash
+            # every other cell out; totals still show their numbers and saturate
+            lim = float(np.nanpercentile(np.abs(body), 95)) if body.size else 1.0
+            lim = lim or 1.0
+            ztxt = np.vectorize(lambda v: f"{v:+,.0f}")(z.values)
+            fig = go.Figure(go.Heatmap(
+                z=z.values.clip(-lim, lim), x=list(z.columns), y=list(z.index), text=ztxt, texttemplate="%{text}",
+                textfont=dict(size=11, color="#F8FAFC"), xgap=2, ygap=2,
+                colorscale=[[0, "#B91C1C"], [0.3, "#7F1D1D"], [0.5, "#152033"], [0.7, "#065F46"], [1, "#10B981"]],
+                zmin=-lim, zmax=lim, customdata=z.values,
+                hovertemplate="%{y} · %{x}: ₹%{customdata:+,.0f} Cr<extra></extra>",
+                colorbar=dict(title="₹ Cr", thickness=10)))
+            n_r, n_c = z.shape
+            for x0, y0, x1, y1 in ((n_c - 1.5, -0.5, n_c - 0.5, n_r - 0.5), (-0.5, n_r - 1.5, n_c - 0.5, n_r - 0.5)):
+                fig.add_shape(type="rect", x0=x0, y0=y0, x1=x1, y1=y1, line=dict(color="#F59E0B", width=2), xref="x", yref="y")
+            fig.update_layout(height=36 * n_r + 110, template=plot_template(), margin=dict(l=10, r=10, t=10, b=10),
+                              xaxis=dict(side="top", type="category", tickfont=dict(size=11)),
+                              yaxis=dict(autorange="reversed", type="category", tickfont=dict(size=12)))
             st.plotly_chart(fig, width="stretch", key="flow_heat")
-            st.caption("Net flow per sector in each time bucket: watch for a sector turning from red to green (money "
-                       "arriving) or the reverse.")
+            st.caption("Net flow per sector in each time bucket (₹ Cr). Right column (TOTAL) = the sector through the "
+                       "day; bottom row (ALL SECTORS) = every sector in that time bucket. Watch for a sector turning from "
+                       "red to green (money arriving) or the reverse.")
+            t2 = z.copy()
+            t2.insert(0, "Sector", t2.index)
+            st.dataframe(t2.reset_index(drop=True), hide_index=True, width="stretch", height=_h(len(t2), 560),
+                         key="flow_heat_tbl", column_config={c: st.column_config.NumberColumn(format="%+.0f")
+                                                             for c in t2.columns if c != "Sector"})
             cum = tl.fillna(0).cumsum()
             top = list(cum.iloc[-1].abs().sort_values(ascending=False).index[:6])
             fig2 = go.Figure([go.Scatter(x=cum.index, y=cum[c], name=c, mode="lines+markers") for c in top])
@@ -8149,7 +8251,7 @@ def _btc_paper_section():
                            "stop at its low, 1 h hold · all tested 2023-26, positive in both halves · checked every minute"),
                 unsafe_allow_html=True)
     for t_ in bn.get("trades", []):          # Bank Nifty EBP trades join the per-setup record
-        if t_.get("status") in ("stop", "target", "time", "open"):
+        if t_.get("status") in ("stop", "target", "time", "trailed", "open"):
             rec.append({"day": str(t_["signal_at"])[:10], "setup": "Bank Nifty EBP 1h (overnight)", "side": t_["side"],
                         "entry_at_ist": str(t_.get("entry_at", ""))[5:16], "entry": t_.get("entry"), "sl": t_["sl"], "tp": t_["tp"],
                         "result": t_["status"], "exit_at": str(t_.get("exit_at") or "")[5:16], "r": t_["r"],
@@ -8190,7 +8292,7 @@ def _btc_paper_section():
         cards.append(f"<div class='mx-idea' style='--c:var(--om-accent);margin:6px 0'><b>{MX._e(v.get('name', key))}</b> · {line}"
                      f" · checked {pd.Timestamp(v['checked']).tz_localize('UTC').tz_convert(IST):%H:%M} IST</div>" if v.get("checked") else "</div>")
     st.markdown("".join(cards) or "<div class='mx-quiet'>Starts on the server within minutes.</div>", unsafe_allow_html=True)
-    done = [x for x in rec if x.get("result") in ("stop", "target", "time")]
+    done = [x for x in rec if x.get("result") in ("stop", "target", "time", "trailed")]
     if done:
         fam = lambda s_: next((k for k in tested if s_.startswith(k)), s_)  # noqa: E731
         g = pd.DataFrame(done).assign(Setup=lambda d: d["setup"].map(fam)).groupby("Setup")["r"].agg(
@@ -8343,7 +8445,7 @@ _DESK_CSS = """<style>
 .dk-tag{display:inline-block;padding:1px 7px;border-radius:9px;font-size:.72rem;border:1px solid var(--c);color:var(--c);margin-left:6px}
 </style>"""
 
-_DONE = ("stop", "target", "time", "Closed", "Stopped", "Trailed")
+_DONE = ("stop", "target", "time", "trailed", "Closed", "Stopped", "Trailed")
 
 
 def _desk_css():

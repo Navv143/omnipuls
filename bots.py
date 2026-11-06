@@ -1040,7 +1040,7 @@ def _account_records(day: str) -> list[dict]:
                 continue
             e, sl, sd = float(x["entry"]), float(x["sl"]), int(x["side"])
             risk = abs(e - sl)
-            done = str(x.get("result", "")).startswith(("stop", "target", "time", "Closed", "Stopped", "Trailed"))
+            done = str(x.get("result", "")).startswith(("stop", "target", "time", "trailed", "Closed", "Stopped", "Trailed"))
             out.append({"source": fam, "symbol": x.get("symbol"), "side": sd, "time": x.get("signal_at"), "entry": e, "sl": sl,
                         "tp1": e + sd * risk, "tp2": e + sd * 2 * risk, "status": "closed" if done else "open",
                         "r": x.get("r"), "r_now": x.get("r"), "m_r": x.get("r") if done else None,
