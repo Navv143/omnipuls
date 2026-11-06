@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /_stcore/
+Disallow: /ticks
+Sitemap: https://omnipuls.cloud/sitemap.xml

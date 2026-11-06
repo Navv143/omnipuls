@@ -5,6 +5,7 @@
 cd /app/code
 sig() { cat requirements.txt .streamlit/config.toml 2>/dev/null | sha1sum | cut -d' ' -f1; }
 START=$(sig)
+python deploy/seo_patch.py || true   # title, description and preview tags for Google (see the file)
 streamlit run app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true &
 PID=$!
 healthy() { python -c "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=20); sys.exit(0)" 2>/dev/null; }

@@ -11,6 +11,15 @@
 		rewrite * /app/static{path}
 		reverse_proxy app:8501
 	}
+	# search engines: robots.txt and sitemap.xml, served by Streamlit from ./static
+	handle /robots.txt {
+		rewrite * /app/static/robots.txt
+		reverse_proxy app:8501
+	}
+	handle /sitemap.xml {
+		rewrite * /app/static/sitemap.xml
+		reverse_proxy app:8501
+	}
 	# everything else: the Streamlit app (its own WebSocket included)
 	handle {
 		reverse_proxy app:8501
