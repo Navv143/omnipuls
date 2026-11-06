@@ -68,10 +68,24 @@ class Market:
         self.momentum: dict = {}
 
     def load(self):
-        stocks, indices = B.load_history(self.cfg, days=LIVE_DAYS if not B.CACHE.exists() else B.HISTORY_DAYS,
-                                         symbols=self.syms + [("INDIAVIX", "IDX_I", 21, "INDEX")])
+        import candles as C
         cut = pd.Timestamp.now() - pd.Timedelta(days=LIVE_DAYS)
-        self.hist = {k: v[v.index >= cut] for k, v in {**stocks, **indices}.items()}
+        if C.TF == 5:
+            stocks, indices = B.load_history(self.cfg, days=LIVE_DAYS if not B.CACHE.exists() else B.HISTORY_DAYS,
+                                             symbols=self.syms + [("INDIAVIX", "IDX_I", 21, "INDEX")])
+            self.hist = {k: v[v.index >= cut] for k, v in {**stocks, **indices}.items()}
+        else:  # the system timeframe (3 minutes): history from the 1-minute cache, resampled
+            self.hist = {}
+            for i, (sym, seg, sid, ins) in enumerate(self.syms + [("INDIAVIX", "IDX_I", 21, "INDEX")], 1):
+                try:
+                    h = B.clean(C.history(sym, seg, sid, ins, LIVE_DAYS, self.cfg))
+                except Exception as e:
+                    log(f"{sym} history: {e}")
+                    continue
+                if not h.empty:
+                    self.hist[sym] = h[h.index.normalize() < pd.Timestamp.now().normalize()]
+                if i % 50 == 0:
+                    log(f"{C.TF}-minute history: {i} symbols")
         try:
             import indices as IX
             self.weights = {k: d.get("w", {}) for k, d in IX.load().items()}
@@ -82,14 +96,16 @@ class Market:
         self.oi_avg = oi_history()
 
     def refresh(self):
+        import candles as C
         import dhan as D
         for sym, seg, sid, ins in self.syms + [("INDIAVIX", "IDX_I", 21, "INDEX")]:
             try:
-                d = B.clean(D.intraday(seg, sid, ins, 5, 1, self.cfg))
+                d = B.clean(C.fetch(seg, sid, ins, 1, self.cfg))
             except D.DhanError as e:
                 if e.code == "NETWORK":
                     raise
                 continue
+            d = C.closed(d)                    # closed candles only: nothing signals before the first candle closes
             if not d.empty:
                 self.today[sym] = d[d.index.normalize() == d.index.normalize().max()]
         try:
@@ -1340,6 +1356,7 @@ def main():
     mkt = Market(cfg)
     mkt.load()
     day, seen, scored, last, logged, opened = None, {}, False, 0.0, set(), False
+    last_slot = None
     while True:
         now = datetime.now(IST)
         try:
@@ -1352,8 +1369,12 @@ def main():
                     mkt.trades = []
                 if mkt.hist:
                     mkt.load()   # yesterday joins the history
-            if market_open(now) and time.time() - last >= EVERY:
-                last = time.time()
+            import candles as C
+            mins = (now.hour * 60 + now.minute) - (9 * 60 + 15)
+            slot = mins // C.TF                          # run right after each candle closes (+10 s for Dhan to settle)
+            due = slot != last_slot and (mins % C.TF) * 60 + now.second >= 10
+            if market_open(now) and (due or time.time() - last >= EVERY):
+                last, last_slot = time.time(), slot
                 mkt.cfg = D.load_config()   # the token the app or recorder renewed
                 mkt.refresh()
                 state = cycle(mkt)
@@ -1391,7 +1412,7 @@ def main():
             STATUS["errors"] = (STATUS["errors"] + [f"{now:%d %b %H:%M} {e}"[:200]])[-10:]
             log(f"error: {e}")
             time.sleep(30)
-        time.sleep(15)
+        time.sleep(5)
 
 
 if __name__ == "__main__":

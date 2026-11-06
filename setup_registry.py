@@ -1,4 +1,5 @@
-"""One source of truth for every setup: when it looks, how it enters, its stop and exit, what the backtest said, and
+"""One source of truth for every setup (all signals run on closed 3-minute candles from 7 Nov 2026 - candles.py;
+the backtests below were on 5-minute candles, so the live record re-checks them on 3 minutes): when it looks, how it enters, its stop and exit, what the backtest said, and
 its status. The Desk's playbook and blotter and the Research Lab's scoreboard read from here.
 
 status: "core"     tested edge, trade it (paper until the live record confirms)
@@ -12,7 +13,7 @@ SETUPS = [
     # ------------------------------------------------------------------ stocks
     {"prefix": "V3 early pick", "market": "Stocks", "status": "core", "window": "09:30-10:00",
      "look": "Top-10 mover at 9:30 (ATR, volume, range); no block deal; not a 0-1% gap its way",
-     "entry": "First 5-min close beyond the 9:15-9:30 range (9:30 candle, or 9:35-9:45 with 1.5x volume)",
+     "entry": "First 3-min close beyond the 9:15-9:30 range (9:30 candle closes 9:33; 9:33-9:45 candles need 1.5x volume)",
      "stop": "0.5 ATR", "exit": "Trail 1 ATR, out 15:20", "bt": "+0.58% a trade", "bt_win": "57%", "bt_n": "54 days",
      "note": "The only stock setup that keeps passing. 77% of breakouts happen by 10:00: no break by 10:00 = no trade."},
     {"prefix": "V3 (top 2, filters)", "market": "Stocks", "status": "testing", "window": "09:30-12:00",

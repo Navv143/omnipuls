@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
+import candles as C
 import dhan as D
 import paths
 
@@ -26,7 +27,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 CACHE = paths.state("scan_cache")
 SNAP_HIST = paths.state("activity_history")
 NIFTY = "__NIFTY__"
-VERSION = 3  # bump when ScanService changes, so a running app replaces its old loader
+VERSION = 4  # bump when ScanService changes, so a running app replaces its old loader
 INSTANCES: list = []
 
 
@@ -66,6 +67,7 @@ def market_hours(now: datetime | None = None) -> bool:
 class ScanService:
     def __init__(self, source: str, cfg: dict | None = None):
         self.source, self.cfg = source, cfg
+        self.tf = C.TF if source == "dhan" else 5      # Yahoo has no 3-minute history: it stays on 5 minutes
         self.syms: list[str] = []
         self.hist: dict[str, pd.DataFrame] = {}
         self.today: dict[str, pd.DataFrame] = {}
@@ -131,7 +133,7 @@ class ScanService:
             h = self.hist.get(s)
             if h is None or h.empty:
                 continue
-            t = self.today.get(s)
+            t = C.closed(self.today.get(s), self.tf)       # the candle still forming is never used
             df = h if t is None or t.empty else pd.concat([h, t])
             out[s] = df[~df.index.duplicated(keep="last")]
         return out, out.pop(NIFTY, None)
@@ -151,7 +153,7 @@ class ScanService:
         with self._lock:
             keys = list(self.idx_ids)
         for k in keys:
-            parts = [x for x in (self.idx_hist.get(k), self.idx_today.get(k)) if x is not None and not x.empty]
+            parts = [x for x in (self.idx_hist.get(k), C.closed(self.idx_today.get(k), self.tf)) if x is not None and not x.empty]
             if parts:
                 df = pd.concat(parts)
                 out[k] = df[~df.index.duplicated(keep="last")]
@@ -208,7 +210,7 @@ class ScanService:
             if full and k in self.idx_hist:
                 continue
             try:
-                df = _naive(D.intraday("IDX_I", sid, "INDEX", 5, 40 if full else 1, self.cfg))
+                df = C.fetch("IDX_I", sid, "INDEX", 40 if full else 1, self.cfg)
                 if df.empty:
                     continue
                 d = df.index.normalize()
@@ -235,15 +237,16 @@ class ScanService:
     # ---------------------------------------------------------------- internals
 
     def _fetch(self, sym: str, days: int) -> pd.DataFrame:
+        """Bars on the system timeframe (candles.TF, default 3 minutes, built from 1-minute candles)."""
         if sym == NIFTY:
-            return _naive(D.intraday("IDX_I", 13, "INDEX", 5, days, self.cfg))
+            return C.fetch("IDX_I", 13, "INDEX", days, self.cfg)
         sid = self._ids.get(sym.upper())
         if sid is None:
             return pd.DataFrame()
-        return _naive(D.intraday("NSE_EQ", sid, "EQUITY", 5, days, self.cfg))
+        return C.fetch("NSE_EQ", sid, "EQUITY", days, self.cfg)
 
     def _cache_dir(self, day) -> Path:
-        d = CACHE / f"{self.source}_{day:%Y%m%d}"
+        d = CACHE / f"{self.source}_tf{self.tf}_{day:%Y%m%d}"
         d.mkdir(parents=True, exist_ok=True)
         return d
 

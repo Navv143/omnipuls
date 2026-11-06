@@ -19,6 +19,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+import candles as _C
+
 DEFAULTS = {"day_x": 1.2, "now_x": 1.0, "range_x": 1.2, "wide_yday": 1.25, "lookback": 20, "recent": 3,
             "sector_rising": False}
 
@@ -300,11 +302,11 @@ def manage(side: int, entry: float, sl: float, tp1: float, tp2: float, after: pd
     r_now = side * (ltp - entry) / risk
     out = {"ltp": ltp, "move_pts": side * (ltp - entry), "move_pct": side * (ltp / entry - 1) * 100, "r_now": round(r_now, 2),
            "best_r": round(best, 2), "worst_r": round(worst, 2), "stop_now": round(stop, 2), "half_booked": half is not None,
-           "as_of": (after.index[-1] + pd.Timedelta(minutes=5)).strftime("%H:%M")}
+           "as_of": (after.index[-1] + pd.Timedelta(minutes=_C.TF)).strftime("%H:%M")}
     if done is not None:
         exit_px = done if half is None else (half + done) / 2
         out.update(closed=True, exit_how=how,
-                   exit_at=("15:15" if how == "15:15 exit" else (when + pd.Timedelta(minutes=5)).strftime("%H:%M")) if hasattr(when, "strftime") else "",
+                   exit_at=("15:15" if how == "15:15 exit" else (when + pd.Timedelta(minutes=_C.TF)).strftime("%H:%M")) if hasattr(when, "strftime") else "",
                    exit_r=round(side * (exit_px - entry) / risk, 2), exit_pct=round(side * (exit_px / entry - 1) * 100 - cost_pct, 3))
         out["advice"] = (f"CLOSED · {how} · {out['exit_r']:+.2f}R" if how == "15:15 exit" else
                          f"CLOSED · {how} at {out['exit_at']} · {out['exit_r']:+.2f}R")

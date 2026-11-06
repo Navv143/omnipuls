@@ -8160,8 +8160,8 @@ def _window_now(now: datetime) -> str:
 
 _PLAYBOOK = [  # (window key, time, what the desk does)
     ("pre", "Before 9:15", "Gap list by group: > 3% / 1-3% / 0.5-1% / flat. 1-3% gap-with = avoid (trap). Iron fly: open the day after expiry."),
-    ("open", "9:15-9:30", "Do nothing: the 9:15-9:30 range is being built. Note the top-10 movers."),
-    ("v3", "9:30-10:00", "V3: enter on the first 5-min CLOSE beyond the 9:15-9:30 range (60% break by 9:45, 77% by 10:00). No retest wait."),
+    ("open", "9:15-9:30", "No signals: the first 3-min candle closes at 9:18 (pre-open price only before that). The 9:15-9:30 range is being built; note the top-10 movers."),
+    ("v3", "9:30-10:00", "V3: enter on the first 3-min CLOSE beyond the 9:15-9:30 range (first chance 9:33; 60% break by 9:45, 77% by 10:00). No retest wait."),
     ("flat", "10:00-10:45", "Flat-open stocks (44% of the day's toppers move now): Footprint top 2, Aligned, Grinder 10:30."),
     ("mid", "11:00-13:30", "Sector top 2 at 11 / 12 / 13. Nifty breakouts here fade: midday fade, not chase."),
     ("late", "13:30-15:20", "Manage only: trail, exit 15:20. No new stock entries."),
@@ -8264,7 +8264,7 @@ def _desk_body():
                 MX.kpi("Avg P&L", f"{tp['pct'].mean():+.2f}%", "per trade, all setups", MX.tone_color(tp["pct"].mean())),
             ]) + "</div>", unsafe_allow_html=True)
     # V3 watchlist: which stocks are set up and which have broken out, with the time
-    st.markdown(MX.section("V3 watchlist · who breaks and when", "top-10 movers at 9:30 · entry = first 5-min close beyond the 9:15-9:30 range"),
+    st.markdown(MX.section("V3 watchlist · who breaks and when", "top-10 movers at 9:30 · entry = first 3-min close beyond the 9:15-9:30 range"),
                 unsafe_allow_html=True)
     if svc is None:
         st.caption("Needs Dhan.")

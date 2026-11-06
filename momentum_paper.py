@@ -273,7 +273,8 @@ def footprint_picks(S: dict, now: datetime, T: str = "10:00", top: int = 2) -> l
             if x.index.normalize().nunique() < 23 or not (_hm(s.today.index) >= T).any():
                 continue
             try:
-                r = CS.stock_rows(sym, x, 5, {}, {}, last_only=True, times=(T,))
+                import candles as C
+                r = CS.stock_rows(sym, x, C.TF, {}, {}, last_only=True, times=(T,))
             except Exception:
                 continue
             for z in r:
@@ -304,7 +305,10 @@ def nifty_orb(nifty, now: datetime) -> dict | None:
         return None
     g = nifty.today
     hm = _hm(g.index)
-    orh, orl = g["High"].iloc[:3].max(), g["Low"].iloc[:3].min()
+    first = hm < "09:30"
+    if not first.any():
+        return None
+    orh, orl = g["High"][first].max(), g["Low"][first].min()
     ok = (hm >= "09:30") & (hm <= "14:30")
     c = g["Close"].to_numpy()
     idx = np.flatnonzero(ok & ((c > orh) | (c < orl)))
@@ -328,10 +332,12 @@ def nifty_orb(nifty, now: datetime) -> dict | None:
             "stop_pct": round(stop_pct, 3), "r": round(res["pct"] / stop_pct, 2), **res}
 
 
-def nifty_fade(nifty, now: datetime, look: int = 12, min_brk: float = 0.1) -> dict | None:
+def nifty_fade(nifty, now: datetime, look: int | None = None, min_brk: float = 0.1) -> dict | None:
     """Short Nifty after its first midday (11:00-14:00) close > min_brk % above the last hour's high; exit 60 min later."""
     if nifty is None or not getattr(nifty, "ok", False):
         return None
+    import candles as C
+    look = look or max(1, 60 // C.TF)                  # the last hour, on any timeframe
     g = nifty.today
     hm = _hm(g.index)
     hi = g["High"].rolling(look).max().shift()
