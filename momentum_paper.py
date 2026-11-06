@@ -52,21 +52,36 @@ def _hm(idx) -> np.ndarray:
     return np.asarray(idx.strftime("%H:%M"))
 
 
+LOCK_AFTER_R, LOCK_SHARE = 1.0, 0.5   # once +1R, the stop locks half of the best move so far (and keeps rising)
+
+
 def track(today: pd.DataFrame, entry_ts, side: int, entry: float, sl: float, tp: float, now: datetime) -> dict:
-    """Follow the trade from the entry candle (inclusive): stop first, then target, exit at the 15:20 candle's open."""
+    """Follow the trade from the entry candle (inclusive): stop first, then target, exit at the 15:20 candle's open.
+    Profit lock: once the trade has been +1R, the stop moves to lock 50% of the best move and ratchets with it, so a
+    winner can't end the day as a loser (research/trail_test.py on 4,936 past Ignition trades: same average as holding
+    to 15:20, -0.03% vs -0.01%, but 50% winners instead of 44% and a smaller worst day)."""
     bars = today[today.index >= entry_ts]
     hm = _hm(bars.index)
     status, px, t_exit, path = "open", None, None, []
+    risk = abs(entry - sl)
+    best = entry
     for (ts, b), h in zip(bars.iterrows(), hm):
         if h >= EXIT_AT:
             status, px, t_exit = "time", float(b["Open"]), ts
             break
         if (side > 0 and b["Low"] <= sl) or (side < 0 and b["High"] >= sl):
-            status, px, t_exit = "stop", float(min(b["Open"], sl) if side > 0 else max(b["Open"], sl)), ts
+            locked = side * (sl - entry) > 0
+            status, px, t_exit = ("trailed" if locked else "stop"), \
+                float(min(b["Open"], sl) if side > 0 else max(b["Open"], sl)), ts
             break
         if (side > 0 and b["High"] >= tp) or (side < 0 and b["Low"] <= tp):
             status, px, t_exit = "target", float(max(b["Open"], tp) if side > 0 else min(b["Open"], tp)), ts
             break
+        best = max(best, float(b["High"])) if side > 0 else min(best, float(b["Low"]))
+        fav = side * (best - entry)
+        if risk > 0 and fav >= LOCK_AFTER_R * risk:
+            lock = entry + side * LOCK_SHARE * fav
+            sl = max(sl, lock) if side > 0 else min(sl, lock)
         path.append((ts + timedelta(minutes=5), float(b["Close"])))
     if status == "open" and len(bars) and (bars.index[-1].date() < now.date() or now.strftime("%H:%M") >= EXIT_AT):
         status, px, t_exit = "time", float(bars["Close"].iloc[-1]), bars.index[-1]

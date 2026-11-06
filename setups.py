@@ -66,6 +66,18 @@ def signals(t: pd.DataFrame, nifty_gap: float) -> dict[str, pd.DataFrame]:
         df["pnl_now%"] = sgn * df["now_vs_open"] * 100
         df["stopped"] = np.where(sgn > 0, df["low"] <= df["stop_px"], df["high"] >= df["stop_px"]) \
             if {"low", "high"} <= set(df.columns) else False
+        # profit lock (same rule as the paper setups): once +1R, the stop locks 50% of the best move. Only the day's
+        # high / low are known here: if the best move reached 1R and the price is now back past the locked level, it
+        # crossed that level after the best point, so the trade is out there.
+        df["trailed"] = False
+        if {"low", "high"} <= set(df.columns):
+            risk = (df["open"] * stop).abs()
+            best = np.where(sgn > 0, df["high"] - df["open"], df["open"] - df["low"])
+            lock = df["open"] + sgn * 0.5 * best
+            hit = (best >= risk) & np.where(sgn > 0, df["ltp"] <= lock, df["ltp"] >= lock) & ~df["stopped"].astype(bool)
+            df["trailed"] = hit
+            df.loc[hit, "pnl_now%"] = (sgn * (lock / df["open"] - 1) * 100)[hit]
+            df["lock_px"] = np.where(best >= risk, lock, np.nan)
         return df
 
     g = t[t["abs_gap"] >= 0.03].sort_values("abs_gap", ascending=False).head(2)
