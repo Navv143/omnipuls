@@ -4,6 +4,7 @@ chain ranges. Colours come from the app's design tokens (--om-*)."""
 from __future__ import annotations
 
 import html
+import zlib
 import math
 
 import numpy as np
@@ -12,9 +13,15 @@ import pandas as pd
 UP, DOWN, NEUTRAL, WARN, ACCENT = "var(--om-up)", "var(--om-down)", "var(--om-neutral)", "var(--om-warn)", "var(--om-accent)"
 
 CSS = """<style>
-.mx-sec{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:18px 0 8px}
-.mx-sec h4{margin:0;font-size:var(--fs-sm);letter-spacing:.09em;text-transform:uppercase;color:var(--om-muted);font-weight:600}
-.mx-sec span{font-size:var(--fs-xs);color:var(--om-faint)}
+.mx-sec{display:flex;align-items:center;gap:10px;margin:22px 0 10px;padding:0 0 7px;position:relative;flex-wrap:wrap}
+.mx-sec::after{content:"";position:absolute;left:0;bottom:0;width:100%;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,var(--h1),var(--h2) 35%,transparent)}
+.mx-sec i{width:10px;height:10px;border-radius:50%;flex:none;background:linear-gradient(135deg,var(--h1),var(--h2));
+  box-shadow:0 0 10px var(--h1)}
+.mx-sec h4{margin:0;font-size:1.02rem;letter-spacing:.06em;text-transform:uppercase;font-weight:800;line-height:1.2;
+  background:linear-gradient(90deg,var(--h1),var(--h2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.mx-sec span{font-size:var(--fs-xs);color:var(--om-faint);margin-left:auto}
+@media (max-width:640px){.mx-sec h4{font-size:.92rem}.mx-sec span{margin-left:0;flex-basis:100%}}
 .mx-pulse{display:grid;grid-template-columns:repeat(5,minmax(170px,1fr));gap:10px}
 @media (max-width:900px){.mx-pulse{grid-auto-flow:column;grid-template-columns:none;grid-auto-columns:72%;overflow-x:auto;
   scroll-snap-type:x mandatory;padding-bottom:6px}.mx-pulse>div{scroll-snap-align:start}}
@@ -121,8 +128,28 @@ def tone_color(t) -> str:
     return UP if (t or 0) > 0 else DOWN if (t or 0) < 0 else NEUTRAL
 
 
+# Section header colours: every section gets its own gradient (stable per title), with fixed colours for the
+# sections whose meaning has a colour (gainers green, losers red, money teal ...).
+HEAD_PAIRS = (("#22D3EE", "#3B82F6"), ("#F59E0B", "#EC4899"), ("#A78BFA", "#EC4899"), ("#3B82F6", "#22D3EE"),
+              ("#14B8A6", "#A78BFA"), ("#F97316", "#FACC15"), ("#EC4899", "#A78BFA"), ("#22C55E", "#22D3EE"))
+HEAD_FIXED = (("gainer", ("#22C55E", "#14B8A6")), ("loser", ("#F43F5E", "#EC4899")), ("money", ("#14B8A6", "#22C55E")),
+              ("playbook", ("#F59E0B", "#EC4899")), ("v3", ("#A78BFA", "#EC4899")), ("index level", ("#3B82F6", "#22D3EE")),
+              ("tested", ("#22D3EE", "#14B8A6")), ("option writer", ("#A78BFA", "#3B82F6")), ("unusual", ("#F97316", "#FACC15")),
+              ("sudden", ("#F97316", "#F43F5E")), ("signal", ("#22D3EE", "#22C55E")), ("top 10", ("#FACC15", "#F97316")))
+
+
+def head_colors(title: str) -> tuple[str, str]:
+    t = str(title).lower()
+    for key, pair in HEAD_FIXED:
+        if key in t:
+            return pair
+    return HEAD_PAIRS[zlib.crc32(t.encode()) % len(HEAD_PAIRS)]
+
+
 def section(title: str, note: str = "") -> str:
-    return f"<div class='mx-sec'><h4>{_e(title)}</h4><span>{_e(note)}</span></div>"
+    a, b = head_colors(title)
+    return (f"<div class='mx-sec' style='--h1:{a};--h2:{b}'><i></i><h4>{_e(title)}</h4>"
+            + (f"<span>{_e(note)}</span>" if note else "") + "</div>")
 
 
 def _num(x, nd=2) -> str:
