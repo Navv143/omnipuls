@@ -103,13 +103,58 @@ def scans(svc) -> dict | None:
     return out
 
 
-def write(svc, act, sc=None):
+_PLAN: dict = {"gold_t": 0.0, "gold": None}
+
+
+def plan_parts(svc) -> dict:
+    """The heavy parts of the regular setups (app._plan_rows: Desk 'Regular setups' and Market View index plans):
+    Bank Nifty failed-break fade, Bank Nifty 5-STAR with the Nifty 100 internals, the trend-day alerts of Nifty and
+    Bank Nifty, and Gold Order Flow (PAXG, every 5 minutes)."""
+    import fade as FADE
+    import five_star as FIVE
+    import gold_flow as GF
+    import trade_odds as TO
+    import trend_alert as TA
+    out = {}
+    idx, fut = svc.idx_bars(), svc.ifut_bars()
+    bn, vix = idx.get("BANKNIFTY"), idx.get("INDIAVIX")
+    now = datetime.now(IST).replace(tzinfo=None)
+    try:
+        out["fade"] = FADE.evaluate(bn, now) if bn is not None and not bn.empty else {"status": "no data"}
+    except Exception as e:
+        log(f"plan fade: {e}")
+    try:
+        bars, _ = svc.bars()
+        internals = FIVE.market_internals({x: bars[x] for x in SC.NIFTY100 if x in bars})
+        out["five"] = FIVE.evaluate(bn, internals) if bn is not None and not bn.empty else {"status": "no data"}
+    except Exception as e:
+        log(f"plan 5-star: {e}")
+    try:
+        tr = []
+        for k in ("NIFTY", "BANKNIFTY"):
+            spot = idx.get(k)
+            if spot is not None and not spot.empty:
+                tr.append((k, TA.evaluate(k, spot, fut.get(k), vix, None, TA.days_to_expiry(k, spot.index.max()))))
+        out["trend"] = tr
+    except Exception as e:
+        log(f"plan trend: {e}")
+    if time.time() - _PLAN["gold_t"] > 300:
+        try:
+            _PLAN["gold"] = GF.run(GF.to_15m(TO.binance_5m("PAXGUSDT", 60)))
+        except Exception as e:
+            _PLAN["gold"] = {"error": str(e)[:200]}
+        _PLAN["gold_t"] = time.time()
+    out["gold"] = _PLAN["gold"]
+    return out
+
+
+def write(svc, act, sc=None, pl=None):
     bars, nifty = svc.bars()
     state = {"version": VERSION, "written": time.time(), "status": svc.status, "error": svc.error,
              "oi_status": svc.oi_status, "tf": svc.tf, "syms": list(svc.syms), "progress": svc.progress(),
              "last_pass": svc.last_pass, "last_snap": svc.last_snap, "freshness": svc.freshness(),
              "bars": bars, "nifty": nifty, "idx": svc.idx_bars(), "ifut": svc.ifut_bars(), "oi": svc.oi(),
-             "snaps": svc.snapshots(), "n_snaps": len(svc.snaps), "activity": act, "scans": sc}
+             "snaps": svc.snapshots(), "n_snaps": len(svc.snaps), "activity": act, "scans": sc, "plan": pl}
     OUT.mkdir(parents=True, exist_ok=True)
     tmp = STATE.with_suffix(f".{os.getpid()}.tmp")
     with open(tmp, "wb") as f:
@@ -152,7 +197,12 @@ def main():
                         sc = scans(svc)
                     except Exception as e:
                         log(f"scans: {e}")
-                write(svc, act, sc)
+                pl = None
+                try:
+                    pl = plan_parts(svc)
+                except Exception as e:
+                    log(f"plan: {e}")
+                write(svc, act, sc, pl)
                 last_key = key
                 log(f"state written ({done}/{total} stocks, {time.time() - t0:.1f}s)")
         except Exception as e:

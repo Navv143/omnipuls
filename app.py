@@ -2557,12 +2557,38 @@ def _md_inline(s: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
 
 
+def _trend_now(svc, idx_b: dict, fut_b: dict) -> list:
+    """Trend-day alerts of Nifty and Bank Nifty: the engine's when it runs, else computed here."""
+    pp = getattr(svc, "plan", None) or {}
+    if pp.get("trend") is not None:
+        return pp["trend"]
+    vix = idx_b.get("INDIAVIX")
+    out = []
+    for k in ("NIFTY", "BANKNIFTY"):
+        spot = idx_b.get(k)
+        if spot is not None and not spot.empty:
+            out.append((k, TA.evaluate(k, spot, fut_b.get(k), vix, None, TA.days_to_expiry(k, spot.index.max()))))
+    return out
+
+
+def _plan_rows_shared(svc) -> list:
+    """The regular setups' rows, one result for every viewer and page (Desk and Market View), rebuilt every 2
+    minutes in the background."""
+    def _calc():
+        idx_b, fut_b = svc.idx_bars(), svc.ifut_bars()
+        return _plan_rows(svc, idx_b, opening_signals(), _trend_now(svc, idx_b, fut_b))
+    return _fresh_or_last(_PLAN_CACHE, ((id(svc), datetime.now(IST).strftime("%Y-%m-%d")), int(time.time() // 120)),
+                          _calc) or []
+
+
 def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
     """State of each TESTED setup (research/FINAL_SETUPS.md), in plain words: fired (with entry, stop, target),
     waiting (window still open) or none. Each part is guarded so one failure never hides the others."""
     now = datetime.now(IST)
     hm = now.strftime("%H:%M")
     rows = []
+
+    pp = getattr(svc, "plan", None) or {}       # the engine's heavy parts (engine.py), when it runs
 
     def add(name, state, text, where, legs=None):
         """legs: the trades behind the row, for the Desk table: [{sym, side, at, entry, stop, target, pnl, status}]"""
@@ -2601,7 +2627,8 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
     bn = idx_b.get("BANKNIFTY")
     # 2. Bank Nifty failed-break fade (signals 9:20-14:30, close back inside within 30 min)
     try:
-        r = FADE.evaluate(bn, now.replace(tzinfo=None)) if bn is not None and not bn.empty else {"status": "no data"}
+        r = pp["fade"] if pp.get("fade") is not None else \
+            (FADE.evaluate(bn, now.replace(tzinfo=None)) if bn is not None and not bn.empty else {"status": "no data"})
         if r.get("trades"):
             tr = r["trades"][-1]
             pts = f"{tr['pts']:+.0f} pts" if pd.notna(tr.get("pts")) else ""
@@ -2623,8 +2650,11 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
 
     # 3. Bank Nifty 5-STAR momentum (all six checks on one 5-min candle, 9:30-15:00)
     try:
-        internals, _ = _five_star_data(svc)
-        r = FIVE.evaluate(bn, internals) if bn is not None and not bn.empty else {"status": "no data"}
+        if pp.get("five") is not None:
+            r = pp["five"]
+        else:
+            internals, _ = _five_star_data(svc)
+            r = FIVE.evaluate(bn, internals) if bn is not None and not bn.empty else {"status": "no data"}
         sg = r.get("signal")
         if sg:
             add("Bank Nifty 5-STAR momentum", "fired" if sg["state"] == "open" else "closed",
@@ -2664,7 +2694,7 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
 
     # 5. Gold Order Flow (15-min, runs almost round the clock)
     try:
-        g = _gold_flow() or {}
+        g = (pp.get("gold") if pp.get("gold") is not None else _gold_flow()) or {}
         trs = [x for x in g.get("trades", []) if x.get("entry") is not None]
         tr = trs[-1] if trs else None
         stt = g.get("state") or {}
@@ -2688,7 +2718,7 @@ def _plan_rows(svc, idx_b: dict, og, trend: list) -> list[dict]:
 def todays_plan(svc, idx_b: dict, og, trend: list):
     """The first thing on the desk: only the setups that held up in testing, and a plain 'no trade' when none has
     fired. Everything below it (verdict, focus lists, activity, flow) is context, not a tested signal."""
-    rows = _plan_rows(svc, idx_b, og, trend)
+    rows = _plan_rows_shared(svc)                # one result shared with the Desk and Market View
     hm = datetime.now(IST).strftime("%H:%M")
     fired = [r for r in rows if r["state"] == "fired"]
     waiting = [r for r in rows if r["state"] == "wait"]
@@ -2731,13 +2761,7 @@ def dashboard_desk(svc, t: pd.DataFrame):
     with _timed("smart money"):
         rf, _ = smart_money_stocks(svc)
         picks = best_picks(rf, sf) if not rf.empty and not sf.empty else pd.DataFrame()
-    vix = idx_b.get("INDIAVIX")
-    trend = []
-    for k in ("NIFTY", "BANKNIFTY"):
-        spot = idx_b.get(k)
-        if spot is None or spot.empty:
-            continue
-        trend.append((k, TA.evaluate(k, spot, fut_b.get(k), vix, None, TA.days_to_expiry(k, spot.index.max()))))
+    trend = _trend_now(svc, idx_b, fut_b)
     todays_plan(svc, idx_b, og, trend)
     st.markdown("##### Market context")
     st.caption("Readings that describe the market (verdict, CE / PE focus lists, activity, money flow). Useful for "
@@ -7131,12 +7155,7 @@ def market_view_body(svc, t: pd.DataFrame):
     sc = _scan_now(svc)
     rf, _ = smart_money_stocks(svc)
     picks = best_picks(rf, sf) if not rf.empty and not sf.empty else pd.DataFrame()
-    vix_b = idx_b.get("INDIAVIX")
-    trend = []
-    for k in ("NIFTY", "BANKNIFTY"):
-        spot = idx_b.get(k)
-        if spot is not None and not spot.empty:
-            trend.append((k, TA.evaluate(k, spot, fut_b.get(k), vix_b, None, TA.days_to_expiry(k, spot.index.max()))))
+    trend = _trend_now(svc, idx_b, fut_b)        # the engine's when it runs
 
     snaps = {k: _idx_snapshot(idx_b.get(k)) for k in ("NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "INDIAVIX")}
     adv = int((t["Chg %"] > 0).sum()) if not t.empty and "Chg %" in t else None
@@ -7158,7 +7177,7 @@ def market_view_body(svc, t: pd.DataFrame):
     _bg_log(snaps, verdict, plans, ce, pe, svc, idx_b, og)   # in the background: the page no longer waits ~4 s for it
     st.session_state.setdefault("_perf", {})["desk log"] = time.time() - _tl
     with _timed("index plans"):
-        plan_rows = _plan_rows(svc, idx_b, og, trend)
+        plan_rows = _plan_rows_shared(svc)       # one result shared with the Desk, rebuilt in the background
 
     # ---- readings with what they mean
     idx_reads = [MV.index_read(name, idx_b.get(k), fut_b.get(k)) for k, name in
@@ -8767,19 +8786,8 @@ def _desk_plan(svc):
     2 minutes in the background; the desk shows the last result straight away."""
     if svc is None:
         return
-    def _calc():
-        idx_b, fut_b = svc.idx_bars(), svc.ifut_bars()
-        og = opening_signals()
-        vix = idx_b.get("INDIAVIX")
-        trend = []
-        for k in ("NIFTY", "BANKNIFTY"):
-            spot = idx_b.get(k)
-            if spot is not None and not spot.empty:
-                trend.append((k, TA.evaluate(k, spot, fut_b.get(k), vix, None, TA.days_to_expiry(k, spot.index.max()))))
-        return _plan_rows(svc, idx_b, og, trend)
     try:
-        rows = _fresh_or_last(_PLAN_CACHE, ((id(svc), datetime.now(IST).strftime("%Y-%m-%d")), int(time.time() // 120)),
-                              _calc)
+        rows = _plan_rows_shared(svc)
     except Exception as ex:
         st.caption(f"Regular setups unavailable: {str(ex)[:120]}")
         return
