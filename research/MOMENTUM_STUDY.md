@@ -566,3 +566,20 @@ As now: 3 windows win 66% PF 1.83; + 'moved <= 1.0 ATR' win 65% PF 2.03; live 11
   both halves, +0.23..0.36% a trade. E.g. after +1.2% lock +0.6%: win 63%, PF 2.19 (h1 2.22 / h2 2.15), +0.33%.
 Conclusion: PF > 1.5 is met comfortably (about 2.0-2.3, steady); a REAL 70% win rate is not reached by exits or by the
 filters tested so far (the profit comes from ~18% of trades that make > 1%).
+
+## ORB / yesterday's levels, and sector vs Nifty direction (superbot_orb_sector.py, sector_independence.py)
+
+Sector independence (daily, 3 years, sector indices): least tied to Nifty = IT (corr 0.51), Pharma (0.52, up on 28% of
+Nifty down days), FMCG (0.59); then PSU Bank, PSE, Metal, Realty (~0.7). BankNifty / Fin Service / Infra move with Nifty
+(0.87-0.89, opposite on only 16-19% of days). Intraday 60 days (F&O stocks): Pharma (5-min corr 0.38), Telecom, Chemicals,
+IT, Capital Goods (~0.5) most independent; Chemicals and Capital Goods closed opposite to Nifty on 42% of days.
+
+Direction rule (40 days, all candidates): against Nifty but with the sector = 683 trades, -0.12% each (PF 0.76); in
+independent sectors -0.11%, Nifty-linked -0.13%. 3-window plan: with Nifty +0.254% (PF 1.83); with sector instead
++0.073% (PF 1.17); Nifty OR sector +0.116%; independent sectors following their sector +0.161%; the added trades alone
+-0.20% (PF 0.66). So the skipped 'against Nifty' moves lose on average, even in Pharma / IT: keep the Nifty rule.
+
+Breakouts (market-aligned candidates): 94% are already beyond the 15-min opening range; the 6% that are not lose
+(-0.14%, PF 0.73). Beyond the 30-min range or yesterday's high / low makes no real difference. In the 3-window plan:
++ beyond 15-min range +0.268% (PF 1.88, worst day -5.2%), + beyond 30-min range +0.281% (PF 1.92), + beyond yesterday's
+high / low +0.227% (worse). Small gains; the 15-min range rule is a cheap safety filter.
