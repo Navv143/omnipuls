@@ -6935,7 +6935,8 @@ def market_view_body(svc, t: pd.DataFrame):
     if adv is not None and dec is not None and adv + dec:
         parts.append(MX.meter_split("F&O breadth", adv, dec, f"{adv} up", f"{dec} down",
                                     f"{adv / (adv + dec) * 100:.0f}% up", tip("F&O breadth")))
-    if buy_share is not None and np.isfinite(buy_share):
+    _d1, _t1 = svc.progress()
+    if buy_share is not None and np.isfinite(buy_share) and _d1 >= 0.9 * max(_t1, 1):
         parts.append(MX.meter_split("Money flow", buy_share, 100 - buy_share, "buying", "selling",
                                     f"{buy_share:.0f}% buying", "Turnover of F&O stocks split by where each candle closed"))
     if fut_money is not None:
@@ -6945,14 +6946,21 @@ def market_view_body(svc, t: pd.DataFrame):
     parts.append(MX.meter_level("India VIX", vx_snap.get("last"), vx_snap.get("chg"), 10, 25, tip("India VIX (fear)")))
     if not R.empty and "Smart" in R:
         nb, ns = int((R["Smart"] >= 40).sum()), int((R["Smart"] <= -40).sum())
-        parts.append(MX.meter_split("Unusual activity", nb, ns, f"{nb} bullish", f"{ns} bearish",
-                                    f"{nb} ▲ · {ns} ▼", tip("Unusual activity")))
+        _d2, _t2 = svc.progress()
+        if _d2 >= 0.9 * max(_t2, 1):
+            parts.append(MX.meter_split("Unusual activity", nb, ns, f"{nb} bullish", f"{ns} bearish",
+                                        f"{nb} ▲ · {ns} ▼", tip("Unusual activity")))
     if parts:
         st.markdown(MX.section("Market internals", f"as of {asof} · green = buyers · red = sellers") + MX.meters(parts),
                     unsafe_allow_html=True)
 
     # ---- 5. where the money goes: sector heatmap, Nifty 50 flow candle by candle
-    heat = MX.heatmap(secflow)
+    _done, _total = svc.progress()
+    heat = MX.heatmap(secflow) if _done >= 0.9 * max(_total, 1) else ""
+    if not heat and _done < 0.9 * max(_total, 1):
+        st.markdown(MX.section("Sector money", "loading") + f"<div class='mx-quiet'>Loading today's money flow: {_done} of "
+                    f"{_total} stocks. Sector money and unusual activity appear once 90% are in (a minute or two after "
+                    "an update or the first open of the day).</div>", unsafe_allow_html=True)
     if heat:
         st.markdown(MX.section("Sector money", f"as of {asof} · size = turnover · colour = net money in / out") + heat,
                     unsafe_allow_html=True)
