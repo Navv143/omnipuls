@@ -24,14 +24,14 @@ _SIGNED = re.compile(r"(%|p&l|chg|change|net|flow|money|smart|^r$|^r |\br$| r$|b
 _NOT_SIGNED = re.compile(r"(atr|range|vol|stop|turnover|risk|win|odds|inflow|outflow|pcr|weight|share|buying|selling|"
                          r"rate|prob|hit|coverage|loaded|iv\b|spread|lot|qty|price|entry|exit|ltp|^now$|level|strike)", re.I)
 _SIDE = re.compile(r"^(side|direction|bias|trend|signal|call|view|flow|money favours|sentiment|buildup|smart side)$", re.I)
-_STATUS = re.compile(r"(status|result|outcome|hour-1 call|now vs range|where|verdict|advice|action|state)", re.I)
+_STATUS = re.compile(r"(status|result|outcome|decision|pass|hour-1 call|now vs range|where|verdict|advice|action|state)", re.I)
 _NAME = ("Stock", "Symbol", "Setup", "Index", "Sector", "Name", "Instrument", "Contract")
 _GAP = {"0-0.5%": CYAN, "0.5-1%": BLUE, "1-3%": AMBER, ">3%": PINK}
 
 _RED_WORDS = ("stop", "exit", "below", "loss", "sell", "bear", "short", "reject", "fail", "avoid", "down", "out", "trap")
-_GREEN_WORDS = ("signal", "target", "hold", "above", "win", "buy", "bull", "long", "traded", "core", "up", "in ", "profit", "trail")
+_GREEN_WORDS = ("trade", "✓", "signal", "target", "hold", "above", "win", "buy", "bull", "long", "traded", "core", "up", "in ", "profit", "trail")
 _BLUE_WORDS = ("done", "squared", "open", "inside", "live", "testing", "running")
-_AMBER_WORDS = ("wait", "time", "closed", "mixed", "neutral", "watch", "pending")
+_AMBER_WORDS = ("repeat", "wait", "time", "closed", "mixed", "neutral", "watch", "pending")
 
 
 def _num_css(v) -> str:

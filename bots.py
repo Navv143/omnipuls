@@ -1193,6 +1193,107 @@ def v3_step(mkt: "Market", now: datetime):
             log(f"v3 record: {e}")
 
 
+SUPER_FILE = OUT / "superbot.json"
+
+
+def superbot_step(mkt: "Market", now: datetime):
+    """The six-stage Super Bot (superbot.py) on every closed candle: the latest table of each stage to Supabase
+    superbot_stage (with when each stock first passed and how many times), every arrival at the decision stage to
+    superbot_trades (TRADE / REJECT / REPEAT with all data and reasons), and the open trades followed to their exit
+    (stop, target, profit lock after +1R, 15:20)."""
+    import activity as A
+    import momentum_paper as MP
+    import scanners as SC
+    import superbot as SB
+    import universe as U
+    hm = now.strftime("%H:%M")
+    if hm < "09:18":
+        return
+    nb = mkt.bars("NIFTY")
+    session = SC.session_of(nb)
+    day = now.strftime("%Y-%m-%d")
+    if session is None or session.strftime("%Y-%m-%d") != day:
+        return
+    try:
+        st_ = json.loads(SUPER_FILE.read_text())
+    except Exception:
+        st_ = {}
+    if st_.get("day") != day:
+        st_ = {"day": day, "trades": [], "final": [], "seen": {}}
+    bars = mkt.stock_bars()
+    S = SC.prepare(bars, session)
+    if len(S) < 50:
+        return
+    R, E, per = A.rank({k: SC.clean(v) for k, v in bars.items()}, session, None, None, U.FNO_SECTOR_OF)
+    oi = oi_today(day)
+    open_now = {t["stock"] for t in st_["trades"] if t["decision"] == "TRADE" and t.get("status") in (None, "open", "waiting")}
+    n_trades = sum(t["decision"] == "TRADE" for t in st_["trades"])
+    res = SB.run(S, per, E, oi, U.FNO_SECTOR_OF, now, open_now, n_trades)
+    # stage tables: latest state, first pass time and how many cycles each stock passed
+    stage_rows = []
+    for k, df in res.items():
+        if df is None or df.empty:
+            continue
+        for r in df.to_dict("records"):
+            key = f"{k}|{r['stock']}"
+            seen = st_["seen"].setdefault(key, {"first": None, "n": 0})
+            if r.get("pass"):
+                seen["n"] += 1
+                seen["first"] = seen["first"] or hm
+            data = {kk: v for kk, v in r.items() if kk not in ("stock", "pass", "reason")}
+            stage_rows.append({"day": day, "stage": k, "stock": r["stock"], "stage_name": SB.STAGES[k],
+                               "side": r.get("side") or r.get("table"), "passed": bool(r.get("pass")), "reason": r.get("reason"),
+                               "last_time": hm, "first_pass": seen["first"], "times_passed": seen["n"], "data": _clean(data)})
+    # decision stage: record each NEW arrival (a stock that was not at the decision stage on the previous candle)
+    final = res.get(6)
+    now_final = set(final["stock"]) if final is not None and not final.empty else set()
+    for r in (final.to_dict("records") if final is not None and not final.empty else []):
+        if r["stock"] in st_["final"]:
+            continue
+        side = 1 if r["side"] == "UP" else -1
+        st_["trades"].append({"id": f"{day}|{r['stock']}|{hm}", "day": day, "stock": r["stock"], "sector": r.get("sector"),
+                              "side": "BUY" if side > 0 else "SELL", "decision": r["decision"], "reason": r["reason"],
+                              "score": r.get("score"), "signal_time": hm, "entry": None, "entry_plan": r["entry_plan"],
+                              "sl": r["stop"], "target": r["target"], "risk_pct": r.get("risk_pct"), "rr": r.get("rr"),
+                              "status": "waiting" if r["decision"] == "TRADE" else None, "stages": r.get("stages"),
+                              "data": _clean({kk: v for kk, v in r.items() if kk not in ("stages",)})})
+        log(f"super bot: {r['decision']} {r['stock']} {r['side']} ({r['reason']})")
+    st_["final"] = sorted(now_final)
+    # follow the trades: entry at the open of the candle after the signal, then stop / target / lock / 15:20
+    for t in st_["trades"]:
+        if t["decision"] != "TRADE" or t.get("status") not in ("waiting", "open"):
+            continue
+        s = S.get(t["stock"])
+        if s is None:
+            continue
+        sig = pd.Timestamp(f"{day} {t['signal_time']}")
+        nxt = s.today[s.today.index > sig - pd.Timedelta(minutes=0)]
+        nxt = nxt[nxt.index.strftime("%H:%M") > t["signal_time"]]
+        if nxt.empty:
+            continue
+        side = 1 if t["side"] == "BUY" else -1
+        if t.get("entry") is None:
+            t["entry"] = round(float(nxt["Open"].iloc[0]), 2)
+            t["entry_time"] = nxt.index[0].strftime("%H:%M")
+            # keep the planned risk: move stop / target with the fill
+            shift = t["entry"] - t["entry_plan"]
+            t["sl"], t["target"] = round(t["sl"] + shift, 2), round(t["target"] + shift, 2)
+        r_ = MP.track(s.today, nxt.index[0], side, t["entry"], t["sl"], t["target"], now)
+        t["status"] = r_["result"]
+        t["exit_time"], t["exit_px"], t["pct"] = r_["exit_at"], r_["exit_px"], r_["pct"]
+        risk_pct = abs(t["entry"] - t["sl"]) / t["entry"] * 100 if t["entry"] else None
+        t["r"] = round(r_["pct"] / risk_pct, 2) if risk_pct else None
+    try:
+        if stage_rows:
+            _cloud().upsert_rows("superbot_stage", _clean(stage_rows), "day,stage,stock")
+        rows = [{k: v for k, v in t.items() if k != "entry_plan"} for t in st_["trades"]]
+        if rows:
+            _cloud().upsert_rows("superbot_trades", _clean(rows), "id")
+    except Exception as e:
+        log(f"super bot save: {e}")
+    SUPER_FILE.write_text(json.dumps(st_, default=str))
+
+
 RADAR_SLOTS = ("09:20", "09:45", "10:30", "12:00", "13:30", "15:00")
 RADAR_FILE = OUT / "radar_snapshots.json"
 
@@ -1398,6 +1499,10 @@ def cycle(mkt: Market) -> dict:
         radar_snapshot_step(mkt, now)
     except Exception as e:
         log(f"radar snapshots: {e}")
+    try:
+        superbot_step(mkt, now)
+    except Exception as e:
+        log(f"super bot: {e}")
     try:
         import ironfly as IFY
         fly = IFY.step(now)
