@@ -522,3 +522,12 @@ Every market-aligned candidate by entry window (40 days): 9:30-10 +0.19% (56% wi
 By window: 9:45-10:15 +0.35% a trade; 10:45-11:15 -0.04% (worst); 12:45-13:15 +0.07%. "Trade later only if flat /
 losing" again worse (+20.0%). A 15-minute shift turns 10:00-10:30 / 12:00-12:30 (+0.25%) into 10:45 / 12:45 (~0%):
 the window edge is fragile, so the exact time slots are mostly noise on 40 days. Wait for the 6-month server test.
+
+### Fixed runs: the bot run once at a set time, top N of everything passing (research/superbot_fixed_runs.py)
+
+9:45 top 3 + 11:00 top 3 + 13:30 top 2: 6.7 trades a day, win 55%, +0.06% a trade, t 0.86, Sep -6.5%, worst day -8.8%.
+By run: 9:45 +0.24%, 11:00 +0.06%, 13:30 -0.12%. Alone: 9:45 x3 +0.24% (Sep 0.0), 10:30 x3 +0.16%, 12:00 x3 +0.12%,
+11:00 x3 -0.15% (Sep -13.8%), 13:30 x3 -0.03%.
+A fixed run takes stocks that have been on the list for a while (late); the live bot takes a stock when it FIRST passes
+all six stages. Same 11:00-12:00 hour: first arrivals +0.20% a trade, a fixed 11:00 run -0.15%. Freshness matters more
+than the clock time; keep the live 'first arrival' design.
