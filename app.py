@@ -8095,7 +8095,295 @@ def page_auto():
                "not lots. Judge it after a few weeks, not a day.")
 
 
+# ================================================================ institutional desk (v2 layout)
+
+import setup_registry as REG
+
+_DESK_CSS = """<style>
+.dk-h{display:flex;align-items:baseline;gap:14px;margin:2px 0 8px}
+.dk-h h2{margin:0;font-size:1.45rem;letter-spacing:.2px}
+.dk-h span{opacity:.6;font-size:.85rem}
+.dk-card{border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px 12px;background:rgba(255,255,255,.02);margin-bottom:10px}
+.dk-card h4{margin:0 0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.8px;opacity:.7}
+.dk-now{border-left:3px solid var(--c);padding:6px 10px;margin:4px 0;background:rgba(255,255,255,.03);border-radius:6px;font-size:.88rem}
+.dk-now b{font-size:.92rem}
+.dk-tag{display:inline-block;padding:1px 7px;border-radius:9px;font-size:.72rem;border:1px solid var(--c);color:var(--c);margin-left:6px}
+</style>"""
+
+_DONE = ("stop", "target", "time", "Closed", "Stopped", "Trailed")
+
+
+def _desk_css():
+    for _c in (MX.CSS, MX.DESK_CSS, _DESK_CSS):
+        st.markdown(_c, unsafe_allow_html=True)
+
+
+def _h(n: int, cap: int = 520) -> int:
+    """Table height that fits n rows (no empty space), capped."""
+    return min(cap, 38 + 35 * max(n, 1))
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _paper_rows(since: str | None = None) -> pd.DataFrame:
+    """Every recorded paper trade (Supabase crypto_paper), newest first."""
+    params = {"select": "*", "order": "day.desc"}
+    if since:
+        params["day"] = f"gte.{since}"
+    rows = CS.select_rows("crypto_paper", params) or []
+    d = pd.DataFrame(rows)
+    if d.empty:
+        return d
+    d["family"] = d["setup"].map(REG.family)
+    d["done"] = d["result"].astype(str).str.startswith(_DONE)
+    for c in ("pct", "pct_60", "pct_120", "r", "entry", "sl", "tp", "exit_px"):
+        if c in d:
+            d[c] = pd.to_numeric(d[c], errors="coerce")
+    return d
+
+
+def _window_now(now: datetime) -> str:
+    t = now.strftime("%H:%M")
+    if t < "09:15":
+        return "pre"
+    if t < "09:30":
+        return "open"
+    if t < "10:00":
+        return "v3"
+    if t < "10:45":
+        return "flat"
+    if t < "13:30":
+        return "mid"
+    if t < "15:20":
+        return "late"
+    return "closed"
+
+
+_PLAYBOOK = [  # (window key, time, what the desk does)
+    ("pre", "Before 9:15", "Gap list by group: > 3% / 1-3% / 0.5-1% / flat. 1-3% gap-with = avoid (trap). Iron fly: open the day after expiry."),
+    ("open", "9:15-9:30", "Do nothing: the 9:15-9:30 range is being built. Note the top-10 movers."),
+    ("v3", "9:30-10:00", "V3: enter on the first 5-min CLOSE beyond the 9:15-9:30 range (60% break by 9:45, 77% by 10:00). No retest wait."),
+    ("flat", "10:00-10:45", "Flat-open stocks (44% of the day's toppers move now): Footprint top 2, Aligned, Grinder 10:30."),
+    ("mid", "11:00-13:30", "Sector top 2 at 11 / 12 / 13. Nifty breakouts here fade: midday fade, not chase."),
+    ("late", "13:30-15:20", "Manage only: trail, exit 15:20. No new stock entries."),
+]
+
+
+def _market_strip():
+    """Index, VIX, breadth and money flow in one row (Dhan)."""
+    if not DHAN_DATA:
+        st.caption("Connect Dhan for the live market strip.")
+        return None, None
+    svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
+    idx = index_defs()
+    svc.set_universe(tuple(sorted(set(scan_universe("All F&O stocks")) | {m for d in idx.values() for m in d["w"]})))
+    svc.set_indices({**{k: d["id"] for k, d in idx.items()}, "INDIAVIX": 21})
+    svc.touch()
+    ib = svc.idx_bars()
+    snaps = {k: _idx_snapshot(ib.get(k)) for k in ("NIFTY", "BANKNIFTY", "FINNIFTY", "INDIAVIX")}
+    act = _activity_data(svc)
+    per = act[2] if act else {}
+    flow = A.flow_window(per, None) if per else pd.DataFrame()
+    R = act[0] if act else pd.DataFrame()
+    adv = int((R["Chg %"] > 0).sum()) if not R.empty else None
+    dec = int((R["Chg %"] < 0).sum()) if not R.empty else None
+    parts = []
+    for k, nm in (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"), ("FINNIFTY", "Fin Nifty")):
+        x = snaps.get(k)
+        if x:
+            parts.append(MX.kpi(nm, f"{x['last']:,.1f}", f"{x['chg']:+.2f}% · from open {x['from_open']:+.2f}%",
+                                MX.tone_color(x["chg"])))
+    vx = snaps.get("INDIAVIX")
+    if vx:
+        parts.append(MX.kpi("India VIX", f"{vx['last']:.2f}", f"{vx['chg']:+.2f}%", MX.tone_color(-vx["chg"])))
+    if adv is not None:
+        parts.append(MX.kpi("Breadth (F&O)", f"{adv} / {dec}", "advancing / declining", MX.tone_color(adv - dec)))
+    if not flow.empty:
+        tin, tout = flow["Inflow Cr"].sum(), flow["Outflow Cr"].sum()
+        parts.append(MX.kpi("Net money flow", f"₹{tin - tout:+,.0f} Cr", f"{tin / max(tin + tout, 1) * 100:.1f}% buying",
+                            MX.tone_color(tin - tout)))
+    st.markdown(MX.kpis(parts), unsafe_allow_html=True)
+    return svc, R
+
+
+def _blotter(d: pd.DataFrame, key: str, height: int = 360):
+    if d.empty:
+        st.markdown("<div class='mx-quiet'>No trades yet today.</div>", unsafe_allow_html=True)
+        return
+    reg = REG.by_prefix()
+    t = d.copy()
+    t["Status"] = t["family"].map(lambda f: REG.STATUS_LABEL.get((reg.get(f) or {}).get("status", ""), ""))
+    t["Symbol"] = t["symbol"]
+    t["Side"] = np.where(t["side"] > 0, "BUY", "SELL")
+    t["Result"] = np.where(t["done"], t["result"].astype(str).str.split(" ").str[0].str.capitalize(), "Open")
+    far = (t["tp"] / t["entry"] - 1).abs() > 0.3
+    t.loc[far.fillna(False), "tp"] = np.nan                    # "no target" setups store a far placeholder
+    t = t.sort_values(["signal_at"], ascending=False)
+    show = t.reindex(columns=["signal_at", "family", "Status", "Symbol", "Side", "entry", "sl", "tp", "Result",
+                              "exit_at", "pct_60", "pct"]).rename(columns={
+        "signal_at": "Time", "family": "Setup", "entry": "Entry", "sl": "Stop", "tp": "Target",
+        "exit_at": "Exit", "pct_60": "1h %", "pct": "P&L %"})
+    st.dataframe(show, hide_index=True, width="stretch", height=min(height, _h(len(show), height)), key=key, column_config={
+        "Entry": st.column_config.NumberColumn(format="%.2f"), "Stop": st.column_config.NumberColumn(format="%.2f"),
+        "Target": st.column_config.NumberColumn(format="%.2f"),
+        "1h %": st.column_config.NumberColumn(format="%+.2f"), "P&L %": st.column_config.NumberColumn(format="%+.2f")})
+
+
+@st.fragment(run_every=LIVE_EVERY)
+def _desk_body():
+    now = datetime.now(IST)
+    _desk_css()
+    st.markdown(f"<div class='dk-h'><h2>Desk</h2><span>{now:%a %d %b %Y · %H:%M} IST</span></div>", unsafe_allow_html=True)
+    svc, R = _market_strip()
+    today = now.strftime("%Y-%m-%d")
+    allp = _paper_rows(today)
+    tp = allp[allp["day"].astype(str) == today] if not allp.empty else allp
+    left, right = st.columns([2.2, 1], gap="medium")
+    with left:
+        core = tp[tp["family"].map(lambda f: (REG.by_prefix().get(f) or {}).get("status") == "core")] if not tp.empty else tp
+        st.markdown(MX.section("Core trades today", "setups with a tested edge · paper"), unsafe_allow_html=True)
+        _blotter(core, "dk_core", 220)
+        st.markdown(MX.section("All recorded setups today", f"{len(tp)} trades · testing on paper"), unsafe_allow_html=True)
+        if not tp.empty:
+            fams = sorted(tp["family"].dropna().unique())
+            pick = st.multiselect("Setups", fams, key="dk_fam", label_visibility="collapsed", placeholder="All setups")
+            _blotter(tp[tp["family"].isin(pick)] if pick else tp, "dk_all", 520)
+        else:
+            _blotter(tp, "dk_all")
+    with right:
+        win = _window_now(now)
+        st.markdown("<div class='dk-card'><h4>Playbook · now</h4>" + "".join(
+            f"<div class='dk-now' style='--c:{GOLD if k == win else 'rgba(255,255,255,.12)'};opacity:{1 if k == win else .55}'>"
+            f"<b>{MX._e(t)}</b>{'<span class=dk-tag style=--c:' + GOLD + '>NOW</span>' if k == win else ''}<br>{MX._e(x)}</div>"
+            for k, t, x in _PLAYBOOK) + "</div>", unsafe_allow_html=True)
+        if not tp.empty:
+            dn = tp[tp["done"]]
+            op = tp[~tp["done"]]
+            st.markdown("<div class='dk-card'><h4>Today's paper book</h4>" + MX.kpis([
+                MX.kpi("Open", str(len(op)), f"{op['pct'].mean():+.2f}% avg" if len(op) else ""),
+                MX.kpi("Closed", str(len(dn)), f"{(dn['pct'] > 0).mean() * 100:.0f}% won" if len(dn) else ""),
+                MX.kpi("Avg P&L", f"{tp['pct'].mean():+.2f}%", "per trade, all setups", MX.tone_color(tp["pct"].mean())),
+            ]) + "</div>", unsafe_allow_html=True)
+    # V3 watchlist: which stocks are set up and which have broken out, with the time
+    st.markdown(MX.section("V3 watchlist · who breaks and when", "top-10 movers at 9:30 · entry = first 5-min close beyond the 9:15-9:30 range"),
+                unsafe_allow_html=True)
+    if svc is None:
+        st.caption("Needs Dhan.")
+        return
+    try:
+        bars, nifty_df = svc.bars()
+        if bars and nifty_df is not None and not nifty_df.empty:
+            S, session = _prepared_now(svc)
+            N = SC.Stock("NIFTY 50", nifty_df, session)
+            diag, early = SC.v3_diagnose(S, N if N.ok else None)
+            if diag is not None and not diag.empty:
+                st.dataframe(diag, hide_index=True, width="stretch", height=_h(len(diag), 420), key="dk_v3")
+            if early:
+                st.markdown(f"<div class='dk-now' style='--c:{UP}'><b>V3 early pick: {MX._e(str(early.get('Stock')))}</b> · "
+                            f"{MX._e(str(early.get('Side')))} · signal {MX._e(str(early.get('Signal')))} · entry {early.get('Entry')} · "
+                            f"stop {early.get('Stop')}</div>", unsafe_allow_html=True)
+        else:
+            st.caption("Waiting for today's candles.")
+    except Exception as e:
+        st.caption(f"V3 watchlist unavailable: {e}")
+
+
+def page_desk():
+    _desk_body()
+
+
+def page_flow():
+    _desk_css()
+    st.markdown("<div class='dk-h'><h2>Money flow</h2><span>where money enters and leaves · F&O stocks and indices</span></div>",
+                unsafe_allow_html=True)
+    page_activity("Flow radar")
+
+
+def _scoreboard() -> pd.DataFrame:
+    d = _paper_rows()
+    rows = []
+    for s in REG.SETUPS:
+        z = d[(d["family"] == s["prefix"]) & d["done"]] if not d.empty else pd.DataFrame()
+        rows.append({"Status": REG.STATUS_LABEL[s["status"]], "Setup": s["prefix"], "Market": s["market"], "Window": s["window"],
+                     "Backtest": s["bt"], "BT win": s["bt_win"], "BT sample": s["bt_n"],
+                     "Live trades": len(z), "Live win %": (z["pct"] > 0).mean() * 100 if len(z) else None,
+                     "Live avg %": z["pct"].mean() if len(z) else None, "Live total %": z["pct"].sum() if len(z) else None,
+                     "Live 1h %": z["pct_60"].mean() if len(z) and "pct_60" in z else None,
+                     "Days": z["day"].nunique() if len(z) else 0})
+    return pd.DataFrame(rows)
+
+
+def page_lab():
+    _desk_css()
+    st.markdown("<div class='dk-h'><h2>Research Lab</h2><span>every setup, its backtest and its live paper record · data only</span></div>",
+                unsafe_allow_html=True)
+    tabs = st.tabs(["Scoreboard", "Playbook rules", "Entry & timing", "Candle study", "Paper record", "Rejected ideas"])
+    with tabs[0]:
+        sb = _scoreboard()
+        st.dataframe(sb, hide_index=True, width="stretch", height=_h(len(sb), 720), column_config={
+            "Live win %": st.column_config.NumberColumn(format="%.0f"), "Live avg %": st.column_config.NumberColumn(format="%+.2f"),
+            "Live total %": st.column_config.NumberColumn(format="%+.1f"), "Live 1h %": st.column_config.NumberColumn(format="%+.2f")})
+        st.caption("Core = tested edge. Testing = recording on paper until 20+ live trades confirm or reject it. "
+                   "Live = closed paper trades after costs.")
+    with tabs[1]:
+        st.dataframe(pd.DataFrame([{"Status": REG.STATUS_LABEL[s["status"]], "Setup": s["prefix"], "Window": s["window"],
+                                    "Look for": s["look"], "Entry": s["entry"], "Stop": s["stop"], "Exit": s["exit"],
+                                    "Note": s["note"]} for s in REG.SETUPS]), hide_index=True, width="stretch", height=_h(len(REG.SETUPS), 720))
+    with tabs[2]:
+        st.markdown("**Entry method on the 9:30 top-10 movers** (450 candidates, 45 days, stop 0.5 ATR, exit 15:20, after 0.12%)")
+        st.dataframe(pd.DataFrame([
+            {"Entry": "Breakout close beyond 9:15-9:30 range", "Fills %": 61, "Avg %": 0.135, "Train %": 0.176, "Test %": 0.096, "Win %": 44, "Median time": "09:40"},
+            {"Entry": "Market at 9:30", "Fills %": 100, "Avg %": 0.074, "Train %": 0.046, "Test %": 0.101, "Win %": 40, "Median time": "09:30"},
+            {"Entry": "VWAP pullback", "Fills %": 88, "Avg %": 0.029, "Train %": 0.035, "Test %": 0.022, "Win %": 42, "Median time": "09:35"},
+            {"Entry": "First pullback, stop entry", "Fills %": 44, "Avg %": 0.010, "Train %": -0.161, "Test %": 0.182, "Win %": 43, "Median time": "09:45"},
+            {"Entry": "Retest of the range edge", "Fills %": 46, "Avg %": 0.005, "Train %": -0.281, "Test %": 0.258, "Win %": 41, "Median time": "09:50"},
+        ]), hide_index=True, width="stretch")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Breakout entry by gap group** (avg % / fills)")
+            st.dataframe(pd.DataFrame([
+                {"Gap": "0-0.5%", "Breakout %": 0.16, "Fills %": 65, "Market 9:30 %": 0.11},
+                {"Gap": "0.5-1%", "Breakout %": 0.03, "Fills %": 80, "Market 9:30 %": 0.20},
+                {"Gap": "1-3%", "Breakout %": -0.09, "Fills %": 61, "Market 9:30 %": -0.10},
+                {"Gap": "> 3%", "Breakout %": 1.64, "Fills %": 33, "Market 9:30 %": 0.39}]), hide_index=True, width="stretch")
+        with c2:
+            st.markdown("**When breakouts happen** (share of breakout closes)")
+            st.dataframe(pd.DataFrame([
+                {"Time": "09:30-09:45", "Breakouts %": 60, "Day's extreme %": 11}, {"Time": "09:45-10:00", "Breakouts %": 17, "Day's extreme %": 6},
+                {"Time": "10:00-10:30", "Breakouts %": 7, "Day's extreme %": 10}, {"Time": "10:30-11:00", "Breakouts %": 5, "Day's extreme %": 5},
+                {"Time": "11:00-12:00", "Breakouts %": 10, "Day's extreme %": 7}, {"Time": "12:00-15:30", "Breakouts %": 1, "Day's extreme %": 37}]),
+                hide_index=True, width="stretch")
+        st.markdown("**Top 10 gainers / losers by opening gap** (46 days)")
+        st.dataframe(pd.DataFrame([
+            {"Gap": "0-0.5%", "Share of toppers %": "42-46", "Becomes topper %": 3, "Half of move done by": "10:05-10:20", "Move left at 10:00 %": "57-69"},
+            {"Gap": "0.5-1%", "Share of toppers %": "24", "Becomes topper %": 4, "Half of move done by": "~9:55", "Move left at 10:00 %": "~60"},
+            {"Gap": "1-3%", "Share of toppers %": "24-28", "Becomes topper %": 9, "Half of move done by": "9:35-9:40", "Move left at 10:00 %": "~52"},
+            {"Gap": "> 3%", "Share of toppers %": "6-8", "Becomes topper %": 28, "Half of move done by": "9:20-9:30", "Move left at 10:00 %": "39-60"}]),
+            hide_index=True, width="stretch")
+    with tabs[3]:
+        _candle_study_results()
+    with tabs[4]:
+        d = _paper_rows()
+        if d.empty:
+            st.caption("No paper trades recorded yet.")
+        else:
+            f1, f2 = st.columns([2, 1])
+            fams = f1.multiselect("Setups", sorted(d["family"].dropna().unique()), key="lab_fam", placeholder="All setups")
+            only_done = f2.toggle("Closed only", True, key="lab_done")
+            z = d[d["family"].isin(fams)] if fams else d
+            z = z[z["done"]] if only_done else z
+            _blotter(z.assign(signal_at=z["day"].astype(str) + " " + z["signal_at"].astype(str)), "lab_rec", 620)
+            st.download_button("Download CSV", z.to_csv(index=False).encode(), "paper_record.csv", "text/csv", key="lab_csv")
+    with tabs[5]:
+        st.dataframe(pd.DataFrame(REG.REJECTED, columns=["Idea", "Market", "What was tested", "Result"]),
+                     hide_index=True, width="stretch", height=_h(len(REG.REJECTED), 760))
+        st.caption("Tested and failed: kept so they are not tested again. Details in research/MOMENTUM_STUDY.md.")
+
+
+
 PAGE_DEFS = [  # (url, function, menu title, icon)
+    ("desk", page_desk, "Desk", ":material/monitoring:"),
+    ("flow", page_flow, "Money Flow", ":material/currency_exchange:"),
+    ("lab", page_lab, "Research Lab", ":material/science:"),
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
     ("funnel", page_funnel, "Momentum Funnel", ":material/filter_alt:"),
     ("agents", page_agents, "AI Desk", ":material/groups:"),
@@ -8125,14 +8413,15 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("review", page_desk_review, "Desk review", ":material/fact_check:"),
 ]
 # Start page: Market View, or set NAVV_START_PAGE (e.g. fno, crypto) to open somewhere else.
-_start = os.environ.get("NAVV_START_PAGE", "view")
+_start = os.environ.get("NAVV_START_PAGE", "desk")
 if _start not in {d[0] for d in PAGE_DEFS}:
-    _start = "view"
+    _start = "desk"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
-nav = st.navigation({  # grouped by what you are doing: today's trading, the market, tools, your account
-    "Today": [P["view"], P["auto"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["scanners"], P["bot"], P["options"]],
-    "Markets": [P["indices"], P["sectors"], P["smart"], P["apex"], P["fno"], P["oi"], P["global"], P["mcx"], P["cdsfut"]],
-    "Tools": [P["chart"], P["screener"], P["watchlist"], P["odds"]],
+nav = st.navigation({  # institutional desk: the few screens that matter first, everything else under More
+    "Desk": [P["desk"], P["flow"], P["options"], P["lab"]],
+    "Markets": [P["view"], P["indices"], P["sectors"], P["fno"], P["oi"], P["chart"], P["global"], P["mcx"], P["cdsfut"]],
+    "More": [P["auto"], P["scanners"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["bot"], P["smart"], P["apex"],
+             P["odds"], P["screener"], P["watchlist"]],
     "Account": [P["account"]] + ([P["portfolio"], P["dhan"], P["review"], P["research"]] if IS_ADMIN else []),
 }, position="top")
 

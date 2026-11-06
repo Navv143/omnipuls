@@ -374,3 +374,14 @@ long / short. Shown in the app (Auto Trader → Candle study → Scenario tree).
   10:00 +0.38% (train +0.20 / test +0.47).
 - Gap WITH the move 1-3% (gap and go) loses at every check, both halves (-0.13% to -0.22%): the retail trap.
 - Deep paths reach +0.4% to +0.6% but on 30-100 signals out of ~245 paths: to be confirmed on the 6-month server run.
+
+## How and when to enter (6 Nov 2026, `research/entry_timing.py`)
+The 10 biggest movers at 9:30 each day (450 candidates, 45 days), five entries, same exit (stop 0.5 ATR, 15:20, 0.12%):
+breakout close beyond the 9:15-9:30 range +0.135% (61% fill, halves +0.18 / +0.10) - the best; market at 9:30 +0.07%;
+VWAP pullback +0.03%; first pullback stop entry +0.01% and retest of the range edge +0.005% (halves flip). By gap: > 3%
+gap that breaks its range +1.64% (33% fill); 1-3% gap negative with every entry. Clock: 60% of breakouts by 9:45, 77% by
+10:00; 25% of candidates had already made the day's extreme before 9:30. Rule: enter on the breakout CLOSE, no retest
+wait, no break by 10:00 = no trade, skip 1-3% gap-with-the-move.
+Also: app redesign - Desk (market strip, core trades, all setups blotter, playbook by time window, V3 watchlist),
+Money Flow, Research Lab (scoreboard backtest vs live, playbook rules, entry & timing, candle study, paper record,
+rejected ideas), all setups in setup_registry.py; old pages under More.
