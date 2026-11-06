@@ -281,6 +281,8 @@ def footprint_picks(S: dict, now: datetime, T: str = "10:00", top: int = 2) -> l
                 z["w"] = z["mv"] * z["sd"]
                 z["stock"] = s
                 rows.append(z)
+        if len(rows) < 0.8 * max(len(S), 1):
+            return []                                  # the 10:00 candles are not in for most stocks yet: try next cycle
         best = sorted(rows, key=lambda z: (z["fp"], z["w"]), reverse=True)[:top]
         _FP_CACHE.clear()
         _FP_CACHE[day] = best
