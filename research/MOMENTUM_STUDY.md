@@ -554,3 +554,15 @@ Fixes (skipped stocks replaced by the next best, as live):
 | Moved <= 1.0 ATR + loss cap 1.5% | 4.7 | +0.285% | 4.23 | +0.28 / +0.30 | -3.4% |
 The fixes add little to the average (+0.01 to +0.04%) but cut the worst day; on the live 11-12 rule the ATR cut does
 nothing. The bigger step is the 3 windows themselves. Confirm on the 6-month server data before going live.
+
+## Target: 70%+ wins with profit factor > 1.5 (research/superbot_winrate.py, 420 exit combinations)
+
+As now: 3 windows win 66% PF 1.83; + 'moved <= 1.0 ATR' win 65% PF 2.03; live 11-12 x3 win 62% PF 1.64.
+- 12 exit combinations pass win >= 70% and PF > 1.5 in BOTH halves; all use 'stop to cost after +0.5R' (no target):
+  3 windows + moved <= 1.0 ATR: win 74.2%, PF 2.55, +0.32% a trade (h1 78% / 2.49, h2 71% / 2.59).
+- But 86 of its 155 wins are scratches (+0.0 to +0.1% after costs). With 0.05% slippage on stop fills the win rate falls
+  to 42% (PF 2.47): a 70% win rate here is only on paper.
+- Real profit locks (move the stop to +0.4..0.8% after a +0.8..1.5% move), 0.05% slippage: win 61-64%, PF 1.9-2.25 in
+  both halves, +0.23..0.36% a trade. E.g. after +1.2% lock +0.6%: win 63%, PF 2.19 (h1 2.22 / h2 2.15), +0.33%.
+Conclusion: PF > 1.5 is met comfortably (about 2.0-2.3, steady); a REAL 70% win rate is not reached by exits or by the
+filters tested so far (the profit comes from ~18% of trades that make > 1%).
