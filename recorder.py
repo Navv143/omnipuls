@@ -314,6 +314,45 @@ def chain_rows(dh: Dhan, exps: dict, now: datetime) -> list[dict]:
     return rows
 
 
+MCX_CHAIN = ["CRUDEOIL", "NATURALGAS"]          # MCX option chains, for testing commodity option strategies on real
+MCX_CHAIN_EVERY = int(os.environ.get("REC_MCX_CHAIN_EVERY", 60))   # premiums, IV and the IV drop after US reports
+MCX_STRIKES = int(os.environ.get("REC_MCX_STRIKES", 15))
+
+
+def mcx_chain_rows(dh: Dhan, cache: dict, now: datetime) -> list[dict]:
+    """Crude oil and natural gas option chains (nearest expiry, MCX_STRIKES each side): LTP, bid / ask, OI, volume, IV
+    and greeks, with the underlying future's price. Dhan's chain API takes the future's security id on MCX_COMM."""
+    day = now.strftime("%Y-%m-%d")
+    if cache.get("day") != day:
+        cache.clear()
+        cache["day"] = day
+        try:
+            cache["fut"] = dh(D.nearest_futures, "MCX_COMM", "FUTCOM", MCX_CHAIN)
+        except Exception as e:
+            _error("mcx futures", e)
+            cache["fut"] = {}
+    rows = []
+    for name in MCX_CHAIN:
+        f = (cache.get("fut") or {}).get(name)
+        if not f:
+            continue
+        try:
+            if name not in cache:
+                cache[name] = [e for e in dh(D.expiries, f["id"], "MCX_COMM") if str(e) >= day][:1]
+            for exp in cache[name]:
+                spot, ch = dh(D.option_chain, f["id"], "MCX_COMM", exp)
+                if ch.empty:
+                    continue
+                ch = ch.assign(_d=(ch["Strike"] - spot).abs()).nsmallest(2 * MCX_STRIKES + 1, "_d").drop(columns="_d")
+                ch.columns = [str(c).lower().replace(" ", "_") for c in ch.columns]
+                for r in ch.to_dict("records"):
+                    rows.append({"time": now.replace(tzinfo=None, second=0, microsecond=0), "underlying": name,
+                                 "future_expiry": str(f.get("expiry")), "expiry": str(exp), "spot": spot, **r})
+        except Exception as e:
+            _error(f"mcx chain {name}", e)
+    return rows
+
+
 LATEST_CHAIN = DATA / "option_chain" / "latest.parquet"
 
 
@@ -407,7 +446,8 @@ def run():
         log("Dhan is not connected (no client_id / access_token): waiting for Dhan Connect or Secrets")
     head = _git_head()
     restart_on_update = os.environ.get("REC_RESTART_ON_UPDATE") == "1"
-    chain, quotes = Snapshots("option_chain"), Snapshots("quotes")
+    chain, quotes, mcx_chain = Snapshots("option_chain"), Snapshots("quotes"), Snapshots("mcx_option_chain")
+    mcx_cache, last_mcx = {}, 0.0
     children = [Child("bots.py", "REC_BOT"), Child("agents.py", "REC_AGENTS"), Child("engine.py", "REC_ENGINE")]
     uni, uni_day, exps, holiday = None, None, {}, None
     last_chain = last_quote = last_backfill_try = last_head_check = 0.0
@@ -452,6 +492,18 @@ def run():
                         chain.rows += rows
                         STATUS["chain"] = {"time": now, "rows": len(rows)}
                         write_latest_chain(rows)
+            hm_ = now.strftime("%H:%M")
+            if now.weekday() < 5 and "09:00" <= hm_ <= "23:30" and D.configured(dh.cfg) \
+                    and time.time() - last_mcx >= MCX_CHAIN_EVERY:
+                last_mcx = time.time()
+                rows = mcx_chain_rows(dh, mcx_cache, now)
+                mcx_chain.rows += rows
+                STATUS["mcx_chain"] = {"time": now, "rows": len(rows)}
+            mcx_chain.flush()
+            if hm_ >= "23:40" or now.weekday() >= 5:      # MCX closes 23:30 (23:55 in US winter at most)
+                mcx_chain.flush(force=True)
+                for d in sorted(p.name for p in (DATA / mcx_chain.kind / "parts").glob("*") if p.is_dir()):
+                    mcx_chain.compact(date.fromisoformat(d))
             chain.flush()
             quotes.flush()
             if now.strftime("%H:%M") >= "15:35" or now.weekday() >= 5:
@@ -474,6 +526,7 @@ def run():
             if head and _git_head() not in ("", head):
                 chain.flush(force=True)
                 quotes.flush(force=True)
+                mcx_chain.flush(force=True)
                 log("new code pulled: restarting")
                 for ch in children:
                     ch.stop()
