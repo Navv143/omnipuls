@@ -27,7 +27,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 CACHE = paths.state("scan_cache")
 SNAP_HIST = paths.state("activity_history")
 NIFTY = "__NIFTY__"
-VERSION = 4  # bump when ScanService changes, so a running app replaces its old loader
+VERSION = 5  # bump when ScanService changes, so a running app replaces its old loader
 INSTANCES: list = []
 
 

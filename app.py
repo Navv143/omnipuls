@@ -3927,7 +3927,12 @@ def get_scan_service(source: str, sig: tuple, version: int = 1):
         if old.source == source:
             old.stop()
             SS.INSTANCES.remove(old)
-    svc = SS.ScanService(source, DCFG if source == "dhan" else None)
+    if source == "dhan" and os.environ.get("OMNIPULS_RECORDER") == "1" and os.environ.get("OMNIPULS_ENGINE", "1") == "1":
+        # server: engine.py (started by the recorder) loads and computes; this process only reads its file
+        import engine_client as EC
+        svc = EC.EngineService(PATHS.DATA / "engine" / "state.pkl", lambda: SS.ScanService("dhan", DCFG))
+    else:
+        svc = SS.ScanService(source, DCFG if source == "dhan" else None)
     SS.INSTANCES.append(svc)
     return svc
 
@@ -4880,7 +4885,11 @@ _ACT_CACHE = _memo("activity")
 
 
 def _activity_data(svc):
-    """Scores for every stock, recomputed only when the background loader has new bars or snapshots."""
+    """Scores for every stock, recomputed only when the background loader has new bars or snapshots. On the server the
+    engine process has already computed them (engine.py): use those, nothing is recomputed here."""
+    pre = getattr(svc, "activity", None)
+    if pre is not None:
+        return pre
     bars, nifty_df = svc.bars()
     if not bars:
         return None

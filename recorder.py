@@ -365,7 +365,7 @@ def _git_head() -> str:
 
 
 class Child:
-    """A helper process (bots.py: the live bots and nightly research; agents.py: the AI Desk) kept alive by the
+    """A helper process (bots.py: the live bots and nightly research; agents.py: the AI Desk; engine.py: the app's data and activity) kept alive by the
     recorder. Its own process: a crash or its memory can't touch the recorder."""
 
     def __init__(self, script: str, env_flag: str):
@@ -408,7 +408,7 @@ def run():
     head = _git_head()
     restart_on_update = os.environ.get("REC_RESTART_ON_UPDATE") == "1"
     chain, quotes = Snapshots("option_chain"), Snapshots("quotes")
-    children = [Child("bots.py", "REC_BOT"), Child("agents.py", "REC_AGENTS")]
+    children = [Child("bots.py", "REC_BOT"), Child("agents.py", "REC_AGENTS"), Child("engine.py", "REC_ENGINE")]
     uni, uni_day, exps, holiday = None, None, {}, None
     last_chain = last_quote = last_backfill_try = last_head_check = 0.0
     while True:

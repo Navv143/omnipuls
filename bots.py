@@ -1224,7 +1224,18 @@ def superbot_step(mkt: "Market", now: datetime):
     S = SC.prepare(bars, session)
     if len(S) < 50:
         return
-    R, E, per = A.rank({k: SC.clean(v) for k, v in bars.items()}, session, None, None, U.FNO_SECTOR_OF)
+    R = E = per = None
+    try:   # the engine's activity (same candles, plus futures OI and the order book), when fresh
+        ef = paths.DATA / "engine" / "state.pkl"
+        if ef.exists() and time.time() - ef.stat().st_mtime < 180:
+            import pickle
+            act = pickle.loads(ef.read_bytes()).get("activity")
+            if act and str(pd.Timestamp(act[3]).date()) == day:
+                R, E, per = act[0], act[1], act[2]
+    except Exception:
+        R = None
+    if R is None:
+        R, E, per = A.rank({k: SC.clean(v) for k, v in bars.items()}, session, None, None, U.FNO_SECTOR_OF)
     oi = oi_today(day)
     open_now = {t["stock"] for t in st_["trades"] if t["decision"] == "TRADE" and t.get("status") in (None, "open", "waiting")}
     n_trades = sum(t["decision"] == "TRADE" for t in st_["trades"])
