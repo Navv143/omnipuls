@@ -6,8 +6,9 @@
   4 OI & ACTIVITY  futures OI change (fresh positions), unusual candles today with / against the move, smart score
   5 CHART       yesterday's high/low break, first 15-min and first-hour range break, acceleration, VWAP, RSI, room
                 to the next support / resistance
-  6 DECISION    TRADE or REJECT, with every reason; entry = next candle's open, stop = last swing (0.3-1.0 ATR),
-                target = next swing level (at least 1.5R, else 2R), profit lock after +1R, exit 15:20
+  6 DECISION    TRADE or REJECT, with every reason: with the market only (longs while Nifty is up, shorts while down),
+                at most 3 trades a day and 1 per sector (best scores first); entry = next candle's open, stop = last
+                swing (0.3-1.0 ATR), target = next swing level (at least 1.5R, else 2R), profit lock after +1R, 15:20
 
 Each stage returns a table with every stock it looked at, PASS / REJECT and the reason, so any rule can be reviewed and
 changed later (all thresholds are in RULES). Recorded by bots.superbot_step: the latest table of each stage
@@ -33,7 +34,11 @@ RULES = {
     # 5 chart (pass when price is on the right side of VWAP and at least `chart_need` of the 7 checks hold)
     "rsi_long": (55, 80), "rsi_short": (20, 45), "room_atr": 0.5, "chart_need": 4,
     # 6 decision
-    "first_entry": "09:30", "last_entry": "14:30", "max_trades": 8, "stop_atr": (0.3, 1.0), "min_rr": 1.5,
+    "first_entry": "09:30", "last_entry": "14:30", "max_trades": 3, "max_per_sector": 1, "stop_atr": (0.3, 1.0),
+    "min_rr": 1.5,
+    # with the market: longs only while Nifty is up on the day, shorts only while it is down (research/superbot_strict.py,
+    # 40 days: 3 a day + this rule = 61% wins, +0.29% a trade, t 2.24, both halves positive; without it -0.02%)
+    "with_market": True,
 }
 STAGES = {1: "Scanner", 2: "Expansion", 3: "Money", 4: "OI & activity", 5: "Chart", 6: "Decision"}
 
@@ -63,7 +68,8 @@ def _swings(h: pd.Series, l: pd.Series, k: int = 3) -> tuple[list, list]:
 
 
 def run(S: dict, per: dict, events: pd.DataFrame, oi: pd.DataFrame, sector_of: dict, now: datetime,
-        open_trades: set | None = None, trades_today: int = 0) -> dict:
+        open_trades: set | None = None, trades_today: int = 0, nifty_chg: float | None = None,
+        taken_sectors: dict | None = None) -> dict:
     """S: scanners.prepare() stocks; per: activity.rank() per-stock candle tables; events: activity unusual candles;
     oi: bots.oi_today() (index = stock, oi_chg %). Returns {stage number: DataFrame} with a 'pass' and 'reason' column,
     and 'decisions' (stage 6 rows)."""
@@ -213,8 +219,12 @@ def run(S: dict, per: dict, events: pd.DataFrame, oi: pd.DataFrame, sector_of: d
         rr = abs(target - px) / risk if risk else np.nan
         score = nok + nk + (1 if fresh else 0) + min(u_with, 2) + (1 if side * smart >= 25 else 0)
         reasons = [r2["reason"], r3["reason"], r4["reason"], r5["reason"]]
+        against = R.get("with_market") and nifty_chg is not None and np.isfinite(nifty_chg) and \
+            ((side > 0 and nifty_chg < 0) or (side < 0 and nifty_chg > 0))
         if sym in open_trades:
             decision, why = "REPEAT", "already in a trade on this stock"
+        elif against:
+            decision, why = "REJECT", f"against the market (Nifty {nifty_chg:+.2f}%): longs only when Nifty is up, shorts when down"
         elif hm < R["first_entry"]:
             decision, why = "REJECT", f"before {R['first_entry']}"
         elif hm > R["last_entry"]:
@@ -227,11 +237,15 @@ def run(S: dict, per: dict, events: pd.DataFrame, oi: pd.DataFrame, sector_of: d
                        "entry_plan": round(px, 2), "stop": round(stop, 2), "target": round(target, 2),
                        "risk_pct": round(risk / px * 100, 2), "rr": round(rr, 2) if np.isfinite(rr) else None,
                        "stages": " | ".join(reasons), "pass": decision == "TRADE"})
-    # the day's trade limit: the best scores first
+    # the day's trade limit (best scores first) and one trade per sector a day
     left = R["max_trades"] - trades_today
+    secs = dict(taken_sectors or {})
     for r in sorted([x for x in out[6] if x["decision"] == "TRADE"], key=lambda x: -x["score"]):
-        if left > 0:
+        if secs.get(r["sector"], 0) >= R.get("max_per_sector", 99):
+            r["decision"], r["reason"], r["pass"] = "REJECT", f"already a trade in {r['sector']} today (1 per sector)", False
+        elif left > 0:
             left -= 1
+            secs[r["sector"]] = secs.get(r["sector"], 0) + 1
         else:
             r["decision"], r["reason"], r["pass"] = "REJECT", f"day's limit of {R['max_trades']} trades reached " \
                 f"(score {r['score']}, lower than the trades taken)", False

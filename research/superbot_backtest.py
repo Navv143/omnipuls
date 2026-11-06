@@ -44,7 +44,7 @@ def naive(df):
     return d[~d.index.duplicated(keep="last")].sort_index()
 
 
-def run_day(bars: dict, day: pd.Timestamp, tf: int) -> tuple[list, list]:
+def run_day(bars: dict, day: pd.Timestamp, tf: int, nifty: pd.DataFrame | None = None) -> tuple[list, list]:
     """All decision-stage arrivals of one day (with trade results) and the per-stage forward-move rows."""
     cut_day = {s: df[df.index < day + pd.Timedelta(days=1)] for s, df in bars.items()}
     cut_day = {s: df for s, df in cut_day.items() if len(df) and df.index[-1].normalize() == day}
@@ -72,7 +72,19 @@ def run_day(bars: dict, day: pd.Timestamp, tf: int) -> tuple[list, list]:
             ev_t = E
         now = datetime(day.year, day.month, day.day, t.hour, t.minute)
         n_tr = sum(1 for a in arrivals if a["decision"] == "TRADE")
-        res = SB.run(S, per_t, ev_t, pd.DataFrame(), U.FNO_SECTOR_OF, now, open_now, n_tr)
+        taken = {}
+        for a in arrivals:
+            if a["decision"] == "TRADE":
+                sec = U.FNO_SECTOR_OF.get(a["stock"], "Other")
+                taken[sec] = taken.get(sec, 0) + 1
+        nchg = None
+        if nifty is not None and len(nifty):
+            nz = nifty[(nifty.index.normalize() == day) & (nifty.index + pd.Timedelta(minutes=tf) <= t)]
+            npc = nifty[nifty.index.normalize() < day]["Close"]
+            if len(nz) and len(npc):
+                nchg = (float(nz["Close"].iloc[-1]) / float(npc.iloc[-1]) - 1) * 100
+        res = SB.run(S, per_t, ev_t, pd.DataFrame(), U.FNO_SECTOR_OF, now, open_now, n_tr, nifty_chg=nchg,
+                     taken_sectors=taken)
         # what each stage adds: move from now to the close, in the stage-1 direction
         side_of = {r["stock"]: (1 if r["table"] == "UP" else -1 if r["table"] == "DOWN" else 0)
                    for r in res[1].to_dict("records")} if not res[1].empty else {}
@@ -153,16 +165,24 @@ def main(argv):
             if f.exists():
                 bars[s] = C.resample(C.naive(pd.read_parquet(f)).astype("float64"), 5)
         out_dir = B.BOT_DIR
+        nf = next((f for f in (cache / "NIFTY.parquet", cache / "NIFTY 50.parquet") if f.exists()), None)
+        nifty = C.resample(C.naive(pd.read_parquet(nf)).astype("float64"), 5) if nf is not None else None
     else:
-        bars = pickle.load(open(argv[1], "rb"))
-        bars = bars[0] if isinstance(bars, tuple) else bars
+        raw = pickle.load(open(argv[1], "rb"))
+        bars = raw[0] if isinstance(raw, tuple) else raw
+        nifty = None
+        if isinstance(raw, tuple) and isinstance(raw[1], dict) and "NIFTY" in raw[1]:
+            nifty = raw[1]["NIFTY"]
+            nifty = nifty.droplevel(1, axis=1) if isinstance(nifty.columns, pd.MultiIndex) else nifty
         out_dir = Path(argv[1]).resolve().parent
+    if nifty is not None:
+        nifty = naive(nifty).dropna(subset=["Close"])
     bars = {s: naive(df).dropna(subset=["Close"]) for s, df in bars.items() if s in U.FNO_SECTOR_OF and df is not None and len(df)}
     tf = int(pd.Series(next(iter(bars.values())).index).diff().dt.total_seconds().median() // 60)
     days = sorted(set().union(*[set(df.index.normalize()) for df in bars.values()]))[20:]   # 20 days of history first
     t0, arr, st = time.time(), [], []
     for i, d in enumerate(days):
-        a, s_ = run_day(bars, d, tf)
+        a, s_ = run_day(bars, d, tf, nifty)
         arr += a
         st += s_
         print(f"{d.date()}: {sum(1 for x in a if x['decision'] == 'TRADE')} trades  ({i + 1}/{len(days)}, "
