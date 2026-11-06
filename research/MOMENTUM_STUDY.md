@@ -491,3 +491,21 @@ Every market-aligned candidate by entry window (40 days): 9:30-10 +0.19% (56% wi
 -0.01%, 11-12 +0.13% (59%), 12-13 +0.03%, 13-14:30 -0.01%. With 3 a day: from 9:30 (fills in the first half hour)
 +0.27% but September -0.6%; 11:00-12:00 only +0.20%, 62% wins, t 2.17, Sep +4.4 / Oct +14.8 / Nov +4.4%, halves
 +0.20 / +0.19; opening only +0.16% with September -9.5% (33% wins). Adopted (paper): entries 11:00-12:00.
+
+## Super Bot in time windows (40 days, with the market, 1 per sector / stock, research/superbot_windows.py)
+
+| Plan | Trades/day | Win | Avg | t | Halves | Sep / Oct / Nov | Worst day |
+|---|---|---|---|---|---|---|---|
+| Live: 11:00-12:00, max 3 | 3.0 | 62% | +0.20% | 2.17 | +0.20 / +0.19 | +4.4 / +14.8 / +4.4 | -2.7% |
+| 9:30 1 + 10:00 2 + 12:00 2 | 4.5 | 66% | +0.20% | 2.34 | +0.25 / +0.15 | +11.6 / +13.9 / +10.3 | -5.6% |
+| 9:30 2 + 10:00 2 + 12:00 2 | 5.2 | 63% | +0.18% | 2.20 | +0.22 / +0.14 | +9.1 / +16.9 / +11.5 | -7.0% |
+| 10:00 2 + 12:00 2 (no 9:30) | 3.6 | 66% | +0.24% | 2.53 | +0.36 / +0.12 | +19.9 / +10.9 / +3.9 | -5.3% |
+| 10:00 2 + 11:00-12:00 2 | 3.9 | 68% | +0.27% | 2.94 | +0.35 / +0.18 | +19.0 / +13.8 / +8.4 | -6.1% |
+
+- By window: 9:30-10:00 is weak (+0.06%, -0.07% as the first of 1; Sep -5.7% alone); 10:00-10:30 (+0.25%), 11:00-12:00
+  (+0.28%) and 12:00-12:30 (+0.23-0.27%) carry the result.
+- Day rules (P&L at the window's start = closed + open trades at that moment's price) made every split worse:
+  "trade later only if flat / losing" 1+1+2: +5.0% total vs +20.6% always; "only if winning": +4.0%. Later windows are
+  about as good after a winning morning as after a losing one, so stopping or chasing removes good trades.
+- 10:00-10:30 was weak for ALL candidates (+0.04%) but good for the top-2 by score: the ranking matters there.
+- 40 days, five plans compared: the best-looking row is partly luck. More trades a day = bigger worst day.
