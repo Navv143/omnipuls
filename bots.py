@@ -68,10 +68,24 @@ class Market:
         self.momentum: dict = {}
 
     def load(self):
-        stocks, indices = B.load_history(self.cfg, days=LIVE_DAYS if not B.CACHE.exists() else B.HISTORY_DAYS,
-                                         symbols=self.syms + [("INDIAVIX", "IDX_I", 21, "INDEX")])
+        import candles as C
         cut = pd.Timestamp.now() - pd.Timedelta(days=LIVE_DAYS)
-        self.hist = {k: v[v.index >= cut] for k, v in {**stocks, **indices}.items()}
+        if C.TF == 5:
+            stocks, indices = B.load_history(self.cfg, days=LIVE_DAYS if not B.CACHE.exists() else B.HISTORY_DAYS,
+                                             symbols=self.syms + [("INDIAVIX", "IDX_I", 21, "INDEX")])
+            self.hist = {k: v[v.index >= cut] for k, v in {**stocks, **indices}.items()}
+        else:  # the system timeframe (3 minutes): history from the 1-minute cache, resampled
+            self.hist = {}
+            for i, (sym, seg, sid, ins) in enumerate(self.syms + [("INDIAVIX", "IDX_I", 21, "INDEX")], 1):
+                try:
+                    h = B.clean(C.history(sym, seg, sid, ins, LIVE_DAYS, self.cfg))
+                except Exception as e:
+                    log(f"{sym} history: {e}")
+                    continue
+                if not h.empty:
+                    self.hist[sym] = h[h.index.normalize() < pd.Timestamp.now().normalize()]
+                if i % 50 == 0:
+                    log(f"{C.TF}-minute history: {i} symbols")
         try:
             import indices as IX
             self.weights = {k: d.get("w", {}) for k, d in IX.load().items()}
@@ -82,14 +96,16 @@ class Market:
         self.oi_avg = oi_history()
 
     def refresh(self):
+        import candles as C
         import dhan as D
         for sym, seg, sid, ins in self.syms + [("INDIAVIX", "IDX_I", 21, "INDEX")]:
             try:
-                d = B.clean(D.intraday(seg, sid, ins, 5, 1, self.cfg))
+                d = B.clean(C.fetch(seg, sid, ins, 1, self.cfg))
             except D.DhanError as e:
                 if e.code == "NETWORK":
                     raise
                 continue
+            d = C.closed(d)                    # closed candles only: nothing signals before the first candle closes
             if not d.empty:
                 self.today[sym] = d[d.index.normalize() == d.index.normalize().max()]
         try:
@@ -1006,6 +1022,32 @@ def _auto_account() -> dict:
         return {"start": AT.RULES["capital"], "equity": AT.RULES["capital"], "history": [], "rules": AT.RULES}
 
 
+def _account_records(day: str) -> list[dict]:
+    """Today's trades of the setups the paper account may trade (setup_registry "account": the V3 early pick and the
+    Nifty ORB break), in the Auto Trader's record format. Their own exit rules decide the result (r); the targets
+    passed here (1R / 2R) only satisfy the analyst's checks."""
+    import setup_registry as REG
+    out = []
+    want = REG.account_setups()
+    for f in (V3_FILE, MOM_FILE):
+        try:
+            rows = json.loads(f.read_text())
+        except Exception:
+            continue
+        for x in rows:
+            fam = REG.family(x.get("setup", ""))
+            if x.get("day") != day or fam not in want or x.get("entry") is None or x.get("sl") is None:
+                continue
+            e, sl, sd = float(x["entry"]), float(x["sl"]), int(x["side"])
+            risk = abs(e - sl)
+            done = str(x.get("result", "")).startswith(("stop", "target", "time", "Closed", "Stopped", "Trailed"))
+            out.append({"source": fam, "symbol": x.get("symbol"), "side": sd, "time": x.get("signal_at"), "entry": e, "sl": sl,
+                        "tp1": e + sd * risk, "tp2": e + sd * 2 * risk, "status": "closed" if done else "open",
+                        "r": x.get("r"), "r_now": x.get("r"), "m_r": x.get("r") if done else None,
+                        "m_exit": x.get("exit_at") if done else None, "ltp": x.get("exit_px")})
+    return out
+
+
 def auto_step(mkt: "Market", now: datetime, scanned: int, final: bool = False) -> dict:
     """The six agents on today's signal records: new signals decided once (filter, analyst, risk, paper order),
     positions marked to the managed results; <data>/autotrader/<day>.json and Supabase auto_trades."""
@@ -1020,7 +1062,7 @@ def auto_step(mkt: "Market", now: datetime, scanned: int, final: bool = False) -
         prior = [h for h in acc.get("history", []) if h["day"] < day]
         book = {"day": day, "equity_start": prior[-1]["equity"] if prior else acc.get("start", AT.RULES["capital"]),
                 "decisions": {}}
-    book = AT.step(book, mkt.trades, float(book["equity_start"]), now.strftime("%H:%M"), scanned)
+    book = AT.step(book, mkt.trades + _account_records(day), float(book["equity_start"]), now.strftime("%H:%M"), scanned)
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(_clean(book), default=str))
     os.replace(tmp, f)
@@ -1340,6 +1382,7 @@ def main():
     mkt = Market(cfg)
     mkt.load()
     day, seen, scored, last, logged, opened = None, {}, False, 0.0, set(), False
+    last_slot = None
     while True:
         now = datetime.now(IST)
         try:
@@ -1352,8 +1395,12 @@ def main():
                     mkt.trades = []
                 if mkt.hist:
                     mkt.load()   # yesterday joins the history
-            if market_open(now) and time.time() - last >= EVERY:
-                last = time.time()
+            import candles as C
+            mins = (now.hour * 60 + now.minute) - (9 * 60 + 15)
+            slot = mins // C.TF                          # run right after each candle closes (+10 s for Dhan to settle)
+            due = slot != last_slot and (mins % C.TF) * 60 + now.second >= 10
+            if market_open(now) and (due or time.time() - last >= EVERY):
+                last, last_slot = time.time(), slot
                 mkt.cfg = D.load_config()   # the token the app or recorder renewed
                 mkt.refresh()
                 state = cycle(mkt)
@@ -1391,7 +1438,7 @@ def main():
             STATUS["errors"] = (STATUS["errors"] + [f"{now:%d %b %H:%M} {e}"[:200]])[-10:]
             log(f"error: {e}")
             time.sleep(30)
-        time.sleep(15)
+        time.sleep(5)
 
 
 if __name__ == "__main__":

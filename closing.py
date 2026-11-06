@@ -15,6 +15,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+import candles as _C
+
 CUT = "15:15"
 
 
@@ -57,7 +59,7 @@ def stock_readings(sym: str, df: pd.DataFrame, cutoff: str = CUT) -> dict | None
     slot = hist[(hist.index.strftime("%H:%M") >= l30.index[0].strftime("%H:%M")) &
                 (hist.index.strftime("%H:%M") <= l30.index[-1].strftime("%H:%M"))]
     usual_v30 = slot.groupby(slot.index.normalize())["Volume"].sum().tail(20).mean() if not slot.empty else np.nan
-    return {"symbol": sym, "price": c, "time": (end + pd.Timedelta(minutes=5)).strftime("%H:%M"),
+    return {"symbol": sym, "price": c, "time": (end + pd.Timedelta(minutes=_C.TF)).strftime("%H:%M"),
             "ret_day": (c / pc - 1) * 100, "ret_30": (c / float(l30["Open"].iloc[0]) - 1) * 100,
             "clv": (c - lo) / (hi - lo) if hi > lo else 0.5,
             "net_30": i30 - o30, "net_15": i15 - o15, "flow_30": i30 / (i30 + o30) * 100 if i30 + o30 > 0 else 50.0,
@@ -149,7 +151,7 @@ def index_pick(name: str, ix: pd.DataFrame, stocks: dict, weights: dict, fut: pd
     verdict = ("BUY for the next open (strong close: tested)" if strong else
                "BUY for the next open (close near the high: tested)" if tested else
                "NO TRADE (not closing near the high)")
-    return {"name": name, "price": c, "time": (end + pd.Timedelta(minutes=5)).strftime("%H:%M"), "clv": clv,
+    return {"name": name, "price": c, "time": (end + pd.Timedelta(minutes=_C.TF)).strftime("%H:%M"), "clv": clv,
             "ret_day": (c / pc - 1) * 100, "ret_atr": ret_atr, "net_30": net30, "breadth": br_now, "breadth_chg_30": br_chg,
             **oi, "writers_30": writers_30 or {}, "tested": tested, "strong": strong, "verdict": verdict,
             "confirmations": conf, "side": 1 if tested else 0}

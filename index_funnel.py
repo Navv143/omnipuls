@@ -22,6 +22,8 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import pandas as pd
 
+import candles as _C
+
 IST = timezone(timedelta(hours=5, minutes=30))
 INDEXES = {"NIFTY": "Nifty 50", "BANKNIFTY": "Bank Nifty", "FINNIFTY": "Fin Nifty", "SENSEX": "Sensex",
            "MIDCPNIFTY": "Midcap Select"}
@@ -351,7 +353,7 @@ def day_trend(ix: pd.DataFrame, stocks: dict, weights: dict) -> dict | None:
     side = 1 if last > pc else -1 if last < pc else 0
     breadth = br_up if side > 0 else br_dn
     trend = bool(np.isfinite(chg_atr) and abs(chg_atr) >= 1.0 and breadth == breadth and breadth >= 75)
-    return {"time": (today.index[-1] + pd.Timedelta(minutes=5)).strftime("%H:%M"),
+    return {"time": (today.index[-1] + pd.Timedelta(minutes=_C.TF)).strftime("%H:%M"),
             "price": last, "chg_pct": (last / pc - 1) * 100, "gap_pct": (o / pc - 1) * 100, "from_open_pct": (last / o - 1) * 100,
             "chg_atr": chg_atr, "gap_atr": (o - pc) / atr14 if atr14 else np.nan, "breadth_up": br_up, "breadth_dn": br_dn,
             "side": side, "breadth_with": breadth, "trend_day": trend, "atr14": atr14, "pc": pc, "open": o}
@@ -387,7 +389,7 @@ def gap_go(ix: pd.DataFrame, stocks: dict, weights: dict) -> dict | None:
     upto = today[today.index <= t0].tail(6)
     import funnel as FN
     plan = FN.trade_plan(s, px, dt["atr14"], float(upto["Low"].min()), float(upto["High"].max()))
-    out["signal"] = {"time": (t0 + pd.Timedelta(minutes=5)).strftime("%H:%M"), "side": out["side"], "price": px, "plan": plan}
+    out["signal"] = {"time": (t0 + pd.Timedelta(minutes=_C.TF)).strftime("%H:%M"), "side": out["side"], "price": px, "plan": plan}
     return out
 
 
@@ -497,7 +499,7 @@ def momentum_now(ix: pd.DataFrame, stocks: dict, weights: dict, name: str = "", 
         p = FN.trade_plan(sd, float(r["Close"]), float(r["atr14"]), float(r["swl"]), float(r["swh"]))
         if p:
             oi = _oi_at(fut, ts + pd.Timedelta(minutes=4), int(r["msd"]))  # OI behind the BURST (new positions its way?)
-            sigs.append({"time": (ts + pd.Timedelta(minutes=5)).strftime("%H:%M"), "side": p["side"], "price": float(r["Close"]),
+            sigs.append({"time": (ts + pd.Timedelta(minutes=_C.TF)).strftime("%H:%M"), "side": p["side"], "price": float(r["Close"]),
                          "plan": p, "fade": fade, "oi": oi, "stage": stage,
                          "why": ("FADE: Bank Nifty bursts usually reverse (stop hunt) · " if fade else "")
                                 + f"{'10' if stage == 'EARLY' else '15'} min: price {r['d_px']:+,.0f}, money ₹{r['d_net']:+,.0f} Cr, breadth {r['br_y']:.0f}% up "
@@ -508,7 +510,7 @@ def momentum_now(ix: pd.DataFrame, stocks: dict, weights: dict, name: str = "", 
         ("TRAP? price " + ("up" if r["msd"] > 0 else "down") + " but money and breadth the other way") if r["trap"] else "no confirmation"
     rule = {"trend_only": "trades bursts on trend days only", "fade_normal": "fades bursts (not on trend days)",
             "with": "trades bursts", "watch": "watch only (no edge yet)"}[mode]
-    return {"name": name, "rule": rule, "trend_day": bool(r["trend_day"]), "time": (t.index[-1] + pd.Timedelta(minutes=5)).strftime("%H:%M"), "price": float(r["Close"]),
+    return {"name": name, "rule": rule, "trend_day": bool(r["trend_day"]), "time": (t.index[-1] + pd.Timedelta(minutes=_C.TF)).strftime("%H:%M"), "price": float(r["Close"]),
             "state": state, "momentum": bool(r["momentum"]), "trap": bool(r["trap"]),
             "d_px": float(r["d_px"]) if r["d_px"] == r["d_px"] else None,
             "d_net": float(r["d_net"]) if r["d_net"] == r["d_net"] else None,

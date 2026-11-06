@@ -268,7 +268,7 @@ def version3(S: dict, nifty: Stock | None, top=2, vol_mult=1.5, until=dtime(12, 
         if len(orb) < 3:
             continue
         or_vol = orb["Volume"].sum()
-        avg_or = s.cum_avg("09:25", 20)
+        avg_or = s.cum_avg(orb.index[-1].strftime("%H:%M"), 20)   # last candle of 9:15-9:30 on any timeframe
         rank.append({"s": s, "atr": s.atr_pct, "orr": (orb["High"].max() - orb["Low"].min()) / s.open,
                      "rvol": or_vol / avg_or if avg_or and avg_or > 0 else np.nan, "gap": abs(s.gap),
                      "hi": orb["High"].max(), "lo": orb["Low"].min()})
