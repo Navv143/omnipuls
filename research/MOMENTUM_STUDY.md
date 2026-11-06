@@ -509,3 +509,16 @@ Every market-aligned candidate by entry window (40 days): 9:30-10 +0.19% (56% wi
   about as good after a winning morning as after a losing one, so stopping or chasing removes good trades.
 - 10:00-10:30 was weak for ALL candidates (+0.04%) but good for the top-2 by score: the ranking matters there.
 - 40 days, five plans compared: the best-looking row is partly luck. More trades a day = bigger worst day.
+
+### Shifted 15 minutes later: 9:45 / 10:45 / 12:45 (same rules, no stock repeated in a day: checked, 0 overlaps)
+
+| Plan | Trades/day | Win | Avg | t | Total | Sep / Oct / Nov | Worst day |
+|---|---|---|---|---|---|---|---|
+| 30-min windows 2+2+2 | 5.7 | 56% | +0.13% | 1.66 | +28.8% | +3.4 / +12.1 / +13.2 | -9.0% |
+| 30-min windows 1+2+2 | 4.8 | 53% | +0.04% | 0.57 | +8.1% | -1.0 / +4.6 / +4.5 | -6.1% |
+| 15-min windows 2+2+2 | 4.6 | 55% | +0.03% | 0.32 | +4.8% | -6.1 / +1.9 / +9.0 | -9.0% |
+| 10:45 + 12:45 only | 3.8 | 52% | -0.06% | -0.80 | -8.8% | -7.8 / -0.4 / -0.6 | -4.4% |
+
+By window: 9:45-10:15 +0.35% a trade; 10:45-11:15 -0.04% (worst); 12:45-13:15 +0.07%. "Trade later only if flat /
+losing" again worse (+20.0%). A 15-minute shift turns 10:00-10:30 / 12:00-12:30 (+0.25%) into 10:45 / 12:45 (~0%):
+the window edge is fragile, so the exact time slots are mostly noise on 40 days. Wait for the 6-month server test.
