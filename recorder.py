@@ -403,6 +403,38 @@ def _git_head() -> str:
         return ""
 
 
+def renew_token_ahead(dh: Dhan, state: dict):
+    """The recorder is the one Dhan token owner on the server (Dhan keeps one token per client: a new one cancels the
+    old). Every 10 minutes: when the saved token has under 2 hours left (or none), make a new one from the PIN + TOTP
+    in Secrets, so the app, engine and bots (which only read the saved token) never meet an expired one."""
+    if time.time() - state.get("checked", 0) < 600:
+        return
+    state["checked"] = time.time()
+    cfg = D.load_config()
+    if not D.can_auto_token(cfg):
+        STATUS["token"] = {"auto": False, "note": "PIN / TOTP secret not in Secrets: tokens are not renewed automatically"}
+        return
+    try:
+        exp = datetime.fromisoformat(str(cfg.get("token_expiry")))
+        exp = exp if exp.tzinfo else exp.replace(tzinfo=IST)
+    except ValueError:
+        exp = None
+    now = datetime.now(IST)
+    if cfg.get("access_token") and exp and exp - now > timedelta(hours=2):
+        if cfg.get("access_token") != dh.cfg.get("access_token"):
+            dh.cfg = cfg
+        STATUS["token"] = {"auto": True, "expiry": exp.isoformat(timespec="minutes")}
+        return
+    try:
+        tok, new_exp = D.generate_token(cfg)     # saves dhan_config.json for every process
+        dh.cfg, dh.made = cfg, time.time()
+        STATUS["token"] = {"auto": True, "expiry": new_exp.isoformat(timespec="minutes"), "made": now.isoformat(timespec="minutes")}
+        log(f"Dhan token renewed ahead of expiry (valid to {new_exp:%d %b %H:%M})")
+    except Exception as e:
+        STATUS["token"] = {"auto": True, "error": str(e)[:200]}
+        _error("token renewal", e)
+
+
 class Child:
     """A helper process (bots.py: the live bots and nightly research; agents.py: the AI Desk; engine.py: the app's data and activity) kept alive by the
     recorder. Its own process: a crash or its memory can't touch the recorder."""
@@ -448,6 +480,7 @@ def run():
     restart_on_update = os.environ.get("REC_RESTART_ON_UPDATE") == "1"
     chain, quotes, mcx_chain = Snapshots("option_chain"), Snapshots("quotes"), Snapshots("mcx_option_chain")
     mcx_cache, last_mcx = {}, 0.0
+    tok_state: dict = {}
     children = [Child("bots.py", "REC_BOT"), Child("agents.py", "REC_AGENTS"), Child("engine.py", "REC_ENGINE")]
     uni, uni_day, exps, holiday = None, None, {}, None
     last_chain = last_quote = last_backfill_try = last_head_check = 0.0
@@ -455,6 +488,7 @@ def run():
         now = datetime.now(IST)
         today = now.date()
         try:
+            renew_token_ahead(dh, tok_state)
             for ch in children:
                 ch.keep_alive()
             if not D.configured(dh.cfg):
