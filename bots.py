@@ -1571,6 +1571,10 @@ def run_research():
         log(f"candle study (6 months, 3 / 5 / 15 min): finished (exit {cs.returncode})")
         rb = subprocess.run([sys.executable, str(paths.HERE / "research_bot_backtest.py")], cwd=str(paths.HERE), timeout=2 * 3600)
         log(f"research bot back-test: finished (exit {rb.returncode})")
+        if datetime.now(IST).weekday() == 5:   # Saturdays: the Super Bot replayed on the server's 6 months
+            sb = subprocess.run([sys.executable, str(paths.HERE / "research" / "superbot_backtest.py"), "--server"],
+                                cwd=str(paths.HERE), timeout=3 * 3600)
+            log(f"super bot back-test: finished (exit {sb.returncode})")
     except Exception as e:
         log(f"momentum study: {e}")
     if r.returncode != 0 and not (B.BOT_DIR / "latest.json").exists():

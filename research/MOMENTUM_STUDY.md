@@ -409,3 +409,23 @@ stop rule (beyond the last 30 minutes' swing, 0.3-0.6 daily ATR) is far too wide
 long 10:30 and Bank Nifty short 9:30 all stopped at -1R within an hour, while the tested Nifty ORB break (stop 48
 points, 0.2%) was +1.35R. Now: the Auto Trader trades only setup_registry "account" setups (V3 early pick + Nifty ORB
 break); the old cards sit in a collapsed "Untested signals - not traded" box on Market View.
+
+## Super Bot back-test (7 Nov 2026, research/superbot_backtest.py)
+40 trading days (Sep-Nov 2026), Yahoo 5-minute candles, ~200 F&O stocks, checkpoints every 15 min 09:30-14:30, the
+live rules (8 trades a day, best scores first, next-candle entry, stop / target / profit lock / 15:20, cost 0.12%).
+No past futures OI or order book: stage 4 ran on unusual candles and the smart score only.
+
+TRADES: 320 on 40 days (8.0 a day) | win 53% | avg +0.148% a trade after costs | avg R +0.07 | h1 +0.022% h2 +0.273% | total +47.2%
+  by exit: stop 61 (-1.83%), target 14 (+2.95%), time 204 (+0.37%), trailed 41 (+1.00%)
+  by side: DOWN 124 (+0.076%, win 54%), UP 196 (+0.193%, win 53%)
+  by entry time: 09h 276 (+0.13%), 10h 44 (+0.25%)
+  by score: (0, 8] 55 (+0.18%), (8, 10] 90 (+0.02%), (10, 12] 174 (+0.21%), (12, 99] 1 (-1.18%)
+REJECT / REPEAT: 9130 ({'REJECT': 8565, 'REPEAT': 565})
+WHAT EACH STAGE ADDS (move to the close in the stage-1 direction, from the checkpoint, before costs):
+  stage 2 Expansion      passed n= 56548 +0.142%  |  rejected n= 41618 +0.120%  |  difference +0.023%
+
+Checks: t = 1.64 (not significant), 21 of 40 days positive, weeks from -0.43% to +0.77%. Against every trending stock
+at the same checkpoint: Super Bot picks +0.27% to the close, all trending +0.21% (before costs): the stages add ~0.06%,
+most of the result is the period's momentum. Stage 4 (without OI) hurt; 276 of 320 trades came at 09:30-09:45 (the
+8-trade limit fills early). Verdict: keep on paper; not a proven setup. Re-run weekly on the server's 6 months
+(Saturdays, bot_results "superbot_bt ...") and on the live record once it has a few weeks.
