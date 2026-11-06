@@ -45,6 +45,7 @@ _reload_changed_modules()
 import json
 import os
 import socket
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from functools import partial
@@ -2018,12 +2019,20 @@ def live(kind: str, items: list, key: str, **kw):
 
 def items_from(data: dict, labels: list[tuple[str, str]]) -> list:
     out = []
+    now = datetime.now(IST)
+    nse_day = now.weekday() < 5 and now.strftime("%H:%M") >= "09:15"
     for label, s in labels:
         df = data.get(s)
         if df is None or len(df) < 2:
             continue
-        out.append(live_item(s, label, df["Close"].iloc[-1], df["Close"].iloc[-2],
-                             spark=[round(float(x), 4) for x in df["Close"].tail(30)]))
+        last, prev = df["Close"].iloc[-1], df["Close"].iloc[-2]
+        # Yahoo's daily candles for NSE / BSE often have no row for today yet: then the last close IS the previous
+        # close. Without this the live price (from the feed) was compared with the close two days back (Nifty showed
+        # +4.46% instead of +2.01% on 6 Nov).
+        if nse_day and U.group_of(s) in ("Indian Indices", "F&O Stocks") and \
+                pd.Timestamp(df.index[-1]).date() < now.date():
+            prev = last
+        out.append(live_item(s, label, last, prev, spark=[round(float(x), 4) for x in df["Close"].tail(30)]))
     return out
 
 
@@ -8502,6 +8511,48 @@ def _gap_group(g) -> str:
     return "0-0.5%" if a < 0.5 else "0.5-1%" if a < 1 else "1-3%" if a < 3 else ">3%"
 
 
+_PLAN_CACHE = _memo("deskplan")
+_PLAN_STATE = {"fired": ("● SIGNAL", UP), "closed": ("● DONE", "#3B82F6"), "wait": ("○ WAITING", GOLD),
+               "none": ("– NONE TODAY", "#64748B"), "nodata": ("? NO DATA", "#64748B")}
+
+
+def _desk_plan(svc):
+    """The regular setups (research/FINAL_SETUPS.md: gap fade, sector overreaction, panic gap-down, Bank Nifty fade,
+    Bank Nifty 5-STAR, trend day + OI, Gold Order Flow) with today's state, as on the old Trading desk. Rebuilt every
+    2 minutes in the background; the desk shows the last result straight away."""
+    if svc is None:
+        return
+    def _calc():
+        idx_b, fut_b = svc.idx_bars(), svc.ifut_bars()
+        og = opening_signals()
+        vix = idx_b.get("INDIAVIX")
+        trend = []
+        for k in ("NIFTY", "BANKNIFTY"):
+            spot = idx_b.get(k)
+            if spot is not None and not spot.empty:
+                trend.append((k, TA.evaluate(k, spot, fut_b.get(k), vix, None, TA.days_to_expiry(k, spot.index.max()))))
+        return _plan_rows(svc, idx_b, og, trend)
+    try:
+        rows = _fresh_or_last(_PLAN_CACHE, ((id(svc), datetime.now(IST).strftime("%Y-%m-%d")), int(time.time() // 120)),
+                              _calc)
+    except Exception as ex:
+        st.caption(f"Regular setups unavailable: {str(ex)[:120]}")
+        return
+    rows = rows or []
+    fired = sum(r["state"] == "fired" for r in rows)
+    st.markdown(MX.section("Regular setups · today", f"{fired} live signal{'s' if fired != 1 else ''} · gap fade, sector "
+                           "overreaction, Bank Nifty fade / 5-STAR, trend day + OI, Gold Order Flow"), unsafe_allow_html=True)
+    order = {"fired": 0, "closed": 1, "wait": 2, "none": 3, "nodata": 4}
+    html_rows = []
+    for r in sorted(rows, key=lambda r: order.get(r["state"], 9)):
+        lab, col = _PLAN_STATE.get(r["state"], ("", "#64748B"))
+        txt = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", MX._e(r["text"]))
+        dim = "" if r["state"] in ("fired", "closed") else "opacity:.72;"
+        html_rows.append(f"<div class='dk-now' style='--c:{col};{dim}'><span class=dk-tag style=--c:{col}>{lab}</span> "
+                         f"<b>{MX._e(r['name'])}</b><br>{txt} <span style='opacity:.55'>({MX._e(r['where'])})</span></div>")
+    st.markdown("".join(html_rows) or "<div class='mx-quiet'>Loading…</div>", unsafe_allow_html=True)
+
+
 @st.fragment(run_every=LIVE_EVERY)
 def _desk_body():
     now = datetime.now(IST)
@@ -8519,6 +8570,7 @@ def _desk_body():
     st.markdown(MX.section("Tested setups · open and closed today", f"V3 early pick · Nifty ORB break · price now from the last "
                            f"closed candle · {n_test} testing-setup trades on Paper & Data"), unsafe_allow_html=True)
     _trade_monitor(core, ltp, now, "dk_mon")
+    _desk_plan(svc)
     # ---- 2. playbook now + sector money, then index levels full width
     c1, c3 = st.columns([1.3, 1], gap="medium")
     with c1:
