@@ -7,7 +7,7 @@
   5 CHART       yesterday's high/low break, first 15-min and first-hour range break, acceleration, VWAP, RSI, room
                 to the next support / resistance
   6 DECISION    TRADE or REJECT, with every reason: with the market only (longs while Nifty is up, shorts while down),
-                at most 3 trades a day and 1 per sector (best scores first); entry = next candle's open, stop = last
+                entries 11:00-12:00 only, at most 3 trades a day and 1 per sector (best scores first); entry = next candle's open, stop = last
                 swing (0.3-1.0 ATR), target 3R, profit lock after +1R, 15:20
 
 Each stage returns a table with every stock it looked at, PASS / REJECT and the reason, so any rule can be reviewed and
@@ -34,7 +34,10 @@ RULES = {
     # 5 chart (pass when price is on the right side of VWAP and at least `chart_need` of the 7 checks hold)
     "rsi_long": (55, 80), "rsi_short": (20, 45), "room_atr": 0.5, "chart_need": 4,
     # 6 decision
-    "first_entry": "09:30", "last_entry": "14:30", "max_trades": 3, "max_per_sector": 1, "stop_atr": (0.3, 1.0),
+    # entries 11:00-12:00, after the market settles (40-day test: every market-aligned candidate by window: 9:30-10
+    # +0.19%, 10-11 ~0, 11-12 +0.13% with 59% wins, after 13:00 ~0; 3 a day in 11:00-12:00 only = 62% wins, +0.20% a
+    # trade, positive in every month and both halves, while the opening trades lost September)
+    "first_entry": "11:00", "last_entry": "12:00", "max_trades": 3, "max_per_sector": 1, "stop_atr": (0.3, 1.0),
     "target_r": 3.0,
     "min_rr": 1.5,
     # with the market: longs only while Nifty is up on the day, shorts only while it is down (research/superbot_strict.py,
@@ -229,9 +232,9 @@ def run(S: dict, per: dict, events: pd.DataFrame, oi: pd.DataFrame, sector_of: d
         elif against:
             decision, why = "REJECT", f"against the market (Nifty {nifty_chg:+.2f}%): longs only when Nifty is up, shorts when down"
         elif hm < R["first_entry"]:
-            decision, why = "REJECT", f"before {R['first_entry']}"
-        elif hm > R["last_entry"]:
-            decision, why = "REJECT", f"after {R['last_entry']}: too late for a new trade"
+            decision, why = "REJECT", f"before {R['first_entry']}: entries only after the market settles ({R['first_entry']}-{R['last_entry']})"
+        elif hm >= R["last_entry"]:
+            decision, why = "REJECT", f"after {R['last_entry']}: outside the entry window ({R['first_entry']}-{R['last_entry']})"
         elif not np.isfinite(rr) or rr < R["min_rr"]:
             decision, why = "REJECT", f"reward/risk {rr:.1f} below {R['min_rr']}"
         else:

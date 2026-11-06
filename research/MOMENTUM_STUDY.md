@@ -485,3 +485,9 @@ Same entries, 6 stops x 6 targets x 6 trails, on the 120 picks and on all 2,313 
   profit from +0.5R raises wins (69%) but cuts the winners (+0.10% picks, +0.01% all). The current exits stay.
 - Losses are the cost of the setup: control them by size (the same rupee risk per trade, 1R = the stop distance)
   and the 3-a-day / 1-per-sector limits, not by more exit rules.
+
+## Super Bot entry window (7 Nov 2026)
+Every market-aligned candidate by entry window (40 days): 9:30-10 +0.19% (56% wins), 10-10:30 +0.04%, 10:30-11
+-0.01%, 11-12 +0.13% (59%), 12-13 +0.03%, 13-14:30 -0.01%. With 3 a day: from 9:30 (fills in the first half hour)
++0.27% but September -0.6%; 11:00-12:00 only +0.20%, 62% wins, t 2.17, Sep +4.4 / Oct +14.8 / Nov +4.4%, halves
++0.20 / +0.19; opening only +0.16% with September -9.5% (33% wins). Adopted (paper): entries 11:00-12:00.
