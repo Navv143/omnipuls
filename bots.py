@@ -1176,7 +1176,7 @@ def v3_step(mkt: "Market", now: datetime):
         stop_pct = abs(entry - stop) / entry * 100 if entry else None
         pct = float(r["P&L %"]) - (0.12 if str(r["Status"]).startswith(("Closed", "Stopped", "Trailed")) else 0)
         row = {"day": day, "setup": f"{setup} {r['Stock']}", "symbol": r["Stock"], "side": side, "signal_at": r["Signal"],
-               "entry_at": r["Signal"], "entry_at_ist": r["Signal"], "entry": round(entry, 2), "sl": round(stop, 2), "tp": None,
+               "entry_at": r.get("Entry at") or r["Signal"], "entry_at_ist": r.get("Entry at") or r["Signal"], "entry": round(entry, 2), "sl": round(stop, 2), "tp": None,
                "stop_pct": round(stop_pct, 3) if stop_pct else None, "result": r["Status"],
                "exit_at": r.get("Exit time") or None, "exit_px": round(float(r["Exit/LTP"]), 2),
                "r": round(pct / stop_pct, 2) if stop_pct else None, "pct": round(pct, 3)}
