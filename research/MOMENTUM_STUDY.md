@@ -394,3 +394,10 @@ bots), so nothing signals before the first candle closes (9:18). Timeframe: 3 mi
 candles anchored to 9:15 (OMNI_TF=5 to go back); history from the shared 1-minute cache (cache_m1). The bots run 10 s
 after each candle closes. V3 on 3-minute candles (Yahoo 1-min, 80 stocks, 7 days) works: 6 Nov CGPOWER short on the
 9:30-9:33 candle. The backtests were on 5-minute candles: the live record and tonight's 3-minute candle study re-check.
+
+## After the breakout: hour by hour (6 Nov 2026, `research/breakout_hourly.py`)
+276 breakouts of the 9:30 top-10 movers (45 days). Median move its way at each hour's end +0.09% / -0.01% / +0.01% /
++0.04% / +0.07%, with ~+0.4-0.6% best and ~-0.3-0.5% worst inside each hour. The first hour decides: below -0.5% after
+hour 1 -> rest of day -0.30% (no recovery); 0 to +0.5% -> +0.31%; above +1% -> +0.48% (winners keep running). Rule
+"exit at 1 hour if below -0.25%, else hold to 15:20": +0.233% a trade (halves +0.29 / +0.18) vs hold-all +0.139%.
+Desk V3 watchlist now shows entry, each hour's move with its high / low, now %, and the hour-1 call.

@@ -84,6 +84,7 @@ import bot as BOT
 import paths as PATHS
 import cryptocom as CC
 import cloudstore as CS
+import candles as C
 import desk_log as DL
 import five_star as FIVE
 import chain_log as CL
@@ -8161,7 +8162,7 @@ def _window_now(now: datetime) -> str:
 _PLAYBOOK = [  # (window key, time, what the desk does)
     ("pre", "Before 9:15", "Gap list by group: > 3% / 1-3% / 0.5-1% / flat. 1-3% gap-with = avoid (trap). Iron fly: open the day after expiry."),
     ("open", "9:15-9:30", "No signals: the first 3-min candle closes at 9:18 (pre-open price only before that). The 9:15-9:30 range is being built; note the top-10 movers."),
-    ("v3", "9:30-10:00", "V3: enter on the first 3-min CLOSE beyond the 9:15-9:30 range (first chance 9:33; 60% break by 9:45, 77% by 10:00). No retest wait."),
+    ("v3", "9:30-10:00", "V3: enter on the first 3-min CLOSE beyond the 9:15-9:30 range (first chance 9:33; 60% break by 9:45, 77% by 10:00). No retest wait. One hour after entry: below -0.25% = exit, else hold."),
     ("flat", "10:00-10:45", "Flat-open stocks (44% of the day's toppers move now): Footprint top 2, Aligned, Grinder 10:30."),
     ("mid", "11:00-13:30", "Sector top 2 at 11 / 12 / 13. Nifty breakouts here fade: midday fade, not chase."),
     ("late", "13:30-15:20", "Manage only: trail, exit 15:20. No new stock entries."),
@@ -8276,7 +8277,15 @@ def _desk_body():
             N = SC.Stock("NIFTY 50", nifty_df, session)
             diag, early = SC.v3_diagnose(S, N if N.ok else None)
             if diag is not None and not diag.empty:
-                st.dataframe(diag, hide_index=True, width="stretch", height=_h(len(diag), 420), key="dk_v3")
+                diag = _v3_hourly(diag, S, datetime.now(IST))
+                cols = ["Rank", "Stock", "Breakout", "Side", "Entry at", "Entry", "Now %", "1h", "2h", "3h", "4h", "5h",
+                        "Hour-1 call", "Volume x", "Gap %", "Why"]
+                st.dataframe(diag.reindex(columns=[c for c in cols if c in diag.columns]), hide_index=True, width="stretch",
+                             height=_h(len(diag), 420), key="dk_v3",
+                             column_config={"Now %": st.column_config.NumberColumn(format="%+.2f")})
+                st.caption("Each hour after entry: move at the hour's end (H = best, L = worst inside that hour). "
+                           "Hour-1 call from 276 past breakouts: below -0.25% after 1 hour = exit (losers don't recover), "
+                           "else hold to 15:20 - +0.23% a trade vs +0.14% holding all.")
             if early:
                 st.markdown(f"<div class='dk-now' style='--c:{UP}'><b>V3 early pick: {MX._e(str(early.get('Stock')))}</b> · "
                             f"{MX._e(str(early.get('Side')))} · signal {MX._e(str(early.get('Signal')))} · entry {early.get('Entry')} · "
@@ -8285,6 +8294,48 @@ def _desk_body():
             st.caption("Waiting for today's candles.")
     except Exception as e:
         st.caption(f"V3 watchlist unavailable: {e}")
+
+
+def _v3_hourly(diag: pd.DataFrame, S: dict, now: datetime) -> pd.DataFrame:
+    """For every stock that broke out: entry (next candle's open), and each hour after entry the move % its way at the
+    hour's end with the best / worst inside that hour, the move now, and the hour-1 call (research/breakout_hourly.py:
+    below -0.25% after the first hour -> exit, else hold to 15:20: +0.23% vs +0.14% a trade, both halves better)."""
+    out = diag.copy()
+    for c in ("Entry at", "Entry", "Now %", "1h", "2h", "3h", "4h", "5h", "Hour-1 call"):
+        out[c] = None
+    for i, r in out.iterrows():
+        bt = str(r.get("Breakout") or "")
+        s = S.get(r.get("Stock"))
+        if s is None or not bt or bt == "—":
+            continue
+        side = 1 if str(r.get("Side", "")).startswith("BUY") else -1
+        t = s.today
+        hm = t.index.strftime("%H:%M")
+        k = np.flatnonzero(hm == bt)
+        if not len(k) or k[0] + 1 >= len(t):
+            out.at[i, "Hour-1 call"] = "entry at next candle"
+            continue
+        e_ts, e = t.index[k[0] + 1], float(t["Open"].iloc[k[0] + 1])
+        post = t.iloc[k[0] + 1:]
+        out.at[i, "Entry at"], out.at[i, "Entry"] = e_ts.strftime("%H:%M"), round(e, 2)
+        out.at[i, "Now %"] = round(side * (float(post["Close"].iloc[-1]) / e - 1) * 100, 2)
+        h1 = None
+        for h in range(1, 6):
+            w = post[(post.index >= e_ts + pd.Timedelta(hours=h - 1)) & (post.index < e_ts + pd.Timedelta(hours=h))]
+            if w.empty:
+                break
+            mv = side * (float(w["Close"].iloc[-1]) / e - 1) * 100
+            best = (side * ((w["High"] if side > 0 else w["Low"]) / e - 1) * 100).max()
+            worst = (side * ((w["Low"] if side > 0 else w["High"]) / e - 1) * 100).min()
+            done = w.index[-1] + pd.Timedelta(minutes=C.TF) >= e_ts + pd.Timedelta(hours=h)
+            out.at[i, f"{h}h"] = f"{mv:+.2f}%  (H {best:+.2f} / L {worst:+.2f})" + ("" if done else " …")
+            if h == 1 and done:
+                h1 = mv
+        if h1 is None:
+            out.at[i, "Hour-1 call"] = f"check at {(e_ts + pd.Timedelta(hours=1)):%H:%M}"
+        else:
+            out.at[i, "Hour-1 call"] = "HOLD to 15:20" if h1 > -0.25 else "EXIT (hour 1 below -0.25%)"
+    return out
 
 
 def page_desk():
