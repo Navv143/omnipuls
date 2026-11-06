@@ -45,3 +45,23 @@ filters). Target 3R (the PDF's 1:3) and 1.5R.
 
 Verdict: as mechanical rules none of the 7 setups has an edge after costs on Indian indices, stocks or commodities. Our
 Super Bot (with the market, 1 per sector, settled window) stays far better (+0.20% a trade, t 2.2, no losing month).
+
+## 3. Pawan Sharma triple SMMA and NK Singh Hilega-Milega (`ma_setups.py`)
+
+Exact rules at the top of `ma_setups.py`. Markets / timeframes as above (Nifty, BankNifty 2m-1h; 180 F&O stocks 5m / 15m,
+60 stocks 1h over 3 years; gold, silver, crude, natural gas 5m-1h), intraday (out at 15:20) and swing (15m / 1h).
+
+| Setup | Nifty | BankNifty | F&O stocks | Commodities |
+|---|---|---|---|---|
+| Triple SMMA (PDF: HTF filter, cross exit) | 2m +0.04%, 5m +0.03% (41-43 trades, t < 1); 15m / 1h ~0 or minus | minus on every TF (-0.05 to -0.10%) | minus on every TF (5m -0.08%, 10,688 trades) | 1h +0.10% (t 1.2, 2nd half +0.04%); 5m / 15m minus |
+| Hilega-Milega (PDF: 50 MA filter) intraday | -0.02% (2m / 5m), +0.03% (15m), -0.01% (1h) | minus on every TF | -0.09 to -0.12% on every TF (73,342 trades on 5m) | ~0 to minus |
+| Hilega-Milega swing 1h (3 years) | **+0.11%, 285 trades, t 2.08, both halves +** | ~0 (-0.002%) | -0.06% | ~0 |
+
+- The HTF filter (SMMA) and the 50 MA filter (H-M) help only a little (a few hundredths of a %), not enough to make
+  either setup positive after costs.
+- The PDF's literal 'green crosses above RSI' for longs rarely fires and loses.
+- The one survivor, Nifty 1h H-M swing, is not the rising market: shorts made +0.15% a trade, longs +0.07%; 2024-2026
+  positive. But the same rule is flat on BankNifty and loses on stocks, and it is 1 of ~110 combinations: unconfirmed.
+  At most worth paper-tracking on Nifty only (about 2 trades a week, ~6 hours a trade).
+
+Verdict: neither setup is a tradable edge after costs on Indian stocks, BankNifty or commodities intraday.
