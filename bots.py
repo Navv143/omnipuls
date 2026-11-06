@@ -1193,6 +1193,92 @@ def v3_step(mkt: "Market", now: datetime):
             log(f"v3 record: {e}")
 
 
+RADAR_SLOTS = ("09:20", "09:45", "10:30", "12:00", "13:30", "15:00")
+RADAR_FILE = OUT / "radar_snapshots.json"
+
+
+def radar_snapshot_step(mkt: "Market", now: datetime, top: int = 15):
+    """The momentum radar's top stocks at 9:20, 9:45, 10:30, 12:00, 13:30 and 15:00 (each computed on the candles up to
+    that time, so a restart can fill a missed slot the same way), saved to Supabase radar_snapshots; after 15:25 each
+    row gets what the stock did afterwards (price at the close, best and worst move its way). For research: which
+    stocks stay on the list all day, and which snapshot time picks the movers."""
+    import scanners as SC
+    from datetime import time as dtime
+    hm = now.strftime("%H:%M")
+    if hm < RADAR_SLOTS[0]:
+        return
+    nb = mkt.bars("NIFTY")
+    session = SC.session_of(nb)
+    day = now.strftime("%Y-%m-%d")
+    if session is None or session.strftime("%Y-%m-%d") != day:
+        return
+    try:
+        state = json.loads(RADAR_FILE.read_text())
+    except Exception:
+        state = {}
+    if state.get("day") != day:
+        state = {"day": day, "done": [], "closed": False}
+    due = [x for x in RADAR_SLOTS if x <= hm and x not in state["done"]]
+    finish = hm >= "15:25" and not state.get("closed")
+    if not due and not finish:
+        return
+    S = SC.prepare(mkt.stock_bars(), session)
+    if len(S) < 50:
+        return
+    rows = []
+    for slot in due:
+        h, m = map(int, slot.split(":"))
+        try:
+            rd = SC.radar(S, None, at=dtime(h, m))
+        except Exception as e:
+            log(f"radar snapshot {slot}: {e}")
+            continue
+        for i, r in enumerate(rd.head(top).to_dict("records"), start=1):
+            rows.append({"day": day, "slot": slot, "rank": i, "stock": r["Stock"], "side": r["Side"],
+                         "sector": r.get("Sector"), "price": r.get("Price"), "move_pct": r.get("Move %"),
+                         "from_open_pct": r.get("From open %"), "move_atr": r.get("Move / ATR"),
+                         "vol_vs_usual": r.get("Volume vs usual"), "last30_vol": r.get("Last 30 min vol vs usual"),
+                         "range_vs_usual": r.get("Range vs usual"), "sector_move": r.get("Sector move %"),
+                         "broke_yday": r.get("Broke yday high/low") or None, "tf_fit": r.get("TradeFinder fit") or None,
+                         "buildup": r.get("Buildup") or None, "big_bars": int(r.get("Big-money bars") or 0),
+                         "score": r.get("Score")})
+        state["done"].append(slot)
+        log(f"radar snapshot {slot}: {min(top, len(rd))} stocks")
+    if finish:
+        try:
+            have = _cloud().select_rows("radar_snapshots", {"select": "*", "day": f"eq.{day}"}) or []
+        except Exception:
+            have = []
+        for x in have + [r for r in rows]:
+            st_ = S.get(x["stock"])
+            if st_ is None or not x.get("price"):
+                continue
+            sd = 1 if str(x.get("side", "")).startswith("BUY") else -1
+            h, m = map(int, x["slot"].split(":"))
+            after = st_.today[st_.today.index.time >= dtime(h, m)]
+            if after.empty:
+                continue
+            px0 = float(x["price"])
+            close = float(after["Close"].iloc[-1])
+            x["close_px"] = round(close, 2)
+            x["after_pct"] = round(sd * (close / px0 - 1) * 100, 3)
+            x["best_pct"] = round(sd * ((after["High"].max() if sd > 0 else after["Low"].min()) / px0 - 1) * 100, 3)
+            x["worst_pct"] = round(sd * ((after["Low"].min() if sd > 0 else after["High"].max()) / px0 - 1) * 100, 3)
+        rows = [r for r in rows] + [x for x in have if "close_px" in x]
+        state["closed"] = True
+    if rows:
+        uniq = {}
+        for r in rows:                          # one row per (day, slot, stock): Postgres rejects repeats in one upsert
+            uniq[(r["day"], r["slot"], r["stock"])] = {k: v for k, v in r.items() if k != "updated_at"}
+        clean = list(uniq.values())
+        try:
+            _cloud().upsert_rows("radar_snapshots", _clean(clean), "day,slot,stock")
+        except Exception as e:
+            log(f"radar snapshots: {e}")
+            return
+    RADAR_FILE.write_text(json.dumps(state))
+
+
 MOM_FILE = OUT / "momentum_record.json"
 
 
@@ -1308,6 +1394,10 @@ def cycle(mkt: Market) -> dict:
         momentum_step(mkt, now)
     except Exception as e:
         log(f"momentum paper: {e}")
+    try:
+        radar_snapshot_step(mkt, now)
+    except Exception as e:
+        log(f"radar snapshots: {e}")
     try:
         import ironfly as IFY
         fly = IFY.step(now)
