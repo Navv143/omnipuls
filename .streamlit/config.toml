@@ -7,7 +7,9 @@ primaryColor = "#3B82F6"
 backgroundColor = "#0B1220"
 secondaryBackgroundColor = "#131D2F"
 textColor = "#E6EDF7"
-borderColor = "#22314A"
+borderColor = "#34496E"
+# lines between table cells: a blue tint so every grid reads as a framed table
+dataframeBorderColor = "#2D4F80"
 dataframeHeaderBackgroundColor = "#1E293B"
 dataframeHeaderTextColor = "#E6EDF7"
 # Type: Inter for text and numbers (clear at small sizes, fixed-width digits so ticking prices don't jump),
