@@ -1866,7 +1866,19 @@ def tv_chart(df: pd.DataFrame, sym: str, intraday: bool, overlays: list, piv: di
                   for k, v in piv.items()]
     levels += list(extra_levels or [])
     ml, ms, mh = ind.macd(c)
+    tick_key, tf_sec = None, 0
+    if intraday and FEED is not None and (TICKS or not PUBLIC):
+        ref = dhan_ref(sym)
+        if ref:
+            tick_key = F.key(ref[0], ref[1])
+            try:
+                FEED.subscribe([(ref[0], ref[1])])
+            except Exception:
+                pass
+        if len(t) > 3:
+            tf_sec = int(pd.Series(t[-50:]).diff().dropna().median() or 0)
     _tv(bars=bars, lines=lines, levels=levels, vol=bool(has_vol), rsi=_tv_series(t, ind.rsi(c)),
+        tick_key=tick_key, tf_sec=tf_sec, wskey=getattr(FEED, "relay_key", ""), port=(FEED.relay_port if FEED is not None else 0),
         macd={"line": _tv_series(t, ml), "signal": _tv_series(t, ms), "hist": _tv_series(t, mh)},
         precision=decimals_for(float(c.iloc[-1])), intraday=intraday, title=f"{name_of(sym)} · {tf_key}",
         rev=f"{sym}-{tf_key}", height=560 if MOBILE else 760, mobile=MOBILE, key="main_chart", default=None)
@@ -2070,6 +2082,7 @@ def _fresh_or_last(memo: dict, key: tuple, compute, tag: str = "v"):
 
 
 _SCAN_CACHE = _memo("scan")
+_V3W_CACHE = _memo("v3watch")
 
 
 def _scan_now(svc):
@@ -2414,12 +2427,7 @@ def trading_desk(svc, t, sf, R, flow, secflow, idx_b, fut_b, sc, picks, og):
     sec_flag = sf.set_index("Sector")["Flow"].to_dict() if not sf.empty else {}
     rd = sc[0] if sc is not None else pd.DataFrame()
     ce, pe = DK.focus(R, flow, rd, picks, sec_flag)
-    _log_desk(snaps, verdict, plans, ce, pe)
-    try:
-        if datetime.now(IST).weekday() < 5:
-            _log_paper(svc, idx_b, og, datetime.now(IST).replace(tzinfo=None))
-    except Exception as e:
-        DL.STATUS["error"] = f"paper log: {e}"[:200]
+    _bg_log(snaps, verdict, plans, ce, pe, svc, idx_b, og)
     c1, c2, c3 = st.columns([1.1, 1, 1]) if not MOBILE else (st.container(), st.container(), st.container())
     with c1:
         st.markdown("<div class='dk-kicker' style='margin:2px 0 8px'>Index options</div>", unsafe_allow_html=True)
@@ -6790,6 +6798,29 @@ class _NullBox:
         pass
 
 
+_BG_LOG = {"busy": False}
+
+
+def _bg_log(snaps, verdict, plans, ce, pe, svc, idx_b, og):
+    """The desk log and the paper log (Supabase) in a background thread, one at a time: the page doesn't wait."""
+    import threading
+    if _BG_LOG["busy"]:
+        return
+    _BG_LOG["busy"] = True
+
+    def run():
+        try:
+            _log_desk(snaps, verdict, plans, ce, pe)
+            if datetime.now(IST).weekday() < 5:
+                _log_paper(svc, idx_b, og, datetime.now(IST).replace(tzinfo=None))
+        except Exception as e:
+            DL.STATUS["error"] = f"desk log: {e}"[:200]
+        finally:
+            _BG_LOG["busy"] = False
+
+    threading.Thread(target=run, daemon=True, name="omni-desklog").start()
+
+
 def market_view_body(svc, t: pd.DataFrame):
     st.markdown(MV_CSS, unsafe_allow_html=True)
     sf = sector_flow_table()
@@ -6833,12 +6864,7 @@ def market_view_body(svc, t: pd.DataFrame):
         if x:
             plans.append(DK.index_plan(name, x["last"], TA.STEP.get(k, 50), verdict, tr, share if k == "NIFTY" else None))
     _tl = time.time()
-    try:  # the desk log (Supabase) keeps recording when people use this page instead of the Trading Desk
-        _log_desk(snaps, verdict, plans, ce, pe)
-        if datetime.now(IST).weekday() < 5:
-            _log_paper(svc, idx_b, og, datetime.now(IST).replace(tzinfo=None))
-    except Exception as e:
-        DL.STATUS["error"] = f"market view log: {e}"[:200]
+    _bg_log(snaps, verdict, plans, ce, pe, svc, idx_b, og)   # in the background: the page no longer waits ~4 s for it
     st.session_state.setdefault("_perf", {})["desk log"] = time.time() - _tl
     with _timed("index plans"):
         plan_rows = _plan_rows(svc, idx_b, og, trend)
@@ -6944,7 +6970,10 @@ def market_view_body(svc, t: pd.DataFrame):
     read_of = {r["title"]: r for r in idx_reads if r}
     tiles = [MX.pulse_tile(nm, snaps.get(k), read_of.get(nm), idx_b.get(k)) for k, nm in names]
     tiles.append(MX.pulse_tile("India VIX", snaps.get("INDIAVIX"), None, None, invert=True))
-    st.markdown(MX.pulse(tiles), unsafe_allow_html=True)
+    if FEED is not None and (TICKS or not PUBLIC):
+        live_index_tiles(idx_b, "mv_live_idx")                # live ticks instead of the once-a-minute tiles
+    else:
+        st.markdown(MX.pulse(tiles), unsafe_allow_html=True)
 
     # ---- 2. mood gauge + the trade idea
     bull = sum(1 for r in every if r["tone"] > 0)
@@ -8272,6 +8301,33 @@ _PLAYBOOK = [  # (window key, time, what the desk does)
 ]
 
 
+_LIVE_IDX = (("NIFTY", "^NSEI", "Nifty 50"), ("BANKNIFTY", "^NSEBANK", "Bank Nifty"),
+             ("FINNIFTY", "NIFTY_FIN_SERVICE.NS", "Fin Nifty"), ("MIDCPNIFTY", "NIFTY_MID_SELECT.NS", "Midcap Select"),
+             ("SENSEX", "^BSESN", "Sensex"), ("INDIAVIX", "^INDIAVIX", "India VIX"))
+
+
+def live_index_tiles(idx_bars: dict, key: str):
+    """The main indices as live tiles: every tick from the Dhan feed moves them, no page refresh needed."""
+    items, pairs = [], []
+    for k, sym, label in _LIVE_IDX:
+        x = _idx_snapshot(idx_bars.get(k))
+        if not x:
+            continue
+        prev = x["last"] / (1 + x["chg"] / 100) if x.get("chg") is not None and np.isfinite(x["chg"]) else None
+        sp = [round(float(v), 2) for v in list(x["closes"])[-60:]] if x.get("closes") is not None else []
+        items.append(live_item(sym, label, x["last"], prev, spark=sp))
+        ref = dhan_ref(sym) if FEED is not None else None
+        if ref:
+            pairs.append((ref[0], ref[1]))
+    if FEED is not None and pairs:
+        try:
+            FEED.subscribe(pairs)
+        except Exception:
+            pass
+    if items:
+        live("tiles", items, key=key)
+
+
 def _market_strip():
     """Index, VIX, breadth and money flow in one row (Dhan)."""
     if not DHAN_DATA:
@@ -8290,15 +8346,9 @@ def _market_strip():
     R = act[0] if act else pd.DataFrame()
     adv = int((R["Chg %"] > 0).sum()) if not R.empty else None
     dec = int((R["Chg %"] < 0).sum()) if not R.empty else None
+    live_index_tiles(ib, "dk_live_idx")                       # ticks live (Dhan feed relay), no refresh
     parts = []
-    for k, nm in (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"), ("FINNIFTY", "Fin Nifty")):
-        x = snaps.get(k)
-        if x:
-            parts.append(MX.kpi(nm, f"{x['last']:,.1f}", f"{x['chg']:+.2f}% · from open {x['from_open']:+.2f}%",
-                                MX.tone_color(x["chg"])))
-    vx = snaps.get("INDIAVIX")
-    if vx:
-        parts.append(MX.kpi("India VIX", f"{vx['last']:.2f}", f"{vx['chg']:+.2f}%", MX.tone_color(-vx["chg"])))
+    del snaps
     if adv is not None:
         parts.append(MX.kpi("Breadth (F&O)", f"{adv} / {dec}", "advancing / declining", MX.tone_color(adv - dec)))
     if not flow.empty:
@@ -8495,11 +8545,13 @@ def _desk_body():
     try:
         bars, nifty_df = svc.bars()
         if bars and nifty_df is not None and not nifty_df.empty:
-            S, session = _prepared_now(svc)
-            N = SC.Stock("NIFTY 50", nifty_df, session)
-            diag, early = SC.v3_diagnose(S, N if N.ok else None)
+            def _calc():
+                S, session = _prepared_now(svc)
+                N = SC.Stock("NIFTY 50", nifty_df, session)
+                d_, e_ = SC.v3_diagnose(S, N if N.ok else None)
+                return (_v3_hourly(d_, S, datetime.now(IST)) if d_ is not None and not d_.empty else d_), e_
+            diag, early = _fresh_or_last(_V3W_CACHE, ((id(svc), SC.session_of(nifty_df)), svc.last_pass, len(bars)), _calc)
             if diag is not None and not diag.empty:
-                diag = _v3_hourly(diag, S, datetime.now(IST))
                 cols = ["Rank", "Stock", "Breakout", "Side", "Entry at", "Entry", "Now", "Now %", "1h", "2h", "3h", "4h", "5h",
                         "Hour-1 call", "Volume x", "Gap %", "Why"]
                 st.dataframe(diag.reindex(columns=[c for c in cols if c in diag.columns]), hide_index=True, width="stretch",
