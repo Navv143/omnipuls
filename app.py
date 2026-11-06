@@ -9414,6 +9414,70 @@ def _rb_chart(r: dict, df: pd.DataFrame, intraday: bool, key: str, height: int, 
     st.plotly_chart(fig, width="stretch", key=key)
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def _rb_bt_stats() -> dict:
+    """The nightly back-test of the bot's plans (research_bot_backtest.py)."""
+    try:
+        return json.loads((PATHS.DATA / "bot" / "research_bot_bt.json").read_text())
+    except Exception:
+        return {}
+
+
+def _rb_activity(sym: str) -> dict | None:
+    """The stock's money and activity from our own engine: money flow (day / last 30 min), smart score, volume vs
+    usual, unusual candles today, its sector's money and rank, radar / V3 lists, Super Bot stage."""
+    if not DHAN_DATA or not sym.endswith(".NS"):
+        return None
+    stock = sym[:-3]
+    try:
+        svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
+        act = _activity_data(svc)
+        if not act:
+            return None
+        R, E, per = act[0], act[1], act[2]
+        out = {}
+        row = R[R["Stock"] == stock]
+        if not row.empty:
+            x = row.iloc[0]
+            out.update({"Smart score": x.get("Smart"), "Volume vs usual": x.get("Vol x (time)"),
+                        "Futures build-up": x.get("Buildup") or ""})
+        c = per.get(stock)
+        if c is not None and len(c) and "Net Flow Cr" in c:
+            out["Money today ₹ Cr"] = float(c["Net Flow Cr"].sum())
+            out["Money last 30 min ₹ Cr"] = float(c.loc[c.index > c.index[-1] - pd.Timedelta(minutes=30), "Net Flow Cr"].sum())
+        if E is not None and not E.empty:
+            e = E[E["Stock"] == stock]
+            out["Unusual candles today"] = int(len(e))
+            out["…of them bullish"] = int((e["Candle"].isin(["Bullish", "Green"])).sum())
+        flow = A.flow_window(per, None)
+        if not flow.empty:
+            flow["Sector"] = flow["Stock"].map(U.FNO_SECTOR_OF).fillna("Other")
+            sec = A.sector_flow(flow)
+            mine = U.FNO_SECTOR_OF.get(stock)
+            if mine and mine in set(sec["Sector"]):
+                k = int(sec.index[sec["Sector"] == mine][0])
+                out["Sector"] = mine
+                out["Sector money ₹ Cr"] = float(sec.loc[k, "Net Flow Cr"])
+                out["Sector rank"] = f"{list(sec['Sector']).index(mine) + 1} of {len(sec)}"
+        sc = getattr(svc, "scans", None) or {}
+        rd = sc.get("radar")
+        if rd is not None and not rd.empty and stock in set(rd["Stock"]):
+            out["Momentum radar"] = f"#{list(rd['Stock']).index(stock) + 1}"
+        dg = (sc.get("v3diag") or (None, None))[0]
+        if dg is not None and not dg.empty and stock in set(dg["Stock"]):
+            out["V3 top 10"] = str(dg.loc[dg["Stock"] == stock, "Why"].iloc[0])[:60]
+        try:
+            sb = CS.select_rows("superbot_stage", {"select": "stage,passed", "day": f"eq.{datetime.now(IST):%Y-%m-%d}",
+                                                   "stock": f"eq.{stock}"}) or []
+            passed = [x["stage"] for x in sb if x.get("passed")]
+            out["Super Bot"] = f"passed stage {max(passed)} of 6" if passed else ("seen, not passed" if sb else "not seen")
+        except Exception:
+            pass
+        return out
+    except Exception:
+        return None
+
+
 def page_research_bot():
     import research_bot as RB
     st.markdown(MX.page_title("Research Bot", "type any stock or index · levels, trend, OI, news and a plan · "
@@ -9463,12 +9527,31 @@ def page_research_bot():
     # ---- the plan for both directions
     st.markdown(MX.section("Trade plan", "both directions · the bias side first · entry, stop at the swing / support, "
                            "targets at the next levels"), unsafe_allow_html=True)
+    import research_bot_backtest as RBT
+    bt = _rb_bt_stats().get("stats") or {}
     plans = sorted(r["plans"], key=lambda p: 0 if (p["side"] == "BUY") == (r["bias"] != "Bearish") else 1)
-    pt = pd.DataFrame([{"Side": p["side"], "Entry": p["entry"], "Stop": p["stop"], "Target 1": p["t1"], "Target 2": p["t2"],
-                        "Risk %": p["risk_pct"], "Reward : risk": p["rr1"], "When": p["how"]} for p in plans])
+    rows_ = []
+    for kind, p in ([("Intraday", r["intraday_plan"])] if r.get("intraday_plan") else []) + [("Swing", x) for x in plans]:
+        et = "at market" if abs(p["entry"] / r["price"] - 1) < 0.0005 else "breakout"
+        m_ = RBT.match(bt, p["side"], et, r["trend"], kind.lower())
+        rows_.append({"Plan": kind, "Side": p["side"], "Entry": p["entry"], "Stop": p["stop"], "Target 1": p["t1"],
+                      "Target 2": p["t2"], "Risk %": p["risk_pct"], "Reward : risk": p["rr1"],
+                      "Past: T1 hit first %": m_["hit_t1_pct"] if m_ else None, "Past: avg % a trade": m_["avg_pct"] if m_ else None,
+                      "Past cases": m_["n"] if m_ else None, "When": p["how"]})
+    pt = pd.DataFrame(rows_)
     st.dataframe(pt, hide_index=True, width="stretch", key="rb_plan", column_config={
         c: st.column_config.NumberColumn(format="%.2f") for c in ("Entry", "Stop", "Target 1", "Target 2", "Risk %", "Reward : risk")}
-        | {"When": st.column_config.TextColumn(width="large")})
+        | {"When": st.column_config.TextColumn(width="large"), "Past: T1 hit first %": st.column_config.NumberColumn(format="%.0f"),
+           "Past: avg % a trade": st.column_config.NumberColumn(format="%+.2f"), "Past cases": st.column_config.NumberColumn(format="%d")})
+    if bt:
+        a_ = (bt.get("intraday") or {}).get("all") or {}
+        st.caption(f"Past = the bot replayed on {(bt.get('intraday') or bt.get('swing') or {}).get('stocks', '?')} F&O stocks "
+                   f"({(bt.get('intraday') or {}).get('from', '')} to {(bt.get('intraday') or {}).get('to', '')}), same kind of "
+                   f"plan, side, entry and trend. Intraday plans overall: {a_.get('n', 0)} trades, target 1 first "
+                   f"{a_.get('hit_t1_pct', 0):.0f}%, {a_.get('avg_pct', 0):+.2f}% a trade after costs. Near zero = the levels "
+                   "are a map, not an edge: use them with the Desk's tested setups.")
+    else:
+        st.caption("Past record: the nightly back-test of the bot's plans fills these columns from the next morning.")
     # ---- charts
     if intra is not None and not intra.empty:
         last2 = intra[intra.index.normalize() >= sorted(set(intra.index.normalize()))[-min(2, len(set(intra.index.normalize())))]]
@@ -9518,6 +9601,26 @@ def page_research_bot():
         z = r["oi"] or r["chain"]
         st.markdown(MX.kpis([MX.kpi(k, (f"{v:,.2f}" if isinstance(v, (int, float, np.floating)) and np.isfinite(v) else str(v or "—")),
                                     "", MX.ACCENT) for k, v in z.items()]), unsafe_allow_html=True)
+    # ---- our own money and activity data
+    ac = _rb_activity(sym)
+    if ac:
+        sd = 1 if r["bias"] == "Bullish" else -1 if r["bias"] == "Bearish" else 0
+        agree = [k for k, v in (("money today", ac.get("Money today ₹ Cr")), ("money last 30 min", ac.get("Money last 30 min ₹ Cr")),
+                                ("smart score", ac.get("Smart score")), ("sector money", ac.get("Sector money ₹ Cr")))
+                 if isinstance(v, (int, float, np.floating)) and np.isfinite(v) and sd and np.sign(v) == sd]
+        note_ = (f"{len(agree)} of 4 agree with the {r['bias'].lower()} bias: " + ", ".join(agree)) if sd else \
+            "bias neutral: money readings only"
+        st.markdown(MX.section("Money and activity", note_), unsafe_allow_html=True)
+
+        def _fmt(v):
+            if isinstance(v, (int, float, np.floating)):
+                return f"{v:+,.1f}" if np.isfinite(v) else "—"
+            return str(v or "—")
+        st.markdown(MX.kpis([MX.kpi(k, _fmt(v), "", (MX.UP if isinstance(v, (int, float, np.floating)) and np.isfinite(v) and v > 0
+                                                     and k not in ("Volume vs usual", "Unusual candles today", "…of them bullish")
+                                                     else MX.DOWN if isinstance(v, (int, float, np.floating)) and np.isfinite(v)
+                                                     and v < 0 else MX.ACCENT)) for k, v in ac.items()]),
+                    unsafe_allow_html=True)
     # ---- news
     st.markdown(MX.section("Latest news", "Google News · India"), unsafe_allow_html=True)
     if nw:
