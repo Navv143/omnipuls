@@ -1107,14 +1107,14 @@ ROUTE_CSS = """<style>
 </style>"""
 
 
-def money_route(up: pd.DataFrame, dn: pd.DataFrame, mobile: bool = False) -> str:
+def money_route(up: pd.DataFrame, dn: pd.DataFrame, mobile: bool = False, window: str = "30 min") -> str:
     """Where the money of the last 30 minutes is going, drawn as routes: sectors on the left, a line from each sector
     to each of its stocks (thicker = more money, moving dashes = live direction), and a card per stock on the right:
     the 10 stocks with money coming in faster on top (green), the 10 with money going out faster below (red).
     up / dn need: Stock, Sector, Net 30m, Net prev 30m, Chg %, and optionally Turnover x (time), Smart, Net Flow Cr."""
     rows = [(r, 1) for _, r in up.iterrows()] + [(r, -1) for _, r in dn.iterrows()]
     if not rows:
-        return "<div class='mx-quiet'>No stock with money speeding up in the last 30 minutes.</div>"
+        return "<div class='mx-quiet'>No stock with money speeding up in this window.</div>"
     W = 520 if mobile else 1000
     cw = 340 if mobile else 360                       # card width
     sw = 116 if mobile else 230                       # sector column width
@@ -1135,7 +1135,7 @@ def money_route(up: pd.DataFrame, dn: pd.DataFrame, mobile: bool = False) -> str
     sy = {s: top + i * ((H - top - 20) / max(len(secs), 1)) for i, s in enumerate(secs)}
     mx = max(abs(float(r["Net 30m"])) for r, _ in rows) or 1.0
     out = [f"<svg viewBox='0 0 {W} {H}' xmlns='http://www.w3.org/2000/svg' font-family='Inter,sans-serif'>",
-           f"<text x='4' y='18' fill='#8EA1BF' font-size='12' letter-spacing='1.5'>SECTORS · 30 MIN</text>",
+           f"<text x='4' y='18' fill='#8EA1BF' font-size='12' letter-spacing='1.5'>SECTORS · {(window or "WHOLE DAY").upper()}</text>",
            (f"<text x='{cx}' y='18' fill='#22C55E' font-size='12' letter-spacing='1.5'>▲ MONEY COMING IN FASTER</text>" if has_up else "")]
     # routes first (under the boxes)
     for i, (r, sd) in enumerate(rows):
@@ -1182,7 +1182,7 @@ def money_route(up: pd.DataFrame, dn: pd.DataFrame, mobile: bool = False) -> str
                    f"font-family='JetBrains Mono,monospace' font-weight='700'>{chg:+.2f}%</text>")
         out.append(f"<text x='{cx + 14}' y='{y + 40}' fill='{col}' font-size='12.5' font-family='JetBrains Mono,monospace' "
                    f"font-weight='700'>₹{n30:+,.0f} Cr</text><text x='{cx + (110 if mobile else 120)}' y='{y + 40}' "
-                   f"fill='#8EA1BF' font-size='11'>30 min · before {p30:+,.0f}</text>")
+                   f"fill='#8EA1BF' font-size='11'>{(window + ' · before ' + format(p30, '+,.0f')) if window else 'today'}</text>")
         # speed bar: this 30 min vs the 30 before
         bw = cw - 28
         a = min(abs(n30) / mx, 1) * bw

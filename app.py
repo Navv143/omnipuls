@@ -5196,11 +5196,20 @@ def flow_radar_body(svc):
     if day.empty:
         st.info("No flow yet.")
         return
-    w30 = A.flow_window(per, _hhmm_minus(last, 25)).set_index("Stock")["Net Flow Cr"]
-    w60 = A.flow_window(per, _hhmm_minus(last, 55)).set_index("Stock")["Net Flow Cr"]
+    import candles as _C
+    wins = {"15 min": 15, "30 min": 30, "1 hour": 60, "4 hours": 240, "Whole day": 0}
+    wsel = st.segmented_control("Money window", list(wins), default="30 min", key="radar_win") or "30 min"
+    wmin = wins[wsel]
     day = day.set_index("Stock")
-    day["Net 30m"] = w30.reindex(day.index).fillna(0)
-    day["Net prev 30m"] = (w60.reindex(day.index).fillna(0) - day["Net 30m"])
+    if wmin:
+        # "Net 30m" / "Net prev 30m" hold the chosen window and the same length before it (names kept for the views)
+        w1 = A.flow_window(per, _hhmm_minus(last, wmin - _C.TF)).set_index("Stock")["Net Flow Cr"]
+        w2 = A.flow_window(per, _hhmm_minus(last, 2 * wmin - _C.TF)).set_index("Stock")["Net Flow Cr"]
+        day["Net 30m"] = w1.reindex(day.index).fillna(0)
+        day["Net prev 30m"] = (w2.reindex(day.index).fillna(0) - day["Net 30m"])
+    else:
+        day["Net 30m"] = day["Net Flow Cr"]
+        day["Net prev 30m"] = 0.0
     day["Accel"] = day["Net 30m"] - day["Net prev 30m"]
     day["Sector"] = day.index.map(U.FNO_SECTOR_OF).fillna("Other")
     day = day.reset_index()
@@ -5211,18 +5220,22 @@ def flow_radar_body(svc):
     m = st.columns(5)
     m[0].metric("Net flow, F&O stocks", f"₹{tin - tout:+,.0f} Cr", f"{tin / max(tin + tout, 1) * 100:.1f}% buying",
                 delta_color="off", border=True)
-    m[1].metric("Last 30 min", f"₹{day['Net 30m'].sum():+,.0f} Cr", f"before: ₹{day['Net prev 30m'].sum():+,.0f} Cr",
+    m[1].metric(f"Last {wsel}" if wmin else "Whole day", f"₹{day['Net 30m'].sum():+,.0f} Cr",
+                f"before: ₹{day['Net prev 30m'].sum():+,.0f} Cr" if wmin else "since 9:15",
                 delta_color="off", border=True)
     if not sec.empty:
         m[2].metric("Money going into", sec.iloc[0]["Sector"], f"₹{sec.iloc[0]['Net Flow Cr']:+,.0f} Cr", border=True)
         m[3].metric("Money leaving", sec.iloc[-1]["Sector"], f"₹{sec.iloc[-1]['Net Flow Cr']:+,.0f} Cr", border=True)
     m[4].metric("Sudden changes, 30 min", len(ev30), f"last candle {last}", delta_color="off", border=True)
 
-    st.markdown(MX.section("Net flow: top 10 increasing · top 10 decreasing", "last 30 minutes vs the 30 before"),
+    st.markdown(MX.section("Net flow: top 10 increasing · top 10 decreasing",
+                           f"last {wsel} vs the {wsel} before" if wmin else "whole day since 9:15"),
                 unsafe_allow_html=True)
-    up10 = day[(day["Net 30m"] > 0) & (day["Accel"] > 0)].sort_values("Net 30m", ascending=False).head(10)
-    dn10 = day[(day["Net 30m"] < 0) & (day["Accel"] < 0)].sort_values("Net 30m").head(10)
-    st.markdown(MX.money_route(up10, dn10, mobile=MOBILE), unsafe_allow_html=True)
+    acc_up = (day["Accel"] > 0) if wmin else True
+    acc_dn = (day["Accel"] < 0) if wmin else True
+    up10 = day[(day["Net 30m"] > 0) & acc_up].sort_values("Net 30m", ascending=False).head(10)
+    dn10 = day[(day["Net 30m"] < 0) & acc_dn].sort_values("Net 30m").head(10)
+    st.markdown(MX.money_route(up10, dn10, mobile=MOBILE, window=(wsel if wmin else "")), unsafe_allow_html=True)
     _route_chart(pd.concat([up10, dn10]), per)
     st.caption("Left: sectors, net money of the last 30 minutes. Lines: thicker = more money, moving dashes show the "
                "direction. Cards: the stock's money in the last 30 min, the grey tick on the bar = the 30 min before, so a "
@@ -9103,9 +9116,146 @@ def page_lab():
 
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _sb_rows(table: str, day: str | None) -> pd.DataFrame:
+    params = {"select": "*"}
+    if day:
+        params["day"] = f"eq.{day}"
+    return pd.DataFrame(CS.select_rows(table, params) or [])
+
+
+def _sb_expand(d: pd.DataFrame) -> pd.DataFrame:
+    """Stage rows: the stored data (jsonb) as columns next to pass / reason."""
+    if d.empty:
+        return d
+    data = pd.json_normalize(d["data"].apply(lambda x: x if isinstance(x, dict) else {}))
+    data.index = d.index
+    base = d[["stock", "passed", "reason", "first_pass", "times_passed", "last_time"]].rename(columns={
+        "stock": "Stock", "passed": "Pass", "reason": "Reason", "first_pass": "First pass", "times_passed": "Times passed",
+        "last_time": "As of"})
+    keep = [c for c in data.columns if c not in ("time", "stages", "side")]
+    out = pd.concat([base, data[keep].rename(columns={"sector": "Sector"})], axis=1)
+    out["Pass"] = np.where(out["Pass"], "✓ PASS", "✗ REJECT")
+    return out
+
+
+@st.fragment(run_every=LIVE_EVERY)
+def _superbot_body():
+    import superbot as SB
+    day_today = datetime.now(IST).strftime("%Y-%m-%d")
+    hist = _sb_rows("superbot_trades", None)
+    days = sorted(set(hist["day"].astype(str)) | {day_today}, reverse=True) if not hist.empty else [day_today]
+    c1, _ = st.columns([1, 3])
+    day = c1.selectbox("Day", days, key="sb_day")
+    stg = _sb_rows("superbot_stage", day)
+    tr = hist[hist["day"].astype(str) == day] if not hist.empty else hist
+    # ---- funnel
+    cnt = {}
+    for k in range(1, 7):
+        z = stg[stg["stage"] == k] if not stg.empty else stg
+        cnt[k] = (len(z), int(z["passed"].sum()) if len(z) else 0)
+    up = dn = rg = 0
+    if not stg.empty:
+        s1 = stg[stg["stage"] == 1]
+        sides = s1["side"].value_counts()
+        up, dn, rg = int(sides.get("UP", 0)), int(sides.get("DOWN", 0)), int(sides.get("RANGED", 0))
+    n_tr = int((tr["decision"] == "TRADE").sum()) if not tr.empty else 0
+    st.markdown(MX.kpis([
+        MX.kpi("1 · Scanner", f"{cnt[1][0]}", f"▲ {up} up · ▼ {dn} down · {rg} ranged", MX.ACCENT),
+        MX.kpi("2 · Expansion", f"{cnt[2][1]}", f"passed of {cnt[2][0]}", "#22D3EE"),
+        MX.kpi("3 · Money", f"{cnt[3][1]}", f"passed of {cnt[3][0]}", "#14B8A6"),
+        MX.kpi("4 · OI & activity", f"{cnt[4][1]}", f"passed of {cnt[4][0]}", "#A78BFA"),
+        MX.kpi("5 · Chart", f"{cnt[5][1]}", f"passed of {cnt[5][0]}", "#EC4899"),
+        MX.kpi("6 · Decision", f"{n_tr} trades", f"{len(tr) - n_tr} rejected / repeat today", "#F59E0B")]),
+        unsafe_allow_html=True)
+    if cnt[1][0]:
+        fig = go.Figure(go.Funnel(y=[f"{k} · {SB.STAGES[k]}" for k in range(1, 7)],
+                                  x=[cnt[1][0] - rg, cnt[2][1], cnt[3][1], cnt[4][1], cnt[5][1], n_tr],
+                                  textinfo="value+percent initial",
+                                  marker=dict(color=["#3B82F6", "#22D3EE", "#14B8A6", "#A78BFA", "#EC4899", "#F59E0B"])))
+        fig.update_layout(template=plot_template(), height=300, margin=dict(l=4, r=4, t=10, b=4))
+        st.plotly_chart(fig, width="stretch", key="sb_funnel")
+    tabs = st.tabs(["Decisions", "1 Scanner", "2 Expansion", "3 Money", "4 OI & activity", "5 Chart", "History", "Rules"])
+    with tabs[0]:
+        if tr.empty:
+            st.markdown("<div class='mx-quiet'>No stock has reached the decision stage yet today.</div>",
+                        unsafe_allow_html=True)
+        else:
+            show = tr.sort_values("signal_time", ascending=False)
+            cols = ["signal_time", "stock", "sector", "side", "decision", "reason", "score", "entry_time", "entry", "sl",
+                    "target", "rr", "status", "exit_time", "exit_px", "pct", "r", "stages"]
+            names = {"signal_time": "Signal", "stock": "Stock", "sector": "Sector", "side": "Side", "decision": "Decision",
+                     "reason": "Reason", "score": "Score", "entry_time": "Entry at", "entry": "Entry", "sl": "Stop",
+                     "target": "Target", "rr": "R:R", "status": "Status", "exit_time": "Exit at", "exit_px": "Exit",
+                     "pct": "P&L %", "r": "R", "stages": "Why each stage passed"}
+            for nm, z in (("Trades", show[show["decision"] == "TRADE"]),
+                          ("Rejected and repeats", show[show["decision"] != "TRADE"])):
+                st.markdown(MX.section(nm, f"{len(z)} today"), unsafe_allow_html=True)
+                if not z.empty:
+                    st.dataframe(z.reindex(columns=cols).rename(columns=names), hide_index=True, width="stretch",
+                                 height=_h(len(z), 460), key=f"sb_dec_{nm}", column_config={
+                                     "P&L %": st.column_config.NumberColumn(format="%+.2f"),
+                                     "R": st.column_config.NumberColumn(format="%+.2f"),
+                                     "Why each stage passed": st.column_config.TextColumn(width="large")})
+    for k in range(1, 6):
+        with tabs[k]:
+            z = stg[stg["stage"] == k] if not stg.empty else stg
+            if z.empty:
+                st.caption("Nothing at this stage yet.")
+                continue
+            e = _sb_expand(z)
+            if k == 1:
+                for side, colr in (("UP", "▲ Up momentum"), ("DOWN", "▼ Down momentum"), ("RANGED", "Ranged")):
+                    zz = e[e["table"] == side] if "table" in e else e.iloc[0:0]
+                    st.markdown(MX.section(colr, f"{len(zz)} stocks"), unsafe_allow_html=True)
+                    if not zz.empty:
+                        st.dataframe(zz.sort_values("chg_pct", ascending=side == "DOWN"), hide_index=True,
+                                     width="stretch", height=_h(len(zz), 380), key=f"sb_s1_{side}")
+            else:
+                e = e.sort_values(["Pass", "Times passed"], ascending=[True, False])
+                st.dataframe(e, hide_index=True, width="stretch", height=_h(len(e), 560), key=f"sb_s{k}",
+                             column_config={"Reason": st.column_config.TextColumn(width="large")})
+    with tabs[6]:
+        if hist.empty:
+            st.caption("No history yet.")
+        else:
+            h = hist[hist["decision"] == "TRADE"].copy()
+            h["pct"] = pd.to_numeric(h["pct"], errors="coerce")
+            h["r"] = pd.to_numeric(h["r"], errors="coerce")
+            done = h[h["status"].isin(["stop", "target", "time", "trailed"])]
+            st.markdown(MX.kpis([MX.kpi("Trades", str(len(h)), f"{len(done)} closed", MX.ACCENT),
+                                 MX.kpi("Win rate", f"{(done['pct'] > 0).mean() * 100:.0f}%" if len(done) else "—", "closed trades",
+                                        MX.UP),
+                                 MX.kpi("Avg per trade", f"{done['pct'].mean():+.2f}%" if len(done) else "—", "after costs",
+                                        MX.tone_color(done["pct"].mean() if len(done) else 0)),
+                                 MX.kpi("Avg R", f"{done['r'].mean():+.2f}" if len(done) else "—", "", MX.ACCENT)]),
+                        unsafe_allow_html=True)
+            by = done.groupby("day").agg(Trades=("stock", "size"), **{"Win %": ("pct", lambda x: (x > 0).mean() * 100),
+                                         "Avg %": ("pct", "mean"), "Total R": ("r", "sum")}).reset_index()
+            st.dataframe(by.sort_values("day", ascending=False), hide_index=True, width="stretch", key="sb_hist_days",
+                         column_config={"Avg %": st.column_config.NumberColumn(format="%+.2f"),
+                                        "Total R": st.column_config.NumberColumn(format="%+.2f"),
+                                        "Win %": st.column_config.NumberColumn(format="%.0f")})
+            st.download_button("Every Super Bot record (CSV)", hist.to_csv(index=False).encode(), "superbot_records.csv",
+                               "text/csv", key="sb_csv")
+    with tabs[7]:
+        st.dataframe(pd.DataFrame([{"Rule": k, "Value": str(v)} for k, v in SB.RULES.items()]), hide_index=True,
+                     width="stretch", key="sb_rules")
+        st.caption("Every threshold the six bots use (superbot.py RULES). Change one there and every stage table shows "
+                   "the effect from the next candle. Paper only: not tested yet; the History tab is its record.")
+
+
+def page_superbot():
+    _desk_css()
+    st.markdown(MX.page_title("Super Bot", "six bots in a row on every F&O stock · every 3-min candle · paper"),
+                unsafe_allow_html=True)
+    _superbot_body()
+
+
 PAGE_DEFS = [  # (url, function, menu title, icon)
     ("desk", page_desk, "Desk", ":material/monitoring:"),
     ("flow", page_flow, "Money Flow", ":material/currency_exchange:"),
+    ("superbot", page_superbot, "Super Bot", ":material/neurology:"),
     ("lab", page_lab, "Research Lab", ":material/science:"),
     ("paper", page_paper, "Paper & Data", ":material/inventory_2:"),
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
@@ -9142,7 +9292,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "desk"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({  # institutional desk: the few screens that matter first, everything else under More
-    "Desk": [P["desk"], P["flow"], P["options"], P["lab"], P["paper"]],
+    "Desk": [P["desk"], P["superbot"], P["flow"], P["options"], P["lab"], P["paper"]],
     "Markets": [P["view"], P["indices"], P["sectors"], P["fno"], P["oi"], P["chart"], P["global"], P["mcx"], P["cdsfut"]],
     "Old tools (untested)": [P["auto"], P["scanners"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["bot"], P["smart"], P["apex"],
              P["odds"], P["screener"], P["watchlist"]],
@@ -9230,7 +9380,7 @@ if DHAN_DATA:  # start loading scanner data in the background so the Scanners pa
             st.session_state.get("scan_uni", "All F&O stocks")))
     except Exception:
         pass
-SELF_REFRESH = {"view", "dashboard", "scanners", "smart", "apex", "desk", "flow", "fno"}  # these refresh their own sections; a full rerun only reloads
+SELF_REFRESH = {"view", "dashboard", "scanners", "smart", "apex", "desk", "flow", "fno", "superbot"}  # these refresh their own sections; a full rerun only reloads
 NO_REFRESH = {"account", "dhan", "research", "review", "lab", "paper"}  # forms and notes: a rerun only interrupts typing
 INDIAN_ONLY = {"fno", "oi", "sectors", "indices", "options", "odds", "portfolio"}  # nothing changes after the close
 _page = getattr(nav, "url_path", "")
