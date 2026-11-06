@@ -1239,7 +1239,18 @@ def superbot_step(mkt: "Market", now: datetime):
     oi = oi_today(day)
     open_now = {t["stock"] for t in st_["trades"] if t["decision"] == "TRADE" and t.get("status") in (None, "open", "waiting")}
     n_trades = sum(t["decision"] == "TRADE" for t in st_["trades"])
-    res = SB.run(S, per, E, oi, U.FNO_SECTOR_OF, now, open_now, n_trades)
+    taken = {}
+    for t in st_["trades"]:
+        if t["decision"] == "TRADE":
+            taken[t.get("sector")] = taken.get(t.get("sector"), 0) + 1
+    nchg = None
+    try:
+        nd = nb.index.normalize()
+        prev_c = float(nb[nd < nd.max()]["Close"].iloc[-1])
+        nchg = (float(nb["Close"].iloc[-1]) / prev_c - 1) * 100
+    except Exception:
+        pass
+    res = SB.run(S, per, E, oi, U.FNO_SECTOR_OF, now, open_now, n_trades, nifty_chg=nchg, taken_sectors=taken)
     # stage tables: latest state, first pass time and how many cycles each stock passed
     stage_rows = []
     for k, df in res.items():

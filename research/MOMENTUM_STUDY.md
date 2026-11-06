@@ -444,3 +444,22 @@ most of the result is the period's momentum. Stage 4 (without OI) hurt; 276 of 3
 - Candidate rules to test on the server's 6 months (not adopted on 40 days): trade with the market only; spread the
   8 trades (e.g. at most 4 by 10:00); an afternoon (13:00-14:30) breakout setup for the late movers; skip entries
   after a move of 2.5+ ATR already made.
+
+## Super Bot: 2-3 picks a day (7 Nov 2026, research/superbot_strict.py)
+Every decision-stage candidate of 40 days (9,462, about 237 a day) with its features and the result of trading it.
+Seven rules chosen in advance from the earlier findings, tested together, alone and each left out, at most 3 trades a
+day and 1 per sector (best score first):
+
+| Version | Trades/day | Win | Avg a trade | t | 1st / 2nd half |
+|---|---|---|---|---|---|
+| all candidates | 237 | 49% | -0.03% | -3.2 | |
+| live rules (8 a day) | 8 | 53% | +0.14% | 1.5 | +0.07 / +0.21 |
+| 3 a day, 1 per sector | 3 | 50% | -0.02% | -0.2 | -0.24 / +0.19 |
+| **3 a day + with the market** | **3** | **61%** | **+0.29%** | **2.2** | **+0.18 / +0.40** |
+| all 7 rules | 1.4 | 56% | +0.27% | 1.2 | +0.13 / +0.40 |
+
+With the market (longs while Nifty is up on the day, shorts while down) is the rule that matters: alone it gives
+the best result, and taking it out of the full set drops it to +0.03%. Not overextended and money last 30 min never
+removed a trade; stronger than Nifty and unusual candle alone did nothing; sector leader helped the first half only;
+volume 2x and unusual candle on top of the market rule gave the same result. Adopted in the live Super Bot (paper):
+with the market, 3 a day, 1 per sector. Still to confirm on the server's 6 months (Saturday back-test).
