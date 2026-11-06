@@ -3986,17 +3986,25 @@ def scanner_body(svc, uni):
         st.info("Waiting for the first data… (" + svc.status + ")", icon=":material/hourglass_top:")
         return
     session = SC.session_of(nifty_df)
-    S = SC.prepare(bars, session)
+    pre = getattr(svc, "scans", None) or {}       # the engine's results for the default settings (engine.py)
+    _S_box = {}
+
+    def S_now():
+        """All stocks prepared, only when a setting differs from the defaults (cached per loader pass)."""
+        if "S" not in _S_box:
+            _S_box["S"] = _prepared(svc)[0]
+        return _S_box["S"]
     N = SC.Stock("NIFTY 50", nifty_df, session)
     N = N if N.ok else None
     nifty_gap = N.gap if N is not None else None
     live_today = session is not None and session.date() == now.date()
     m = st.columns(4)
     m[0].metric("Session", f"{session:%a %d %b}", "today" if live_today else "last session", delta_color="off", border=True)
-    m[1].metric("Stocks scanned", len(S), border=True)
+    m[1].metric("Stocks scanned", len(bars), border=True)
     m[2].metric("Nifty gap at open", f"{nifty_gap * 100:+.2f}%" if nifty_gap is not None else "—",
                 "panic day" if nifty_gap is not None and nifty_gap <= -0.005 else None, delta_color="off", border=True)
-    last_bar = max(s.today.index[-1] for s in S.values()) if S else None
+    last_bar = max((df.index[-1] for df in bars.values() if len(df) and df.index[-1].normalize() == session), default=None) \
+        if session is not None else None
     m[3].metric("Last 5-min bar", f"{last_bar:%H:%M}" if last_bar is not None else "—", border=True)
     if not live_today:
         st.info("The market isn't open yet today, so these are the last session's signals.", icon=":material/schedule:")
@@ -4038,13 +4046,16 @@ def scanner_body(svc, uni):
                    "a 5-min candle closes beyond the 9:15-9:30 range by 12:00 with volume 1.5x its 10-day slot "
                    "average and Nifty not broken the other way; enter next candle. Stop 0.5 ATR, trail 1 ATR, exit 15:20.")
         flt = st.toggle("Use the volume and Nifty filters (the test found they add nothing)", value=True, key="v3f")
-        v, ranked = SC.version3(S, N, filters=flt)
+        if flt and pre.get("v3") is not None and pre.get("v3ranked") is not None:
+            v, ranked = pre["v3"], pre["v3ranked"]
+        else:
+            v, ranked = SC.version3(S_now(), N, filters=flt)
         if v.empty:
             st.caption("No breakout signal yet." if live_today else "No signal that session.")
         else:
             data_table(v, "scan_v3", signed=signed, name_col="Stock", height=200)
         try:
-            diag, early = SC.v3_diagnose(S, N)
+            diag, early = pre["v3diag"] if pre.get("v3diag") is not None else SC.v3_diagnose(S_now(), N)
         except Exception:
             diag, early = pd.DataFrame(), None
         st.markdown("**★ V3 early pick** (testing next to V3: the day's first top-10 breakout on the 9:30 candle, or "
@@ -4077,7 +4088,10 @@ def scanner_body(svc, uni):
                                     format_func=lambda n: f"{n} sessions")
         asof = c2.radio("Window up to", ["Now", "10:30 (tested time)"], horizontal=True, key="rad_at")
         oi = svc.oi() if hasattr(svc, "oi") else {}
-        rd = SC.radar(S, oi, at=SC.dtime(10, 30) if asof.startswith("10:30") else None, lookback=lookback)
+        if asof == "Now" and lookback == 20 and pre.get("radar") is not None:
+            rd = pre["radar"].copy()
+        else:
+            rd = SC.radar(S_now(), oi, at=SC.dtime(10, 30) if asof.startswith("10:30") else None, lookback=lookback)
         if not rd.empty and DHAN_DATA:
             rd = with_sector_money(rd)
         if svc.source == "dhan" and getattr(svc, "oi_status", "") not in ("ready", "off"):
@@ -4113,7 +4127,7 @@ def scanner_body(svc, uni):
                 data_table(rd, "scan_radar", signed=("Move %", "From open %", "Sector move %", "OI chg %", "Sector money (Rs cr)"),
                            name_col="Stock", height=520)
         if live_today:
-            radar_log_today(S, oi, session)
+            radar_log_today(S_now, oi, session)
         if IS_ADMIN:
             with st.expander("Track record of the 10:30 picks (logged daily)"):
                 radar_track_record(bars)
@@ -4181,7 +4195,7 @@ def with_option_flow(df: pd.DataFrame, session) -> pd.DataFrame:
                                  "Confirmed since"]]], axis=1)
 
 
-def radar_log_today(S: dict, oi: dict, session):
+def radar_log_today(S, oi: dict, session):
     """Once a day after 10:35, save the top 3 as of 10:30 (TradeFinder-pattern shortlist first, then the score) with
     their entry (10:30 candle open), futures OI and option-writing readings."""
     now = datetime.now(IST)
@@ -4193,6 +4207,7 @@ def radar_log_today(S: dict, oi: dict, session):
             return
     except Exception:
         pass
+    S = S() if callable(S) else S              # prepared only now that the day's log is actually due
     rd = SC.radar(S, oi, at=SC.dtime(10, 30))
     if rd.empty:
         return
@@ -8882,9 +8897,17 @@ def _desk_body():
         bars, nifty_df = svc.bars()
         if bars and nifty_df is not None and not nifty_df.empty:
             def _calc():
-                S, session = _prepared_now(svc)
-                N = SC.Stock("NIFTY 50", nifty_df, session)
-                d_, e_ = SC.v3_diagnose(S, N if N.ok else None)
+                pre = getattr(svc, "scans", None)
+                if pre and pre.get("v3diag") is not None:
+                    # the engine ranked all stocks (engine.py); the hourly cells need only the ~10 listed stocks
+                    d_, e_ = pre["v3diag"]
+                    session = pre["session"]
+                    S = {x: SC.Stock(x, bars[x], session) for x in (d_["Stock"] if d_ is not None and not d_.empty else [])
+                         if x in bars}
+                else:
+                    S, session = _prepared_now(svc)
+                    N = SC.Stock("NIFTY 50", nifty_df, session)
+                    d_, e_ = SC.v3_diagnose(S, N if N.ok else None)
                 return (_v3_hourly(d_, S, datetime.now(IST)) if d_ is not None and not d_.empty else d_), e_
             diag, early = _fresh_or_last(_V3W_CACHE, ((id(svc), SC.session_of(nifty_df)), svc.last_pass, len(bars)), _calc)
             if diag is not None and not diag.empty:

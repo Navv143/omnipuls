@@ -89,13 +89,16 @@ def scans(svc) -> dict | None:
     oi = svc.oi()
     out = {"session": session, "last_pass": svc.last_pass}
     for name, fn in (("radar", lambda: SC.radar(S, oi)),
-                     ("v3", lambda: SC.version3(S, (lambda N: N if N.ok else None)(SC.Stock("NIFTY 50", nifty, session)))[0]),
-                     ("rf", lambda: SC.r_factor(S, oi))):
+                     ("v3both", lambda: SC.version3(S, (lambda N: N if N.ok else None)(SC.Stock("NIFTY 50", nifty, session)))),
+                     ("rf", lambda: SC.r_factor(S, oi)),
+                     ("v3diag", lambda: SC.v3_diagnose(S, (lambda N: N if N.ok else None)(SC.Stock("NIFTY 50", nifty, session))))):
         try:
             out[name] = fn()
         except Exception as e:
             log(f"scan {name}: {e}")
             out[name] = None
+    vb = out.pop("v3both", None)               # V3 signals and the 9:30 ranking behind them
+    out["v3"], out["v3ranked"] = (vb if vb is not None else (None, None))
     _SCANS.update(k=svc.last_pass, v=out)
     return out
 
