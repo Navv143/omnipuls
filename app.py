@@ -788,17 +788,36 @@ if DHAN_ON:
 
 
 @st.cache_resource(show_spinner=False)
-def get_feed(sig: tuple, version=None):
-    """One live Dhan feed per set of credentials, shared by every page and browser tab."""
-    for old in list(F.INSTANCES):
-        old.stop()
-        F.INSTANCES.remove(old)
+def get_feed(sig: tuple, version=None, day=None):
+    """One live Dhan feed per set of credentials and day, shared by every page and browser tab. A fresh feed each
+    day re-subscribes everything, so Dhan sends today's previous close (it sends it only on subscription)."""
+    import gc
+    # every feed still running, including ones made by an older copy of feed.py (code reloads in place, so its list
+    # of instances is a different object): stop them all so the new one gets the relay port and Dhan's connection
+    olds = list(F.INSTANCES) + [o for o in gc.get_objects()
+                                if type(o).__name__ == "DhanFeed" and not getattr(o, "_stop", True)]
+    for old in {id(o): o for o in olds}.values():
+        try:
+            old.stop()
+            if getattr(old, "thread", None) is not None and old.thread.is_alive():
+                old.thread.join(timeout=6)
+        except Exception:
+            pass
+        # older feed code closed its relay without waiting, leaving the listening socket bound: close it from here
+        srv = getattr(old, "_server", None)
+        for s_ in list(getattr(srv, "sockets", None) or []):
+            try:
+                os.close(s_.fileno())
+            except Exception:
+                pass
+    F.INSTANCES.clear()
     f = F.DhanFeed(DCFG["client_id"], DCFG["access_token"])
     F.INSTANCES.append(f)
     return f
 
 
-FEED = get_feed(_dhan_sig(), getattr(F, "VERSION", 1)) if DHAN_DATA and DCFG.get("live_feed", True) else None
+FEED = (get_feed(_dhan_sig(), getattr(F, "VERSION", 1), datetime.now(IST).strftime("%Y-%m-%d"))
+        if DHAN_DATA and DCFG.get("live_feed", True) else None)
 
 
 def feed_state(f) -> tuple[str, str]:
@@ -8890,8 +8909,8 @@ if DHAN_DATA:  # start loading scanner data in the background so the Scanners pa
             st.session_state.get("scan_uni", "All F&O stocks")))
     except Exception:
         pass
-SELF_REFRESH = {"view", "dashboard", "scanners", "smart", "apex"}  # these refresh their own sections; a full rerun only reloads
-NO_REFRESH = {"account", "dhan", "research", "review"}  # forms and notes: a rerun only interrupts typing
+SELF_REFRESH = {"view", "dashboard", "scanners", "smart", "apex", "desk", "flow", "fno"}  # these refresh their own sections; a full rerun only reloads
+NO_REFRESH = {"account", "dhan", "research", "review", "lab", "paper"}  # forms and notes: a rerun only interrupts typing
 INDIAN_ONLY = {"fno", "oi", "sectors", "indices", "options", "odds", "portfolio"}  # nothing changes after the close
 _page = getattr(nav, "url_path", "")
 if (auto and _page not in SELF_REFRESH | NO_REFRESH
@@ -8912,8 +8931,14 @@ try:  # how long each page takes on the server (Supabase app_perf), at most one 
     _pk = f"_perf_at_{_page}"
     if CS.enabled() and time.time() - st.session_state.get(_pk, 0) >= 60:
         st.session_state[_pk] = time.time()
-        _row = {"page": _page or "home", "secs": round(_secs, 2), "market": bool(SS.market_hours()),
-                "sections": {k: round(v, 2) for k, v in (st.session_state.get("_perf") or {}).items()}}
+        _sec = {k: round(v, 2) for k, v in (st.session_state.get("_perf") or {}).items()}
+        if FEED is not None:   # live-tick health, readable from Supabase
+            _sec.update({"feed_connected": int(bool(FEED.connected)), "feed_relay_port": int(FEED.relay_port or 0),
+                         "feed_ticks": len(FEED.ticks), "feed_msgs": int(FEED.msgs), "feed_ticks_env": int(TICKS),
+                         "feed_public": int(PUBLIC), "feed_clients": len(getattr(FEED, "_clients", {}) or {})})
+        else:
+            _sec["feed_none"] = 1
+        _row = {"page": _page or "home", "secs": round(_secs, 2), "market": bool(SS.market_hours()), "sections": _sec}
         CS.upsert_rows("app_perf", [_row], "id")
 except Exception:
     pass

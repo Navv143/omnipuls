@@ -28,7 +28,7 @@ PACKET_SIZE = {1: 16, 2: 16, 4: 50, 5: 12, 6: 16, 7: 8, 8: 162, 50: 10}
 IST = timezone(timedelta(hours=5, minutes=30))
 PUSH_EVERY = 0.15  # seconds between relay pushes (ticks are coalesced per instrument)
 INSTANCES: list = []  # running feeds (the app keeps one)
-VERSION = 2  # bump when DhanFeed changes, so a running app replaces its old feed object
+VERSION = 3  # bump when DhanFeed changes, so a running app replaces its old feed object
 # Reason codes Dhan sends in its disconnect packet (code 50)
 DISCONNECT = {
     805: "too many live-feed connections on this Dhan account (max 5). Close other Omnipuls windows/copies or "
@@ -85,7 +85,7 @@ def parse(buf: bytes, store: dict) -> list[str]:
                 t["oi"] = struct.unpack_from("<i", p, 8)[0]
             elif code == 6 and len(p) >= 16:
                 pc, poi = struct.unpack_from("<fi", p, 8)
-                t.update(prev_close=pc, prev_oi=poi)
+                t.update(prev_close=pc, prev_oi=poi, prev_day=_today_ist())
             elif code == 8 and len(p) >= 62:
                 (ltp, ltq, ltt, atp, vol, tsq, tbq, oi, oih, oil, o, c, h, lo) = struct.unpack_from("<fhifiiiiiiffff", p, 8)
                 t.update(ltp=ltp, ltq=ltq, ltt=ltt, atp=atp, vol=vol, tsq=tsq, tbq=tbq, oi=oi, oi_hi=oih, oi_lo=oil,
@@ -107,6 +107,16 @@ def parse(buf: bytes, store: dict) -> list[str]:
     return changed
 
 
+def _today_ist() -> str:
+    return (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d")
+
+
+def fresh_prev(t: dict):
+    """The previous close only if Dhan sent it today: it comes once, when the instrument is subscribed, so a feed
+    that ran overnight still held the day before yesterday's close (Nifty showed +2.95% instead of +0.50%)."""
+    return t.get("prev_close") if t.get("prev_day") == _today_ist() else None
+
+
 def to_quote(t: dict) -> dict:
     """A tick in the same shape as Dhan's REST quote (ohlc.close = previous close)."""
     depth = t.get("depth") or []
@@ -114,7 +124,7 @@ def to_quote(t: dict) -> dict:
         "last_price": t.get("ltp"), "last_quantity": t.get("ltq"), "last_trade_time": _ltt(t.get("ltt", 0)),
         "average_price": t.get("atp"), "volume": t.get("vol"), "buy_quantity": t.get("tbq"),
         "sell_quantity": t.get("tsq"), "oi": t.get("oi"), "oi_day_high": t.get("oi_hi"), "oi_day_low": t.get("oi_lo"),
-        "ohlc": {"open": t.get("open"), "high": t.get("high"), "low": t.get("low"), "close": t.get("prev_close")},
+        "ohlc": {"open": t.get("open"), "high": t.get("high"), "low": t.get("low"), "close": fresh_prev(t)},
         "depth": {"buy": [{"quantity": d[0], "orders": d[2], "price": d[4]} for d in depth],
                   "sell": [{"quantity": d[1], "orders": d[3], "price": d[5]} for d in depth]},
         "prev_oi": t.get("prev_oi"), "_feed": True, "_ts": t.get("ts"),
@@ -150,6 +160,7 @@ class DhanFeed:
         self.started = time.time()
         self.relay_port = int(os.environ.get("OMNIPULS_RELAY_PORT") or 0) or _free_port()  # fixed in Docker
         self.relay_key = secrets.token_urlsafe(18)  # only pages the app drew (signed-in users) know it
+        self.relay_error = ""
         self._stop = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._ws = None
@@ -192,17 +203,32 @@ class DhanFeed:
         waited = int(now - self.started)
         return "connecting", f"Dhan live feed connecting… ({self.attempts} attempt{'s' if self.attempts != 1 else ''}, {waited}s)"
 
-    def stop(self):
+    def stop(self, wait: float = 6.0):
+        """Close the Dhan socket and the browser relay; wait (up to `wait` s) so the next feed can take the port."""
         self._stop = True
         if self._loop and self._loop.is_running():
             asyncio.run_coroutine_threadsafe(self._shutdown(), self._loop)
+        if wait and self.thread.is_alive() and threading.current_thread() is not self.thread:
+            self.thread.join(timeout=wait)
 
     async def _shutdown(self):
+        # the relay first, and wait until its listening socket is really closed: stopping the loop before that left
+        # port 8765 bound to a dead server, so the next feed could not take it and browsers hung ("Waiting for ticks")
+        srv = getattr(self, "_server", None)
+        if srv is not None:
+            try:
+                for s in list(getattr(srv, "sockets", None) or []):
+                    try:
+                        s.close()
+                    except Exception:
+                        pass
+                srv.close()
+                await asyncio.wait_for(srv.wait_closed(), 3)
+            except Exception:
+                pass
         try:
             if self._ws is not None:
-                await self._ws.close()
-            if getattr(self, "_server", None) is not None:
-                self._server.close()
+                await asyncio.wait_for(self._ws.close(), 3)
         except Exception:
             pass
         me = asyncio.current_task()
@@ -330,15 +356,24 @@ class DhanFeed:
             finally:
                 self._clients.pop(ws, None)
 
-        try:
-            self._server = await websockets.serve(handler, "0.0.0.0", self.relay_port, ping_interval=20)
-        except OSError:
-            self.relay_port = 0
+        # the previous feed (a token renewal or an app reload) may still hold the port for a moment: retry for a minute
+        # instead of giving up (giving up set relay_port = 0 and every page showed "Waiting for ticks")
+        want = self.relay_port
+        for attempt in range(60):
+            try:
+                self._server = await websockets.serve(handler, "0.0.0.0", want, ping_interval=20, reuse_address=True)
+                self.relay_port = want
+                self.relay_error = ""
+                return
+            except OSError as e:
+                self.relay_error = f"relay port {want} busy ({e}); retry {attempt + 1}"
+                await asyncio.sleep(1)
+        self.relay_port = 0
 
     @staticmethod
     def _compact(t: dict) -> list:
         """[ltp, prev_close, volume, oi, high, low, open, ltt_text, avg, buy_qty, sell_qty, depth, prev_oi]"""
-        return [t.get("ltp"), t.get("prev_close"), t.get("vol"), t.get("oi"), t.get("high"), t.get("low"),
+        return [t.get("ltp"), fresh_prev(t), t.get("vol"), t.get("oi"), t.get("high"), t.get("low"),
                 t.get("open"), _ltt(t.get("ltt", 0))[-8:], t.get("atp"), t.get("tbq"), t.get("tsq"),
                 t.get("depth"), t.get("prev_oi")]
 
