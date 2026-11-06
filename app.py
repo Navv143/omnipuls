@@ -235,6 +235,11 @@ st.markdown(
   html, body, [data-testid="stAppViewContainer"] {font-feature-settings:"tnum" 1, "cv11" 1;}
   [data-testid="stDataFrame"], [data-testid="stTable"], .cell, .tape {font-variant-numeric: tabular-nums;}
   h1, h2, h3 {letter-spacing:-.01em;}
+  /* bold, colourful headings: page titles and st.subheader */
+  [data-testid="stHeading"] h2, [data-testid="stHeading"] h3, [data-testid="stMarkdownContainer"] h3 {font-weight:800 !important;
+    background:linear-gradient(90deg,#22D3EE,#A78BFA 60%,#EC4899);-webkit-background-clip:text;background-clip:text;
+    color:transparent !important; width:fit-content;}
+  [data-testid="stMarkdownContainer"] h4 {font-weight:800 !important; color:#F59E0B;}
   .om-howto {font-size:var(--fs-sm); color:var(--om-text-3); margin:-.2rem 0 .5rem; padding:.45rem .75rem;
              border-left:3px solid var(--om-accent); background:var(--om-accent-soft); border-radius:0 var(--r-sm) var(--r-sm) 0;}
   .block-container {padding-top: 1.4rem; padding-bottom: 2rem;}
@@ -8246,7 +8251,8 @@ import setup_registry as REG
 
 _DESK_CSS = """<style>
 .dk-h{display:flex;align-items:baseline;gap:14px;margin:2px 0 8px}
-.dk-h h2{margin:0;font-size:1.45rem;letter-spacing:.2px}
+.dk-h h2{margin:0;font-size:1.6rem;letter-spacing:.2px;font-weight:800;
+  background:linear-gradient(90deg,#22D3EE,#3B82F6 45%,#A78BFA);-webkit-background-clip:text;background-clip:text;color:transparent}
 .dk-h span{opacity:.6;font-size:.85rem}
 .dk-card{border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px 12px;background:rgba(255,255,255,.02);margin-bottom:10px}
 .dk-card h4{margin:0 0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.8px;opacity:.7}
