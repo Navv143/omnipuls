@@ -322,6 +322,7 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+st.markdown(MX.CSS, unsafe_allow_html=True)   # shared boxes (KPIs, sections, heat tiles) on every page
 
 
 # ---------------------------------------------------------------- device and sign-in
@@ -3734,17 +3735,12 @@ def oi_list(df: pd.DataFrame, key: str, sort_col: str, ascending: bool, n: int =
     if d.empty:
         st.caption("None right now.")
         return
-    box = st.container(key=f"rows_n_{key}")
-    widths = [2.2, 1.5, 1.5, 1.4]
-    h = box.columns(widths)
-    for c, label in zip(h, ["Stock", "Price %", "OI %", "OI"]):
-        c.markdown(f'<div class="hdr">{label}</div>', unsafe_allow_html=True)
-    for _, r in d.iterrows():
-        c = box.columns(widths, vertical_alignment="center")
-        c[0].markdown(f"[{r['Stock']}]({chart_link(r['Symbol'])})")
-        c[1].markdown(pct_html(r["Fut Chg %"]), unsafe_allow_html=True)
-        c[2].markdown(pct_html(r["OI Chg %"]), unsafe_allow_html=True)
-        c[3].markdown(f'<div class="cell">{fmt_vol(r["OI"], ".NS")}</div>', unsafe_allow_html=True)
+    tb = pd.DataFrame({"Stock": d["Stock"].values, "Price %": d["Fut Chg %"].values, "OI %": d["OI Chg %"].values,
+                       "OI": [fmt_vol(v, ".NS") for v in d["OI"]],
+                       "Chart": [chart_link(sym) for sym in d["Symbol"]]})
+    st.dataframe(tb, hide_index=True, width="stretch", height=_h(len(tb), 420), key=f"oi_tbl_{key}", column_config={
+        "Price %": st.column_config.NumberColumn(format="%+.2f%%"), "OI %": st.column_config.NumberColumn(format="%+.2f%%"),
+        "Chart": st.column_config.LinkColumn("Chart", display_text="Open")})
 
 
 def page_oi():
@@ -4453,6 +4449,17 @@ def page_cdsfut():
         st.header("Currency futures")
         need_dhan()
         return
+    live = futmap("NSE_CURRENCY", "FUTCUR")
+    if not any(k[4:] in live for k in U.CURRENCY_FUT):
+        # Dhan's contract list has no unexpired NSE currency futures (the last ones expired in June 2026), so there is
+        # nothing to price: say so, and show the rupee spot rates instead of a misleading "Yahoo failed" error
+        status_strip()
+        st.header("Currency futures (NSE)")
+        st.info("Dhan's contract list has no live NSE currency futures right now (the last contracts in it expired "
+                "in June 2026), so there are no futures prices to show. Below: the rupee spot rates.",
+                icon=":material/info:")
+        page_market("Currency (INR)", "Rupee rates", tiles_n=4, note="Spot rupee rates (Yahoo, delayed).", bare=True)
+        return
     page_market("Currency Futures (Dhan)", "Currency futures (NSE)", tiles_n=4,
                 note="Nearest NSE currency futures from Dhan.")
     contracts_note("NSE_CURRENCY", "FUTCUR", U.CURRENCY_FUT)
@@ -5113,8 +5120,11 @@ def _unusual_heatmap(ev: pd.DataFrame, day: pd.DataFrame, E_all: pd.DataFrame | 
         up_ = str(r.get("Candle")) in ("Green", "Bullish")
         c = "#22C55E" if up_ else "#F43F5E"
         f = net30.get(r["Stock"], np.nan)
-        ylab.append(f"<b><span style='color:{c}'>{'▲' if up_ else '▼'} {r['Stock']}</span></b> {r['Time']} · "
-                    f"{float(r.get('Chg %') or 0):+.2f}%" + (f" · ₹{f:+,.0f} Cr" if pd.notna(f) else ""))
+        if MOBILE:   # phones: just the stock, the rest is in the table below
+            ylab.append(f"<b><span style='color:{c}'>{'▲' if up_ else '▼'} {r['Stock'][:11]}</span></b>")
+        else:
+            ylab.append(f"<b><span style='color:{c}'>{'▲' if up_ else '▼'} {r['Stock']}</span></b> {r['Time']} · "
+                        f"{float(r.get('Chg %') or 0):+.2f}%" + (f" · ₹{f:+,.0f} Cr" if pd.notna(f) else ""))
     tot = ratio.fillna(0).sum(axis=1)
     smart = pd.to_numeric(e.get("Smart"), errors="coerce") if "Smart" in e else pd.Series(np.nan, index=e.index)
     z = np.c_[ratio.clip(upper=6).fillna(0).to_numpy(), tot.clip(upper=6).to_numpy(),
@@ -5122,14 +5132,17 @@ def _unusual_heatmap(ev: pd.DataFrame, day: pd.DataFrame, E_all: pd.DataFrame | 
     txt = [[("—" if pd.isna(e.iloc[i][col]) else (f"{e.iloc[i][col]:.0f}%" if u == "%" else f"{e.iloc[i][col]:.1f}x"))
             for _, col, _t, u in _UNUSUAL_COLS] + [f"{tot.iloc[i]:.1f}", "—" if pd.isna(smart.iloc[i]) else f"{smart.iloc[i]:+.0f}"]
            for i in range(len(e))]
-    cols = [nm for nm, *_ in _UNUSUAL_COLS] + ["TOTAL", "Smart score"]
+    cols = ([nm for nm, *_ in _UNUSUAL_COLS] + ["TOTAL", "Smart score"]) if not MOBILE else \
+        ["Vol", "Range", "ATR", "OI", "Total", "Smart"]
     fig = go.Figure(go.Heatmap(
-        z=z, x=cols, y=ylab, text=txt, texttemplate="%{text}", textfont=dict(size=13, color="#F8FAFC"),
+        z=z, x=cols, y=ylab, text=txt, texttemplate="%{text}", textfont=dict(size=10 if MOBILE else 13, color="#F8FAFC"),
+        showscale=not MOBILE,
         colorscale=[[0, "#111A2C"], [0.16, "#1E3A5F"], [0.34, "#0EA5E9"], [0.55, "#F59E0B"], [0.8, "#F97316"], [1, "#EC4899"]],
         zmin=0, zmax=6, xgap=3, ygap=3, colorbar=dict(title="× threshold", thickness=10),
         hovertemplate="%{y}<br>%{x}: %{text}<extra></extra>"))
-    fig.update_layout(template=plot_template(), height=70 + 34 * len(e), margin=dict(l=4, r=4, t=30, b=4),
-                      xaxis=dict(side="top", tickfont=dict(size=13)), yaxis=dict(autorange="reversed", tickfont=dict(size=12)))
+    fig.update_layout(template=plot_template(), height=70 + (30 if MOBILE else 34) * len(e), margin=dict(l=4, r=4, t=30, b=4),
+                      xaxis=dict(side="top", tickfont=dict(size=10 if MOBILE else 13), tickangle=0),
+                      yaxis=dict(autorange="reversed", tickfont=dict(size=10 if MOBILE else 12)))
     st.plotly_chart(fig, width="stretch", key="radar_unusual_heat")
     st.dataframe(e[["Stock", "Time", "Candle", "Why", "Chg %"]].rename(columns={"Candle": "Side", "Chg %": "Chg %"})
                  .assign(Side=lambda d: np.where(d["Side"].isin(["Green", "Bullish"]), "BUY side", "SELL side")),
@@ -8965,11 +8978,68 @@ def page_paper():
         _btc_paper_section()
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _radar_snap_rows() -> pd.DataFrame:
+    rows = CS.select_rows("radar_snapshots", {"select": "*", "order": "day.desc"}) or []
+    d = pd.DataFrame(rows)
+    for c in ("rank", "price", "move_pct", "vol_vs_usual", "score", "after_pct", "best_pct", "worst_pct"):
+        if c in d:
+            d[c] = pd.to_numeric(d[c], errors="coerce")
+    return d
+
+
+def _radar_snapshots_view():
+    """The momentum radar's top 15 saved at 9:20 / 9:45 / 10:30 / 12:00 / 13:30 / 15:00 by the bots, with what each
+    stock did afterwards: which stocks stay on the list, and which snapshot time finds the movers."""
+    d = _radar_snap_rows()
+    if d.empty:
+        st.info("No radar snapshots yet: the bots save the momentum radar's top 15 at 9:20, 9:45, 10:30, 12:00, 13:30 "
+                "and 15:00 on market days, and fill in the result after 15:25.", icon=":material/history:")
+        return
+    days = sorted(d["day"].astype(str).unique(), reverse=True)
+    st.markdown(MX.section("Which snapshot time finds the movers", f"all {len(days)} day(s) · result = from the "
+                           "snapshot price to the close, the stock's way"), unsafe_allow_html=True)
+    done = d.dropna(subset=["after_pct"])
+    if not done.empty:
+        by = done.groupby("slot").agg(Stocks=("stock", "size"), **{"Avg to close %": ("after_pct", "mean"),
+                                      "Win %": ("after_pct", lambda x: (x > 0).mean() * 100),
+                                      "Avg best %": ("best_pct", "mean"), "Avg worst %": ("worst_pct", "mean")})
+        top5 = done[done["rank"] <= 5].groupby("slot")["after_pct"].mean()
+        by["Top 5 avg %"] = top5
+        st.dataframe(by.reset_index().rename(columns={"slot": "Snapshot"}), hide_index=True, width="stretch",
+                     key="rs_by_slot", column_config={c: st.column_config.NumberColumn(format="%+.2f") for c in
+                                                      ("Avg to close %", "Avg best %", "Avg worst %", "Top 5 avg %")}
+                     | {"Win %": st.column_config.NumberColumn(format="%.0f")})
+    c1, _ = st.columns([1, 3])
+    day = c1.selectbox("Day", days, key="rs_day")
+    z = d[d["day"].astype(str) == day]
+    piv = z.pivot_table(index="stock", columns="slot", values="rank", aggfunc="min")
+    piv = piv.reindex(columns=[x for x in ("09:20", "09:45", "10:30", "12:00", "13:30", "15:00") if x in piv.columns])
+    first = z.sort_values("slot").groupby("stock").first()
+    out = pd.DataFrame({"Stock": piv.index, "Times on list": piv.notna().sum(axis=1).values,
+                        "Side": first["side"].reindex(piv.index).values, "Sector": first["sector"].reindex(piv.index).values})
+    for c in piv.columns:
+        out[f"#{c}"] = [("" if pd.isna(v) else f"#{int(v)}") for v in piv[c].values]
+    res = z.sort_values("slot").groupby("stock")["after_pct"].first()
+    out["First seen → close %"] = res.reindex(piv.index).values
+    out = out.sort_values(["Times on list", "Stock"], ascending=[False, True])
+    st.markdown(MX.section("Stocks on the radar list · " + day, "#time = its rank at that snapshot (1 = top) · blank = "
+                           "not on the list"), unsafe_allow_html=True)
+    st.dataframe(out, hide_index=True, width="stretch", height=_h(len(out), 620), key="rs_day_tbl",
+                 column_config={"Times on list": st.column_config.ProgressColumn(min_value=0, max_value=6, format="%d"),
+                                "First seen → close %": st.column_config.NumberColumn(format="%+.2f")})
+    st.download_button("All snapshots (CSV)", d.to_csv(index=False).encode(), "radar_snapshots.csv", "text/csv",
+                       key="rs_csv")
+
+
 def page_lab():
     _desk_css()
     st.markdown("<div class='dk-h'><h2>Research Lab</h2><span>every setup, its backtest and its live paper record · data only</span></div>",
                 unsafe_allow_html=True)
-    tabs = st.tabs(["Scoreboard", "Playbook rules", "Entry & timing", "Candle study", "Paper record", "Rejected ideas"])
+    tabs = st.tabs(["Scoreboard", "Playbook rules", "Entry & timing", "Candle study", "Paper record", "Rejected ideas",
+                    "Radar snapshots"])
+    with tabs[6]:
+        _radar_snapshots_view()
     with tabs[0]:
         sb = _scoreboard()
         st.dataframe(sb, hide_index=True, width="stretch", height=_h(len(sb), 720), column_config={

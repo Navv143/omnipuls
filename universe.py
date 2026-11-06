@@ -226,6 +226,8 @@ def normalize(symbol: str) -> str:
     }
     if s in aliases:
         return aliases[s]
+    if s.startswith(("MCX:", "CDS:", "FUT:")):     # Dhan futures (MCX commodities, currency, stock futures)
+        return s
     if s.startswith("^") or s.endswith((".NS", ".BO", "=X", "=F", "-USD")) or "." in s:
         return s
     crypto_bases = {k.split("-")[0] for k in CRYPTO}
