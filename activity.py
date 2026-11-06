@@ -393,8 +393,28 @@ buy/sell signal on its own.
 """
 
 
+_FLOW_MEMO: dict = {}
+
+
 def flow_window(per: dict, start_time: str | None = None) -> pd.DataFrame:
-    """Per-stock inflow / outflow / net flow from `start_time` (HH:MM, inclusive) to the last candle."""
+    """Per-stock inflow / outflow / net flow from `start_time` (HH:MM, inclusive) to the last candle. Remembered per
+    data version (the same `per` object and candle count), so every viewer and every refresh reuses one result."""
+    try:
+        key = (id(per), len(per), sum(len(c) for c in per.values() if c is not None), start_time)
+    except Exception:
+        key = None
+    if key is not None and key in _FLOW_MEMO:
+        return _FLOW_MEMO[key].copy()
+    out = _flow_window(per, start_time)
+    if key is not None:
+        if len(_FLOW_MEMO) > 64:
+            _FLOW_MEMO.clear()
+        _FLOW_MEMO[key] = out
+        return out.copy()
+    return out
+
+
+def _flow_window(per: dict, start_time: str | None = None) -> pd.DataFrame:
     rows = []
     for sym, c in per.items():
         if c is None or c.empty or "Net Flow Cr" not in c:

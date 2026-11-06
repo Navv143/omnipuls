@@ -6887,10 +6887,31 @@ _CHAIN_BACK = {c.lower().replace(" ", "_"): c for c in _CHAIN_COLS}
 _CHAIN_NAME = {13: "NIFTY", 25: "BANKNIFTY", 27: "FINNIFTY", 442: "MIDCPNIFTY", 51: "SENSEX"}
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _latest_chain_file(mtime: float) -> pd.DataFrame:
+    """The recorder's option_chain/latest.parquet (every index, this minute), read once per file version for all
+    viewers."""
+    return pd.read_parquet(PATHS.DATA / "option_chain" / "latest.parquet")
+
+
 def _recorder_chain(sid: int, max_age_min: int = 5):
     """The recorder's latest saved chain for an index (nearest expiry, ±25 strikes, saved every minute), if fresh:
-    no Dhan call (Dhan's chain API allows one call every 3 seconds, which made the Market View wait ~9 s)."""
+    no Dhan call (Dhan's chain API allows one call every 3 seconds, which made the Market View wait 9-23 s).
+    First the one-minute latest.parquet, then the 5-minute part files."""
     name = _CHAIN_NAME.get(int(sid))
+    lf = PATHS.DATA / "option_chain" / "latest.parquet"
+    try:
+        if name and lf.exists() and time.time() - lf.stat().st_mtime < max_age_min * 60:
+            c = _latest_chain_file(lf.stat().st_mtime)
+            c = c[c["index"] == name]
+            if not c.empty:
+                c = c[c["expiry"] == c["expiry"].min()]
+                spot = float(c["spot"].iloc[0])
+                cc = c.rename(columns=_CHAIN_BACK)
+                ch = cc[[k for k in _CHAIN_COLS if k in cc]].sort_values("Strike").reset_index(drop=True)
+                return spot, ch, D.max_pain(ch)
+    except Exception:
+        pass
     d = PATHS.DATA / "option_chain" / "parts" / datetime.now(IST).strftime("%Y-%m-%d")
     files = sorted(d.glob("*.parquet")) if name and d.exists() else []
     for f in reversed(files[-3:]):

@@ -1,7 +1,7 @@
 # HTTPS for the Omnipuls cloud server. Caddy gets and renews a free Let's Encrypt certificate for $DOMAIN by itself.
 # the server's DOMAIN (deploy/.env) and omnipuls.cloud, both served (the old address keeps working)
 {$DOMAIN}, omnipuls.cloud {
-	encode gzip
+	encode zstd gzip
 	# live ticks: the browser's secure WebSocket (wss://DOMAIN/ticks) goes to the app's tick relay
 	handle /ticks* {
 		reverse_proxy app:8765
