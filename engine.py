@@ -73,13 +73,40 @@ def activity(svc) -> tuple | None:
     return R, E, per, session
 
 
-def write(svc, act):
+_SCANS: dict = {}
+
+
+def scans(svc) -> dict | None:
+    """The scanner results the app's pages show (momentum radar, V3 breakouts, R-factor), exactly as the app computes
+    them (_scan_now, smart_money_stocks), recomputed only when the loader has new candles."""
+    if _SCANS.get("k") == svc.last_pass:
+        return _SCANS.get("v")
+    bars, nifty = svc.bars()
+    if not bars or nifty is None or nifty.empty:
+        return None
+    session = SC.session_of(nifty)
+    S = SC.prepare(bars, session)
+    oi = svc.oi()
+    out = {"session": session, "last_pass": svc.last_pass}
+    for name, fn in (("radar", lambda: SC.radar(S, oi)),
+                     ("v3", lambda: SC.version3(S, (lambda N: N if N.ok else None)(SC.Stock("NIFTY 50", nifty, session)))[0]),
+                     ("rf", lambda: SC.r_factor(S, oi))):
+        try:
+            out[name] = fn()
+        except Exception as e:
+            log(f"scan {name}: {e}")
+            out[name] = None
+    _SCANS.update(k=svc.last_pass, v=out)
+    return out
+
+
+def write(svc, act, sc=None):
     bars, nifty = svc.bars()
     state = {"version": VERSION, "written": time.time(), "status": svc.status, "error": svc.error,
              "oi_status": svc.oi_status, "tf": svc.tf, "syms": list(svc.syms), "progress": svc.progress(),
              "last_pass": svc.last_pass, "last_snap": svc.last_snap, "freshness": svc.freshness(),
              "bars": bars, "nifty": nifty, "idx": svc.idx_bars(), "ifut": svc.ifut_bars(), "oi": svc.oi(),
-             "snaps": svc.snapshots(), "n_snaps": len(svc.snaps), "activity": act}
+             "snaps": svc.snapshots(), "n_snaps": len(svc.snaps), "activity": act, "scans": sc}
     OUT.mkdir(parents=True, exist_ok=True)
     tmp = STATE.with_suffix(f".{os.getpid()}.tmp")
     with open(tmp, "wb") as f:
@@ -115,9 +142,14 @@ def main():
                 t0 = time.time()
                 act = None
                 done, total = svc.progress()
+                sc = None
                 if done:
                     act = activity(svc)
-                write(svc, act)
+                    try:
+                        sc = scans(svc)
+                    except Exception as e:
+                        log(f"scans: {e}")
+                write(svc, act, sc)
                 last_key = key
                 log(f"state written ({done}/{total} stocks, {time.time() - t0:.1f}s)")
         except Exception as e:

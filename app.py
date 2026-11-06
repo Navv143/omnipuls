@@ -2141,6 +2141,9 @@ _V3W_CACHE = _memo("v3watch")
 
 def _scan_now(svc):
     """Radar shortlist and V3 breakouts on the loader's latest bars; recomputed only when new bars arrive."""
+    pre = getattr(svc, "scans", None)          # the engine computed them (engine.py)
+    if pre and pre.get("radar") is not None and pre.get("v3") is not None:
+        return pre["radar"], pre["v3"], pre["session"]
     bars, nifty_df = svc.bars()
     if not bars or nifty_df is None or nifty_df.empty:
         return None
@@ -5957,17 +5960,24 @@ def smart_money_stocks(svc) -> tuple[pd.DataFrame, object]:
     """Every F&O stock with its live price, today's futures buildup and rupee flow, and its R-factor."""
     res, _ = safe(oi_data, True)
     flows = SC.stock_flows(res[0]) if res else pd.DataFrame()
-    bars, nifty_df = svc.bars()
-    if not bars or nifty_df is None or nifty_df.empty:
-        return pd.DataFrame(), None
-    S, session = _prepared(svc)
-    key = ((id(svc), session), svc.last_pass, len(bars))
-    rf = _fresh_or_last(_PREP_CACHE, key, lambda: SC.r_factor(_prepared_now(svc)[0], svc.oi() if hasattr(svc, "oi")
-                                                              else {}), tag="rf").copy()
+    pre = getattr(svc, "scans", None)          # the engine computed the R-factor (engine.py)
+    if pre and pre.get("rf") is not None:
+        rf, session, S = pre["rf"].copy(), pre["session"], None
+    else:
+        bars, nifty_df = svc.bars()
+        if not bars or nifty_df is None or nifty_df.empty:
+            return pd.DataFrame(), None
+        S, session = _prepared(svc)
+        key = ((id(svc), session), svc.last_pass, len(bars))
+        rf = _fresh_or_last(_PREP_CACHE, key, lambda: SC.r_factor(_prepared_now(svc)[0], svc.oi() if hasattr(svc, "oi")
+                                                                  else {}), tag="rf").copy()
     if rf.empty:
         return rf, session
     rf = rf.drop(columns=["Buildup", "OI chg %", "Side", "Sector"], errors="ignore")
-    rf["Prev Close"] = rf["Stock"].map(lambda s: S[s].prev_close if s in S else np.nan)
+    if S is not None:
+        rf["Prev Close"] = rf["Stock"].map(lambda s: S[s].prev_close if s in S else np.nan)
+    else:   # price / (1 + move) = yesterday's close
+        rf["Prev Close"] = rf["Price"] / (1 + rf["Move %"] / 100) if {"Price", "Move %"} <= set(rf.columns) else np.nan
     rf["Chg %"] = rf["Move %"]
     if not flows.empty:
         f = flows.set_index("Stock")
@@ -7078,6 +7088,15 @@ def _bg_log(snaps, verdict, plans, ce, pe, svc, idx_b, og):
     threading.Thread(target=run, daemon=True, name="omni-desklog").start()
 
 
+def _go_card(title: str, note: str, page: str, label: str):
+    """A section that is shown in full on another page: its header and a one-tap link there (no duplicate data)."""
+    st.markdown(MX.section(title, note), unsafe_allow_html=True)
+    try:
+        st.page_link(P[page], label=label + " →", icon=":material/arrow_forward:")
+    except Exception:
+        st.caption(f"See {label}.")
+
+
 def market_view_body(svc, t: pd.DataFrame):
     st.markdown(MV_CSS, unsafe_allow_html=True)
     sf = sector_flow_table()
@@ -7292,14 +7311,9 @@ def market_view_body(svc, t: pd.DataFrame):
             _old.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
             _old.markdown(MX.section("Momentum Funnel picks (untested)", "all 5 steps · ranked by score · details on Momentum Funnel")
                           + MX.watch_cards(fp[:4], show_why=True), unsafe_allow_html=True)
-        if ev:
-            ev6 = []
-            for _e in ev[:6]:
-                _t0, _p0 = _first_seen(f"Radar: {_e['stock']}", _e.get("price"))
-                ev6.append({**_e, "plan": None, "first_t": _t0, "first_px": _p0})
-            st.markdown(MX.section("Sudden changes", f"radar bot · updated {bs2.get('updated', '')[11:16]} · first seen = when "
-                                   "it first showed today · information, not a trade signal") + MX.event_cards(ev6, 6),
-                        unsafe_allow_html=True)
+        if ev:   # merged: the unusual candles live on Money Flow (heat map by reason, repeats table)
+            _go_card("Sudden changes", f"{len(ev)} now · shown in full on Money Flow: unusual candles by volume, range, "
+                     "ATR and OI, and the stocks that repeat", "flow", "Open Money Flow · unusual candles")
     except Exception:
         pass
 
@@ -7340,20 +7354,21 @@ def market_view_body(svc, t: pd.DataFrame):
                     f"{_total} stocks. Sector money and unusual activity appear once 90% are in (a minute or two after "
                     "an update or the first open of the day).</div>", unsafe_allow_html=True)
     if heat:
-        st.markdown(MX.section("Sector money", f"as of {asof} · size = turnover · colour = net money in / out") + heat,
-                    unsafe_allow_html=True)
         rot = money_rotation_fig(secflow, 360 if MOBILE else 420)
         if rot is not None:
             st.markdown(MX.section("Money path", "from the sectors losing money (left, each its own colour) to the sectors "
                                    "receiving it (right) · live"), unsafe_allow_html=True)
             st.plotly_chart(rot, width="stretch", key="mv_rotation", config={"displayModeBar": False})
-        _sector_drill(flow, R)
-        _idx_cols = st.columns(1 if MOBILE else 2)
-        for _c, (_ik, _nm) in zip(_idx_cols * 2, (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"))):
-            with _c:
-                _f = index_flow_tree(flow, (index_defs().get(_ik) or {}).get("w", {}), _nm, f"mv_tree_{_ik}")
-                if _f is None:
-                    st.caption(f"{_nm}: no flow yet.")
+        # merged: the sector heat map with its stocks lives on Sectors, the index money maps on Money Flow
+        top_in = secflow.iloc[0]["Sector"] if not secflow.empty else ""
+        top_out = secflow.iloc[-1]["Sector"] if not secflow.empty else ""
+        g1, g2 = (st.container(), st.container()) if MOBILE else st.columns(2)
+        with g1:
+            _go_card("Sector money", f"most in: {top_in} · most out: {top_out} · heat map, tap a sector for its stocks",
+                     "sectors", "Open Sectors")
+        with g2:
+            _go_card("Nifty 50 · Bank Nifty money maps", "box = size of each stock's flow · every index",
+                     "flow", "Open Money Flow · inside the index")
     _tn = time.time()
     nf_today, nf_cross, nf_read = MV.flow_macd(idx_b.get("NIFTY"), MV.index_flow(per, (index_defs().get("NIFTY") or {})
                                                                                    .get("w", {})))

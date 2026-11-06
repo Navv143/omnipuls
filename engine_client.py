@@ -139,6 +139,12 @@ class EngineService:
         st = self._live()
         return None if st is None else st.get("activity")
 
+    @property
+    def scans(self):
+        """{"session", "radar", "v3", "rf"} from the engine, or None."""
+        st = self._live()
+        return None if st is None else st.get("scans")
+
     def _attr(self, k: str, default=None):
         st = self._live()
         return getattr(self._fb, k, default) if st is None else st.get(k, default)
