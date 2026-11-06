@@ -6710,6 +6710,15 @@ def _mv_signals(plan_rows: list, ce: pd.DataFrame, pe: pd.DataFrame, sc, picks: 
 
 
 @st.fragment(run_every=LIVE_EVERY)
+class _NullBox:
+    """Swallows output: sections that used to show untested signals on Market View."""
+    def markdown(self, *a, **k):
+        pass
+
+    def caption(self, *a, **k):
+        pass
+
+
 def market_view_body(svc, t: pd.DataFrame):
     st.markdown(MV_CSS, unsafe_allow_html=True)
     sf = sector_flow_table()
@@ -6843,9 +6852,7 @@ def market_view_body(svc, t: pd.DataFrame):
     idea_rows = plan_rows + ([{"name": "Master bot (tested rule + balance agree)", "state": "fired", "where": "",
                                "text": "; ".join(r["Signal"].split(": ", 1)[1] + " (" + r["Details"].split(" · ")[0] + ")"
                                                  for r in passed)}] if passed else [])
-    idea = MV.trade_idea(idea_rows, verdict, every)
-    now = datetime.now(IST)
-    sig = _mv_signals(plan_rows, ce, pe, sc, picks, bot_rows)
+    del idea_rows  # trade idea / signal chips no longer shown here (untested engines)
     st.markdown(MX.CSS, unsafe_allow_html=True)
 
     try:
@@ -6865,23 +6872,13 @@ def market_view_body(svc, t: pd.DataFrame):
     # ---- 2. mood gauge + the trade idea
     bull = sum(1 for r in every if r["tone"] > 0)
     bear = sum(1 for r in every if r["tone"] < 0)
+    # market reading only: the mood gauge; no trade signals here (only tested setups signal, on the Desk;
+    # the old engines' signals are collected on Paper & Data)
     st.markdown("<div class='mx-hero'>" + MX.gauge(verdict.get("score"), verdict.get("label", "Waiting for data"),
-                                                   bull, bear, len(every) - bull - bear)
-                + MX.idea_panel(idea, f"{now:%a %d %b %H:%M} IST", _md_inline) + "</div>", unsafe_allow_html=True)
-
-    # ---- 3. signals as chips
-    n_live = int((sig["Status"] == "● SIGNAL").sum()) if not sig.empty else 0
-    st.markdown(MX.section("Signals", f"{n_live} live · as of {asof} · hover a card for details") + MX.signal_cards(sig),
-                unsafe_allow_html=True)
-
-    # ---- trend-day banners (measured from yesterday's close: catches gap days)
-    for _k, (_dt, _gg) in gaps.items():
-        if _dt and (_dt["trend_day"] or (_gg or {}).get("signal") or abs(_dt.get("gap_atr") or 0) >= 0.3):
-            st.markdown(MX.trend_banner(IF.INDEXES[_k], _dt, _gg, _k), unsafe_allow_html=True)
-    _old = st.expander("Untested signals (old engines) - not traded", icon=":material/block:", expanded=False)
-    _old.caption("Index funnel, index momentum bot and momentum funnel: never passed a backtest and lost on paper "
-                 "(index funnel -0.36R, momentum funnel -0.26R a trade). Shown for reference only; the Auto Trader "
-                 "trades only tested setups (Research Lab → Scoreboard).")
+                                                   bull, bear, len(every) - bull - bear) + "</div>", unsafe_allow_html=True)
+    st.markdown("<div class='mx-quiet' style='margin:4px 0 10px'>Trade signals: tested setups only, on the <b>Desk</b>. "
+                "Paper setups and the old engines' signals: <b>Desk → Paper &amp; Data</b>.</div>", unsafe_allow_html=True)
+    _old = _NullBox()
     if any(moms.values()):
         _old.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
         _old.markdown(MX.section("Index momentum bot", "price + money + breadth + ATR rising together · trap = price against "
@@ -6983,12 +6980,6 @@ def market_view_body(svc, t: pd.DataFrame):
                     + MX.chains(ch_tiles), unsafe_allow_html=True)
 
     # ---- the detail, folded away
-    with st.expander("All signals as a table", icon=":material/table_rows:"):
-        if not sig.empty:
-            st.dataframe(sig, hide_index=True, width="stretch",
-                         column_config={"Details": st.column_config.TextColumn(width="large")})
-        st.caption("Tested = made money after costs in testing (trade these). Small edge = real but thin. "
-                   "Context = not tested as a signal: use it to choose the side, not as an entry.")
     with st.expander("What each reading means", icon=":material/menu_book:"):
         st.markdown("<div class='mv-grid'>" + "".join(_mv_card(r) for r in every) + "</div>", unsafe_allow_html=True)
     st.caption("Refreshes every minute in market hours. For information only, not investment advice.")
@@ -8244,26 +8235,26 @@ def _desk_body():
     tp = allp[allp["day"].astype(str) == today] if not allp.empty else allp
     left, right = st.columns([2.2, 1], gap="medium")
     with left:
-        core = tp[tp["family"].map(lambda f: (REG.by_prefix().get(f) or {}).get("status") == "core")] if not tp.empty else tp
-        st.markdown(MX.section("Core trades today", "setups with a tested edge · paper"), unsafe_allow_html=True)
-        _blotter(core, "dk_core", 220)
-        st.markdown(MX.section("All recorded setups today", f"{len(tp)} trades · testing on paper"), unsafe_allow_html=True)
-        if not tp.empty:
-            fams = sorted(tp["family"].dropna().unique())
-            pick = st.multiselect("Setups", fams, key="dk_fam", label_visibility="collapsed", placeholder="All setups")
-            _blotter(tp[tp["family"].isin(pick)] if pick else tp, "dk_all", 520)
-        else:
-            _blotter(tp, "dk_all")
+        acct = set(REG.account_setups())
+        core = tp[tp["family"].isin(acct)] if not tp.empty else tp
+        st.markdown(MX.section("Tested setups · today's trades", "V3 early pick (core) · Nifty ORB break (index, small stop)"),
+                    unsafe_allow_html=True)
+        _blotter(core, "dk_core", 300)
+        n_test = int((~tp["family"].isin(acct)).sum()) if not tp.empty else 0
+        st.markdown(f"<div class='mx-quiet'>{n_test} more paper trades from setups still in testing: "
+                    "<b>Desk → Paper &amp; Data</b>.</div>", unsafe_allow_html=True)
     with right:
         win = _window_now(now)
         st.markdown("<div class='dk-card'><h4>Playbook · now</h4>" + "".join(
             f"<div class='dk-now' style='--c:{GOLD if k == win else 'rgba(255,255,255,.12)'};opacity:{1 if k == win else .55}'>"
             f"<b>{MX._e(t)}</b>{'<span class=dk-tag style=--c:' + GOLD + '>NOW</span>' if k == win else ''}<br>{MX._e(x)}</div>"
             for k, t, x in _PLAYBOOK) + "</div>", unsafe_allow_html=True)
-        if not tp.empty:
-            dn = tp[tp["done"]]
-            op = tp[~tp["done"]]
-            st.markdown("<div class='dk-card'><h4>Today's paper book</h4>" + MX.kpis([
+        tpc = tp[tp["family"].isin(set(REG.account_setups()))] if not tp.empty else tp
+        if not tpc.empty:
+            dn = tpc[tpc["done"]]
+            op = tpc[~tpc["done"]]
+            tp = tpc
+            st.markdown("<div class='dk-card'><h4>Tested setups today</h4>" + MX.kpis([
                 MX.kpi("Open", str(len(op)), f"{op['pct'].mean():+.2f}% avg" if len(op) else ""),
                 MX.kpi("Closed", str(len(dn)), f"{(dn['pct'] > 0).mean() * 100:.0f}% won" if len(dn) else ""),
                 MX.kpi("Avg P&L", f"{tp['pct'].mean():+.2f}%", "per trade, all setups", MX.tone_color(tp["pct"].mean())),
@@ -8367,6 +8358,62 @@ def _scoreboard() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _old_engine_rows(day: str) -> pd.DataFrame:
+    return pd.DataFrame(CS.select_rows("trade_signals", {"select": "*", "day": f"eq.{day}", "order": "time"}) or [])
+
+
+def page_paper():
+    """Everything still being tested or collected: testing setups, the old engines' signals, iron fly, crypto & gold.
+    Nothing here is a trade signal."""
+    _desk_css()
+    now = datetime.now(IST)
+    today = now.strftime("%Y-%m-%d")
+    st.markdown("<div class='dk-h'><h2>Paper &amp; Data</h2><span>setups in testing and data collection · not trade "
+                "signals · results feed the Research Lab</span></div>", unsafe_allow_html=True)
+    allp = _paper_rows(today)
+    tp = allp[allp["day"].astype(str) == today] if not allp.empty else allp
+    acct = set(REG.account_setups())
+    test = tp[~tp["family"].isin(acct)] if not tp.empty else tp
+    tabs = st.tabs([f"Testing setups ({len(test)})", "Old engines (data only)", "Iron fly", "Crypto & gold"])
+    with tabs[0]:
+        if not test.empty:
+            fams = sorted(test["family"].dropna().unique())
+            pick = st.multiselect("Setups", fams, key="pp_fam", label_visibility="collapsed", placeholder="All setups")
+            z = test[test["family"].isin(pick)] if pick else test
+            g = z.groupby("family").agg(Trades=("pct", "size"), Open=("done", lambda d: int((~d).sum())),
+                                        Avg=("pct", "mean"), Win=("pct", lambda r: (r > 0).mean() * 100)).reset_index()
+            st.dataframe(g.rename(columns={"family": "Setup", "Avg": "Avg % today", "Win": "Win % today"}), hide_index=True,
+                         width="stretch", height=_h(len(g), 400), column_config={
+                             "Avg % today": st.column_config.NumberColumn(format="%+.2f"),
+                             "Win % today": st.column_config.NumberColumn(format="%.0f")})
+            _blotter(z, "pp_all", 620)
+        else:
+            _blotter(test, "pp_all")
+        st.caption("Recorded on paper until 20+ trades confirm or reject each setup (Research Lab → Scoreboard).")
+    with tabs[1]:
+        o = _old_engine_rows(today)
+        if o.empty:
+            st.caption("No old-engine signals today.")
+        else:
+            show = o.reindex(columns=["time", "source", "symbol", "side", "entry", "sl", "tp1", "risk_pct", "status", "outcome",
+                                      "r", "r_now"]).rename(columns={"time": "Time", "source": "Engine", "symbol": "Symbol",
+                                                                    "side": "Side", "entry": "Entry", "sl": "Stop", "tp1": "Target 1",
+                                                                    "risk_pct": "Stop %", "status": "Status", "outcome": "Outcome",
+                                                                    "r": "R", "r_now": "R now"})
+            show["Side"] = np.where(pd.to_numeric(show["Side"], errors="coerce") > 0, "BUY", "SELL")
+            g = o.groupby("source").agg(n=("symbol", "size"), r=("r", lambda x: pd.to_numeric(x, errors="coerce").mean())).reset_index()
+            st.dataframe(g.rename(columns={"source": "Engine", "n": "Signals today", "r": "Avg R"}), hide_index=True,
+                         width="stretch", height=_h(len(g), 300), column_config={"Avg R": st.column_config.NumberColumn(format="%+.2f")})
+            st.dataframe(show, hide_index=True, width="stretch", height=_h(len(show), 620))
+        st.caption("Index funnel, index momentum bot, momentum funnel, master bot, gap & go: never passed a backtest and lost "
+                   "on paper - kept running only to collect data. Not traded, not shown as signals.")
+    with tabs[2]:
+        _ironfly_section()
+    with tabs[3]:
+        _btc_paper_section()
+
+
 def page_lab():
     _desk_css()
     st.markdown("<div class='dk-h'><h2>Research Lab</h2><span>every setup, its backtest and its live paper record · data only</span></div>",
@@ -8439,6 +8486,7 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("desk", page_desk, "Desk", ":material/monitoring:"),
     ("flow", page_flow, "Money Flow", ":material/currency_exchange:"),
     ("lab", page_lab, "Research Lab", ":material/science:"),
+    ("paper", page_paper, "Paper & Data", ":material/inventory_2:"),
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
     ("funnel", page_funnel, "Momentum Funnel", ":material/filter_alt:"),
     ("agents", page_agents, "AI Desk", ":material/groups:"),
@@ -8473,9 +8521,9 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "desk"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({  # institutional desk: the few screens that matter first, everything else under More
-    "Desk": [P["desk"], P["flow"], P["options"], P["lab"]],
+    "Desk": [P["desk"], P["flow"], P["options"], P["lab"], P["paper"]],
     "Markets": [P["view"], P["indices"], P["sectors"], P["fno"], P["oi"], P["chart"], P["global"], P["mcx"], P["cdsfut"]],
-    "More": [P["auto"], P["scanners"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["bot"], P["smart"], P["apex"],
+    "Old tools (untested)": [P["auto"], P["scanners"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["bot"], P["smart"], P["apex"],
              P["odds"], P["screener"], P["watchlist"]],
     "Account": [P["account"]] + ([P["portfolio"], P["dhan"], P["review"], P["research"]] if IS_ADMIN else []),
 }, position="top")
