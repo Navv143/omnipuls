@@ -1268,9 +1268,12 @@ def superbot_step(mkt: "Market", now: datetime):
                                "last_time": hm, "first_pass": seen["first"], "times_passed": seen["n"], "data": _clean(data)})
     # decision stage: record each NEW arrival (a stock that was not at the decision stage on the previous candle)
     final = res.get(6)
-    now_final = set(final["stock"]) if final is not None and not final.empty else set()
+    # stocks turned away only because the entry window has not opened yet are not remembered as "already at the
+    # decision stage", so they are decided again (and can trade) once the window opens
+    now_final = set(final.loc[~final["reason"].astype(str).str.startswith("before"), "stock"]) \
+        if final is not None and not final.empty else set()
     for r in (final.to_dict("records") if final is not None and not final.empty else []):
-        if r["stock"] in st_["final"]:
+        if r["stock"] in st_["final"] or str(r.get("reason", "")).startswith("before"):
             continue
         side = 1 if r["side"] == "UP" else -1
         st_["trades"].append({"id": f"{day}|{r['stock']}|{hm}", "day": day, "stock": r["stock"], "sector": r.get("sector"),

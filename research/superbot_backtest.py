@@ -104,9 +104,10 @@ def run_day(bars: dict, day: pd.Timestamp, tf: int, nifty: pd.DataFrame | None =
                 stage_rows.append({"day": day, "time": chk, "stage": k, "stock": r["stock"], "passed": bool(r["pass"]),
                                    "to_close": sd * (float(after["Close"].iloc[-1]) / e - 1) * 100})
         final = res.get(6)
-        now_final = set(final["stock"]) if final is not None and not final.empty else set()
+        now_final = set(final.loc[~final["reason"].astype(str).str.startswith("before"), "stock"]) \
+            if final is not None and not final.empty else set()
         for r in (final.to_dict("records") if final is not None and not final.empty else []):
-            if r["stock"] in prev_final:
+            if r["stock"] in prev_final or str(r.get("reason", "")).startswith("before"):
                 continue
             a = {"day": day, "time": chk, "stock": r["stock"], "side": r["side"], "decision": r["decision"],
                  "reason": r["reason"], "score": r["score"], "rr": r.get("rr"), "risk_pct": r.get("risk_pct")}
