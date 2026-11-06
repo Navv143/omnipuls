@@ -5033,6 +5033,59 @@ def _flow_story(r: pd.Series) -> str:
     return " · ".join(bits)
 
 
+_UNUSUAL_COLS = (("Volume", "Candle Vol x", 3.0, "x"), ("Range", "Candle Range x", 2.5, "x"),
+                 ("Size vs ATR", "Candle ATR %", 35.0, "%"), ("OI", "Candle OI x", 4.0, "x"))
+
+
+def _unusual_heatmap(ev: pd.DataFrame, day: pd.DataFrame):
+    """Unusual candles as a heat map: one row per stock (its strongest candle of the last 30 min), one column per
+    reason (volume, range, size vs the daily ATR, OI), colour = how many times its threshold, so you see at a glance
+    WHAT made each candle unusual. Plus counts per reason."""
+    e = ev.copy()
+    for _, col, thr, _u in _UNUSUAL_COLS:
+        e[col] = pd.to_numeric(e.get(col), errors="coerce") if col in e else np.nan
+    ratio = pd.DataFrame({nm: e[col] / thr for nm, col, thr, _u in _UNUSUAL_COLS})
+    e["_score"] = ratio.max(axis=1)
+    e = e.loc[e.sort_values("_score", ascending=False).drop_duplicates("Stock").index].head(16)
+    ratio = ratio.loc[e.index]
+
+    def why(r):
+        hit = [nm for nm, *_ in _UNUSUAL_COLS if r.get(nm, 0) >= 1]
+        return " + ".join(hit) if hit else "—"
+    e["Why"] = ratio.apply(why, axis=1)
+    cnt = {nm: int((ratio[nm] >= 1).sum()) for nm, *_ in _UNUSUAL_COLS}
+    st.markdown(MX.kpis([MX.kpi(f"{nm} spike", str(cnt[nm]), (f"≥ {thr:g}x the usual" if u == "x" else f"candle ≥ {thr:g}% of daily ATR"),
+                                c) for (nm, _c, thr, u), c in zip(_UNUSUAL_COLS, ("#F59E0B", "#22D3EE", "#A78BFA", "#EC4899"))]),
+                unsafe_allow_html=True)
+    net30 = day.set_index("Stock")["Net 30m"] if "Net 30m" in day else pd.Series(dtype=float)
+    ylab = []
+    for _, r in e.iterrows():
+        up_ = str(r.get("Candle")) in ("Green", "Bullish")
+        c = "#22C55E" if up_ else "#F43F5E"
+        f = net30.get(r["Stock"], np.nan)
+        ylab.append(f"<b><span style='color:{c}'>{'▲' if up_ else '▼'} {r['Stock']}</span></b> {r['Time']} · "
+                    f"{float(r.get('Chg %') or 0):+.2f}%" + (f" · ₹{f:+,.0f} Cr" if pd.notna(f) else ""))
+    z = ratio.clip(upper=6).fillna(0).to_numpy()
+    txt = [[("—" if pd.isna(e.iloc[i][col]) else (f"{e.iloc[i][col]:.0f}%" if u == "%" else f"{e.iloc[i][col]:.1f}x"))
+            for _, col, _t, u in _UNUSUAL_COLS] for i in range(len(e))]
+    cols = [nm for nm, *_ in _UNUSUAL_COLS]
+    fig = go.Figure(go.Heatmap(
+        z=z, x=cols, y=ylab, text=txt, texttemplate="%{text}", textfont=dict(size=13, color="#F8FAFC"),
+        colorscale=[[0, "#111A2C"], [0.16, "#1E3A5F"], [0.34, "#0EA5E9"], [0.55, "#F59E0B"], [0.8, "#F97316"], [1, "#EC4899"]],
+        zmin=0, zmax=6, xgap=3, ygap=3, colorbar=dict(title="× threshold", thickness=10),
+        hovertemplate="%{y}<br>%{x}: %{text}<extra></extra>"))
+    fig.update_layout(template=plot_template(), height=70 + 34 * len(e), margin=dict(l=4, r=4, t=30, b=4),
+                      xaxis=dict(side="top", tickfont=dict(size=13)), yaxis=dict(autorange="reversed", tickfont=dict(size=12)))
+    st.plotly_chart(fig, width="stretch", key="radar_unusual_heat")
+    st.dataframe(e[["Stock", "Time", "Candle", "Why", "Chg %"]].rename(columns={"Candle": "Side", "Chg %": "Chg %"})
+                 .assign(Side=lambda d: np.where(d["Side"].isin(["Green", "Bullish"]), "BUY side", "SELL side")),
+                 hide_index=True, width="stretch", height=_h(len(e), 300), key="radar_unusual_tbl",
+                 column_config={"Chg %": st.column_config.NumberColumn(format="%+.2f")})
+    st.caption("Colour = how many times the threshold (volume 3x, range 2.5x, candle 35% of the daily ATR, OI 4x the "
+               "usual for that time). A single big candle often snaps back; strongest when the money of the last 30 "
+               "minutes agrees with it.")
+
+
 @st.fragment(run_every=LIVE_EVERY)
 def flow_radar_body(svc):
     """One screen: where money is going in / out right now, what is accelerating, which index stocks pull, and the
@@ -5076,14 +5129,10 @@ def flow_radar_body(svc):
                 unsafe_allow_html=True)
     up10 = day[(day["Net 30m"] > 0) & (day["Accel"] > 0)].sort_values("Net 30m", ascending=False).head(10)
     dn10 = day[(day["Net 30m"] < 0) & (day["Accel"] < 0)].sort_values("Net 30m").head(10)
-    cc = st.columns(2)
-    for col, d, colr, title in ((cc[0], up10, UP, "Money coming in faster"), (cc[1], dn10, DOWN, "Money going out faster")):
-        with col:
-            st.markdown(f"**{title}**")
-            html = "".join(f"<div class='mx-idea' style='--c:{colr};margin:4px 0'><b>{MX._e(r['Stock'])}</b> "
-                           f"<span style='opacity:.7'>{MX._e(r['Sector'])}</span><br><span style='font-size:.86em'>"
-                           f"{MX._e(_flow_story(r))}</span></div>" for _, r in d.iterrows())
-            st.markdown(html or "<div class='mx-quiet'>None right now.</div>", unsafe_allow_html=True)
+    st.markdown(MX.money_route(up10, dn10, mobile=MOBILE), unsafe_allow_html=True)
+    st.caption("Left: sectors, net money of the last 30 minutes. Lines: thicker = more money, moving dashes show the "
+               "direction. Cards: the stock's money in the last 30 min, the grey tick on the bar = the 30 min before, so a "
+               "bar far past its tick = money speeding up. Money against the price move often comes before a turn.")
 
     st.markdown(MX.section("Inside the index: where the money comes in and goes out",
                            "box size = index weight · colour = net flow as % of the stock's usual day"),
@@ -5115,19 +5164,7 @@ def flow_radar_body(svc):
     if ev30.empty:
         st.markdown("<div class='mx-quiet'>No unusual candles in the last 30 minutes.</div>", unsafe_allow_html=True)
     else:
-        rows = []
-        for _, e in ev30.sort_values("Time", ascending=False).head(25).iterrows():
-            f = day.set_index("Stock")["Net 30m"].get(e["Stock"], np.nan)
-            txt = (f"{e['Time']} · {e['Candle'].lower()} candle · {e.get('Candle Vol x', np.nan):.1f}x volume · "
-                   f"{e.get('Candle Range x', np.nan):.1f}x range · price {e.get('Chg %', 0):+.2f}%"
-                   + (f" · OI {e['Candle OI x']:.1f}x" if pd.notna(e.get("Candle OI x")) and e.get("Candle OI x", 0) >= 2 else "")
-                   + (f" · money last 30 min ₹{f:+,.0f} Cr" if pd.notna(f) else ""))
-            colr = UP if e["Candle"] == "Bullish" else DOWN
-            rows.append(f"<div class='mx-idea' style='--c:{colr};margin:3px 0'><b>{MX._e(e['Stock'])}</b> "
-                        f"<span style='font-size:.86em'>{MX._e(txt)}</span></div>")
-        st.markdown("".join(rows), unsafe_allow_html=True)
-        st.caption("A single big candle often snaps back; it shows where the activity is. Strongest when the money "
-                   "of the last 30 minutes agrees with the candle.")
+        _unusual_heatmap(ev30, day)
 
     st.markdown(MX.section("All F&O: sectors and their stocks", "box size = turnover today · colour = buying share"),
                 unsafe_allow_html=True)

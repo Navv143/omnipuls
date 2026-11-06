@@ -1091,3 +1091,106 @@ def position_cards(rows: list) -> str:
                    + (f" · {m['r']:+.2f}R" if m.get("r") is not None else "")
                    + (f" · {_e(m['exit'])}" if m.get("exit") else (f" · {_e(m['advice'])}" if m.get("advice") else "")) + "</div></div>")
     return "<div class='at-pos'>" + "".join(out) + "</div>"
+
+
+# ---------------------------------------------------------------- money route (Flow radar)
+
+R_UP, R_DN = "#22C55E", "#F43F5E"
+ROUTE_CSS = """<style>
+.mr-wrap{border:1px solid var(--om-border-strong);border-radius:14px;background:radial-gradient(120% 60% at 30% 0%,
+  rgba(34,197,94,.07),transparent 60%),radial-gradient(120% 60% at 30% 100%,rgba(244,63,94,.07),transparent 60%),
+  var(--om-surface);padding:8px 6px;overflow:hidden}
+.mr-wrap svg{width:100%;height:auto;display:block}
+.mr-flow{stroke-dasharray:7 9;animation:mrflow 1.2s linear infinite}
+@keyframes mrflow{to{stroke-dashoffset:-32}}
+@media (prefers-reduced-motion:reduce){.mr-flow{animation:none}}
+</style>"""
+
+
+def money_route(up: pd.DataFrame, dn: pd.DataFrame, mobile: bool = False) -> str:
+    """Where the money of the last 30 minutes is going, drawn as routes: sectors on the left, a line from each sector
+    to each of its stocks (thicker = more money, moving dashes = live direction), and a card per stock on the right:
+    the 10 stocks with money coming in faster on top (green), the 10 with money going out faster below (red).
+    up / dn need: Stock, Sector, Net 30m, Net prev 30m, Chg %, and optionally Turnover x (time), Smart, Net Flow Cr."""
+    rows = [(r, 1) for _, r in up.iterrows()] + [(r, -1) for _, r in dn.iterrows()]
+    if not rows:
+        return "<div class='mx-quiet'>No stock with money speeding up in the last 30 minutes.</div>"
+    W = 520 if mobile else 1000
+    cw = 340 if mobile else 360                       # card width
+    sw = 116 if mobile else 230                       # sector column width
+    ch, gap, top = 66, 8, 30
+    cx = W - cw - 4
+    # sectors: money in on top, money out below
+    sec = {}
+    for r, sd in rows:
+        s = str(r.get("Sector") or "Other")
+        sec.setdefault(s, 0.0)
+        sec[s] += float(r["Net 30m"])
+    secs = sorted(sec, key=lambda s: -sec[s])
+    n = len(rows)
+    has_up = any(sd > 0 for _, sd in rows)
+    ypos = lambda i: top + i * (ch + gap) + (18 if rows[i][1] < 0 and has_up else 0)  # noqa: E731
+    H = top + n * (ch + gap) + 20 + (18 if has_up else 0)
+    sh = min(56, (H - top - 20) / max(len(secs), 1) - 8)
+    sy = {s: top + i * ((H - top - 20) / max(len(secs), 1)) for i, s in enumerate(secs)}
+    mx = max(abs(float(r["Net 30m"])) for r, _ in rows) or 1.0
+    out = [f"<svg viewBox='0 0 {W} {H}' xmlns='http://www.w3.org/2000/svg' font-family='Inter,sans-serif'>",
+           f"<text x='4' y='18' fill='#8EA1BF' font-size='12' letter-spacing='1.5'>SECTORS · 30 MIN</text>",
+           (f"<text x='{cx}' y='18' fill='#22C55E' font-size='12' letter-spacing='1.5'>▲ MONEY COMING IN FASTER</text>" if has_up else "")]
+    # routes first (under the boxes)
+    for i, (r, sd) in enumerate(rows):
+        s = str(r.get("Sector") or "Other")
+        y0 = sy[s] + sh / 2
+        y1 = ypos(i) + ch / 2
+        x0, x1 = sw + 4, cx
+        col = R_UP if sd > 0 else R_DN
+        w = 1.5 + 9 * abs(float(r["Net 30m"])) / mx
+        d = f"M{x0},{y0:.1f} C{x0 + (x1 - x0) * .45:.1f},{y0:.1f} {x0 + (x1 - x0) * .55:.1f},{y1:.1f} {x1},{y1:.1f}"
+        out.append(f"<path d='{d}' stroke='{col}' stroke-opacity='.22' stroke-width='{w:.1f}' fill='none'/>")
+        out.append(f"<path class='mr-flow' d='{d}' stroke='{col}' stroke-opacity='.85' stroke-width='{max(1.2, w / 3):.1f}' "
+                   f"fill='none' style='animation-direction:{'normal' if sd > 0 else 'reverse'}'/>")
+    # sector boxes
+    for s in secs:
+        v = sec[s]
+        col = R_UP if v >= 0 else R_DN
+        y = sy[s]
+        out.append(f"<rect x='2' y='{y:.1f}' width='{sw}' height='{sh:.1f}' rx='9' fill='{col}' fill-opacity='.12' "
+                   f"stroke='{col}' stroke-opacity='.6'/>")
+        out.append(f"<rect x='2' y='{y:.1f}' width='4' height='{sh:.1f}' rx='2' fill='{col}'/>")
+        out.append(f"<text x='14' y='{y + sh / 2 - 3:.1f}' fill='#E6EDF7' font-size='{11 if mobile else 13}' "
+                   f"font-weight='700'>{_e(s[:14] if mobile else s[:22])}</text>")
+        out.append(f"<text x='14' y='{y + sh / 2 + 13:.1f}' fill='{col}' font-size='12' font-family='JetBrains Mono,monospace' "
+                   f"font-weight='700'>₹{v:+,.0f} Cr</text>")
+    # stock cards
+    for i, (r, sd) in enumerate(rows):
+        if sd < 0 and (i == 0 or rows[i - 1][1] > 0):
+            yy = ypos(i) - 7
+            out.append(f"<text x='{cx}' y='{yy:.1f}' fill='#F43F5E' font-size='12' letter-spacing='1.5'>▼ MONEY GOING OUT FASTER</text>")
+        y = ypos(i)
+        col = R_UP if sd > 0 else R_DN
+        n30, p30, chg = float(r["Net 30m"]), float(r["Net prev 30m"]), float(r["Chg %"])
+        tx = r.get("Turnover x (time)")
+        sm = r.get("Smart")
+        extra = " · ".join(b for b in (f"{tx:.1f}x turnover" if pd.notna(tx) else "",
+                                       f"smart {sm:+.0f}" if pd.notna(sm) and abs(sm) >= 25 else "",
+                                       f"day ₹{float(r['Net Flow Cr']):+,.0f} Cr" if pd.notna(r.get("Net Flow Cr")) else "") if b)
+        out.append(f"<rect x='{cx}' y='{y}' width='{cw}' height='{ch}' rx='10' fill='#0E1626' stroke='{col}' "
+                   f"stroke-opacity='.75'/><rect x='{cx}' y='{y}' width='{cw}' height='{ch}' rx='10' fill='{col}' fill-opacity='.08'/>")
+        out.append(f"<rect x='{cx}' y='{y + 8}' width='4' height='{ch - 16}' rx='2' fill='{col}'/>")
+        out.append(f"<text x='{cx + 14}' y='{y + 22}' fill='#E6EDF7' font-size='14' font-weight='800'>{_e(r['Stock'])}</text>")
+        out.append(f"<text x='{cx + cw - 10}' y='{y + 22}' text-anchor='end' fill='{R_UP if chg >= 0 else R_DN}' font-size='14' "
+                   f"font-family='JetBrains Mono,monospace' font-weight='700'>{chg:+.2f}%</text>")
+        out.append(f"<text x='{cx + 14}' y='{y + 40}' fill='{col}' font-size='12.5' font-family='JetBrains Mono,monospace' "
+                   f"font-weight='700'>₹{n30:+,.0f} Cr</text><text x='{cx + (110 if mobile else 120)}' y='{y + 40}' "
+                   f"fill='#8EA1BF' font-size='11'>30 min · before {p30:+,.0f}</text>")
+        # speed bar: this 30 min vs the 30 before
+        bw = cw - 28
+        a = min(abs(n30) / mx, 1) * bw
+        b = min(abs(p30) / mx, 1) * bw
+        out.append(f"<rect x='{cx + 14}' y='{y + 47}' width='{bw}' height='4' rx='2' fill='#283A5C'/>"
+                   f"<rect x='{cx + 14}' y='{y + 47}' width='{max(a, 2):.1f}' height='4' rx='2' fill='{col}'/>"
+                   f"<rect x='{cx + 14 + b:.1f}' y='{y + 45}' width='2' height='8' fill='#8EA1BF'/>")
+        if extra:
+            out.append(f"<text x='{cx + 14}' y='{y + 62}' fill='#8EA1BF' font-size='10.5'>{_e(extra)}</text>")
+    out.append("</svg>")
+    return ROUTE_CSS + "<div class='mr-wrap'>" + "".join(out) + "</div>"

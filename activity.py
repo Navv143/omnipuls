@@ -196,6 +196,7 @@ def stock_candles(sym: str, bars: pd.DataFrame, session, fut: pd.DataFrame | Non
     t["Chg %"] = (t["Close"] / b["prev_close"] - 1) * 100
     t["From open %"] = (t["Close"] / o - 1) * 100
     t["ATR used %"] = (t["High"].cummax() - t["Low"].cummin()) / b["atr"] * 100 if b["atr"] else np.nan
+    t["Candle ATR %"] = (t["High"] - t["Low"]) / b["atr"] * 100 if b["atr"] else np.nan   # one candle vs the daily ATR
     mom_atr = (t["Close"] - o) / b["atr"] if b["atr"] else np.nan
     vwap = turn.cumsum() / t["Volume"].cumsum().replace(0, np.nan)
     t["VWAP"] = vwap
@@ -318,7 +319,8 @@ def rank(bars: dict, session, futs: dict | None = None, snaps: pd.DataFrame | No
                            "Candle Vol x": e["Candle Vol x"], "Candle Range x": e["Candle Range x"],
                            "Candle OI x": e["Candle OI x"], "Candle Turnover Cr": e["Candle Turnover Cr"],
                            "Price": e["Close"], "Chg %": e["Chg %"], "Vol x (time)": e["Vol x (time)"],
-                           "Smart": e["Smart"], "_ts": ts})
+                           "Smart": e["Smart"], "Candle ATR %": e.get("Candle ATR %", np.nan),
+                           "ATR used %": e.get("ATR used %", np.nan), "_ts": ts})
     R = pd.DataFrame(rows)
     E = pd.DataFrame(events)
     if not R.empty:
