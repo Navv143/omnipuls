@@ -1,4 +1,4 @@
-# (6 Nov 2026: changed to restart a hung app; run_app.sh now has a health watchdog)
+# (7 Nov 2026: changed to restart the app so deploy/seo_patch.py runs; run_app.sh has a health watchdog)
 # Omnipuls theme: dark work area with a darker sidebar. The three selectable layouts
 # (Account > Appearance) restyle the sidebar and tables on top of this.
 [theme]
