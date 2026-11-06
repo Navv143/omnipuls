@@ -29,3 +29,23 @@ trip, both halves of the period, quarters / years. Scripts: research/commodity/ 
 Takeaways: commodities trend over months (gold, silver) but intraday breakouts don't pay after costs; the intraday
 moves follow US data / news, not the morning structure. The one rule worth paper-trading is copper's 2-day dip buy;
 for gold, holding beats every timing rule tested.
+
+## Crude oil and natural gas: intraday option trades (7 Nov 2026, research/commodity/options_intraday.py)
+There is no MCX option price history yet, so this tests the futures moves that option trades depend on.
+
+| Finding | Crude | Natural gas |
+|---|---|---|
+| Share of the day's movement in US hours (18:30-23:30 IST) | 64% (2024-25) / 45% (2025-26) | 65% / 39% |
+| Weekly US report (crude Wed, gas Thu, 20:00 IST summer / 21:00 winter): 2-hour move vs other days | 1.25x | 1.45x (1.69x in 2025-26) |
+| 2-hour move > 2.5% after the report | - | 19% of reports vs 7% of other days |
+| Report-hour move continues to the close? | no (+0.02%) | no; moves >= 1% partly reverse: +0.39% fading to the close, 61 reports, both halves |
+
+Reading for options: the gas report is the one big scheduled move, but it is known in advance, so its premium rises
+before it and drops after (IV crush): buying straddles before it only pays if the move beats that. No follow-through
+after the report, so buying options in the direction of the first move has no support; the partial reversal after big
+gas moves is a lead (selling the move's side after the report), not an edge. The rest of the day is quieter in Asian
+hours, which favours option sellers only if premiums keep the full day's decay there; that needs real option prices.
+
+Next: the recorder now saves MCX crude oil and natural gas option chains every minute (09:00-23:30, nearest expiry,
+15 strikes each side, LTP / bid / ask / OI / IV / greeks) to <data>/mcx_option_chain/. After 3-4 weeks (12-16 reports)
+the report straddle, the post-report fade with options and the quiet-hours premium sale can be tested on real premiums.
