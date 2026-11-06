@@ -41,3 +41,4 @@ market_data/
 
 # Server settings (domain) written by deploy/setup.sh
 deploy/.env
+research/commodity/cmd.pkl
