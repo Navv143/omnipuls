@@ -531,3 +531,26 @@ By run: 9:45 +0.24%, 11:00 +0.06%, 13:30 -0.12%. Alone: 9:45 x3 +0.24% (Sep 0.0)
 A fixed run takes stocks that have been on the list for a while (late); the live bot takes a stock when it FIRST passes
 all six stages. Same 11:00-12:00 hour: first arrivals +0.20% a trade, a fixed 11:00 run -0.15%. Freshness matters more
 than the clock time; keep the live 'first arrival' design.
+
+## Weak points of the 3-window plan (10:00-10:30 x2, 11:00-12:00 x2, 12:00-12:30 x2) - research/superbot_weakpoints.py, superbot_fixes.py
+
+Base (40 days): 223 trades, 5.6 a day, win 66%, +0.254% a trade, t 3.49, halves +0.34 / +0.17, worst day -6.1%.
+- Main loss driver: Nifty turning against the trade after entry. Nifty with the trade by > 0.3%: 66 trades +0.82% each
+  (the whole profit); against by > 0.3%: 29 trades -0.27%. Not visible at entry (exiting on a market turn was tested
+  earlier and made it worse).
+- Chasing: stocks that already moved > 1.0 day-ATR earn +0.006% (top third), > 2.64% on the day +0.04%, > 2.17%
+  stronger than Nifty +0.10%. On all candidates the 1.0-2.0 ATR band is negative but > 2 ATR is positive again: not clean.
+- Bad days cluster (all trades go with the market, so they are one bet): 22 Oct -6.1%, 3 Nov -3.3%.
+- 1st trade of the day (10:00 window) +0.12%, 6th trade +0.08%; 2nd-5th +0.24 to +0.42%.
+
+Fixes (skipped stocks replaced by the next best, as live):
+| Version | Trades/day | Avg | t | Halves | Worst day |
+|---|---|---|---|---|---|
+| Base | 5.6 | +0.254% | 3.49 | +0.34 / +0.17 | -6.1% |
+| Skip moved > 1.0 day-ATR | 5.2 | +0.265% | 4.16 | +0.28 / +0.25 | -4.3% |
+| Skip > 2.5% stronger than Nifty | 5.4 | +0.290% | 4.82 | +0.38 / +0.20 | -3.8% |
+| Day loss cap 1.5% | 5.1 | +0.264% | 3.42 | +0.34 / +0.17 | -5.3% |
+| Max 5 a day | 5.0 | +0.277% | 3.47 | +0.35 / +0.20 | -5.8% |
+| Moved <= 1.0 ATR + loss cap 1.5% | 4.7 | +0.285% | 4.23 | +0.28 / +0.30 | -3.4% |
+The fixes add little to the average (+0.01 to +0.04%) but cut the worst day; on the live 11-12 rule the ATR cut does
+nothing. The bigger step is the 3 windows themselves. Confirm on the 6-month server data before going live.
