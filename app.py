@@ -3565,15 +3565,18 @@ def page_sectors():
                     unsafe_allow_html=True)
 
     # ---- every sector as a card
-    s1, s2 = st.columns([2, 3], vertical_alignment="bottom")
-    sort = s1.segmented_control("Sort sectors by", ["Change", "Net money", "R-factor", "Smart score", "Activity"],
-                                default="Change", key="sx_sort") or "Change"
-    q = s2.text_input("Find a sector or stock", key="sx_find", placeholder="e.g. Banks or TCS")
+    s1, s2, s3 = st.columns([2, 2, 2], vertical_alignment="bottom")
+    sort = s1.selectbox("Sort sectors by", ["Change", "Net money", "R-factor", "Smart score", "Activity"], key="sx_sort")
+    _stock_keys = {"Change %": "Chg %", "Net money": "Net Flow Cr", "R-factor": "R-factor", "Smart score": "Smart",
+                   "Activity": "Activity %", "OI change": "OI Chg %", "Volume vs avg": "Vol x Avg"}
+    ssort = s2.selectbox("Sort stocks by", list(_stock_keys), key="sx_ssort")
+    asc = s3.toggle("Lowest first", False, key="sx_asc")
+    q = st.text_input("Find a sector or stock", key="sx_find", placeholder="e.g. Banks or TCS")
     rows = []
     for sec, g in t.groupby("Sector"):
         rows.append({"Sector": sec, "Change": g["Chg %"].mean(), "Net money": (fl_of.get(sec) or {}).get("Net Flow Cr", np.nan),
                      "R-factor": g["R-factor"].mean(), "Smart score": g["Smart"].mean(), "Activity": g["Activity %"].mean()})
-    order = pd.DataFrame(rows).sort_values(sort, ascending=False, na_position="last")["Sector"].tolist()
+    order = pd.DataFrame(rows).sort_values(sort, ascending=asc, na_position="last")["Sector"].tolist()
     if q:
         hit = set(t[t["Stock"].str.contains(q.strip(), case=False, regex=False)]["Sector"])
         order = [s for s in order if q.strip().lower() in s.lower() or s in hit]
@@ -3584,14 +3587,16 @@ def page_sectors():
         st.session_state.sx_pick = order[0]
     pick = st.session_state.sx_pick
     st.markdown(MX.section("All sectors", "R = R-factor (0-100) · Smart = smart score · Activity = volume vs usual by now")
-                + MX.sector_grid([MX.sector_card(s, t[t["Sector"] == s], fl_of.get(s) or {}, s == pick) for s in order]),
+                + MX.sector_grid([MX.sector_card(s, t[t["Sector"] == s], fl_of.get(s) or {}, s == pick,
+                                                 _stock_keys[ssort], asc) for s in order]),
                 unsafe_allow_html=True)
 
     # ---- the chosen sector as a full live table
     st.markdown(MX.section("Sector detail", "pick a sector"), unsafe_allow_html=True)
     pick = st.pills("Sector", order, default=pick, key="sx_pill", label_visibility="collapsed") or pick
     st.session_state.sx_pick = pick
-    g = t[t["Sector"] == pick].sort_values("Chg %", ascending=False)
+    _k = _stock_keys[ssort] if _stock_keys[ssort] in t else "Chg %"
+    g = t[t["Sector"] == pick].sort_values(_k, ascending=asc, na_position="last")
     fl = fl_of.get(pick) or {}
     st.markdown(MX.sector_card(pick, g, fl, True).replace("sx-list", "sx-list' style='display:none"),
                 unsafe_allow_html=True)
@@ -6553,6 +6558,66 @@ def nifty_flow_fig(today: pd.DataFrame, crosses: list, height: int = 560):
     return fig
 
 
+def index_flow_tree(flow: pd.DataFrame, weights: dict, name: str, key: str):
+    """An index's stocks as a heat map: box size = how much money moved (in or out), colour = in (green) / out (red)."""
+    if flow is None or flow.empty or not weights:
+        return None
+    m = flow[flow["Stock"].isin(weights)].copy()
+    if m.empty:
+        return None
+    m["size"] = m["Net Flow Cr"].abs().clip(lower=0.05)
+    lim = float(np.nanpercentile(m["Net Flow Cr"].abs(), 90)) or 1.0
+    tin, tout = m["Inflow Cr"].sum(), m["Outflow Cr"].sum()
+    st.markdown(MX.section(f"{name}: money in / out by stock", f"net ₹{tin - tout:+,.0f} Cr · {tin / max(tin + tout, 1) * 100:.0f}% "
+                           "buying · box = size of the flow"), unsafe_allow_html=True)
+    fig = go.Figure(go.Treemap(
+        labels=m["Stock"], parents=[""] * len(m), values=m["size"],
+        marker=dict(colors=m["Net Flow Cr"].clip(-lim, lim), colorscale=[[0, "#c62828"], [0.5, "#263238"], [1, "#00a884"]],
+                    cmid=0, cmin=-lim, cmax=lim, line=dict(width=1, color="#0b1220")),
+        customdata=np.c_[m["Net Flow Cr"], m["Chg %"], m["Buy share %"].fillna(50), m["Stock"].map(weights)],
+        texttemplate="<b>%{label}</b><br>₹%{customdata[0]:+,.0f} Cr<br>%{customdata[1]:+.2f}%",
+        hovertemplate="%{label}: net ₹%{customdata[0]:+,.1f} Cr · price %{customdata[1]:+.2f}% · buying "
+                      "%{customdata[2]:.0f}% · index weight %{customdata[3]:.1f}%<extra></extra>"))
+    fig.update_layout(height=420 if not MOBILE else 360, template=plot_template(), margin=dict(l=2, r=2, t=2, b=2))
+    st.plotly_chart(fig, width="stretch", key=key, config={"displayModeBar": False})
+    return fig
+
+
+def _sector_drill(flow: pd.DataFrame, R: pd.DataFrame):
+    """Open a sector from the money map: its stocks with price, flow, activity and build-up, sortable and searchable."""
+    if flow is None or flow.empty:
+        return
+    f = flow.copy()
+    f["Sector"] = f["Stock"].map(U.FNO_SECTOR_OF).fillna("Other")
+    secs = f.groupby("Sector")["Net Flow Cr"].sum().sort_values(ascending=False)
+    pick = st.pills("Open a sector", [f"{s} ₹{v:+,.0f} Cr" for s, v in secs.items()], key="mv_sec_pick",
+                    label_visibility="visible")
+    if not pick:
+        return
+    sec = pick.rsplit(" ₹", 1)[0]
+    g = f[f["Sector"] == sec].copy()
+    if R is not None and not R.empty:
+        g = g.merge(R[[c for c in ("Stock", "Activity", "Vol x (time)", "vs VWAP %", "RSI") if c in R]], on="Stock", how="left")
+    c1, c2 = st.columns([2, 1])
+    q = c1.text_input("Find a stock", key="mv_sec_q", placeholder="type to filter", label_visibility="collapsed")
+    side = c2.segmented_control("Show", ["All", "Inflow", "Outflow"], default="All", key="mv_sec_side",
+                                label_visibility="collapsed") or "All"
+    if q:
+        g = g[g["Stock"].str.contains(q.strip(), case=False, regex=False)]
+    if side != "All":
+        g = g[(g["Net Flow Cr"] > 0) if side == "Inflow" else (g["Net Flow Cr"] < 0)]
+    cols = ["Stock", "Price", "Chg %", "Net Flow Cr", "Inflow Cr", "Outflow Cr", "Buy share %", "Flow % of usual",
+            "Turnover x (time)", "Vol x (time)", "Activity", "Smart", "Buildup", "OI Value Chg Cr", "vs VWAP %", "RSI"]
+    g = g.sort_values("Net Flow Cr", ascending=False)
+    st.dataframe(g.reindex(columns=[c for c in cols if c in g]), hide_index=True, width="stretch",
+                 height=min(42 + 35 * len(g), 560), key="mv_sec_tbl", column_config={
+                     "Chg %": st.column_config.NumberColumn(format="%+.2f"),
+                     "Net Flow Cr": st.column_config.NumberColumn(format="%+.1f"),
+                     "Flow % of usual": st.column_config.NumberColumn(format="%+.1f"),
+                     "Buy share %": st.column_config.NumberColumn(format="%.0f")})
+    st.caption(f"{sec}: {len(g)} stocks · click a column header to sort.")
+
+
 def money_rotation_fig(secflow: pd.DataFrame, height: int = 380):
     """Where the money moves: sectors losing money (red, left) to sectors receiving it (green, right)."""
     links = A.rotation_links(secflow) if secflow is not None and not secflow.empty else []
@@ -6562,12 +6627,18 @@ def money_rotation_fig(secflow: pd.DataFrame, height: int = 380):
     dsts = list(dict.fromkeys(b for _, b, _ in links))
     net = secflow.set_index("Sector")["Net Flow Cr"].to_dict()
     labels = [f"{x}  ₹{net.get(x, 0):+,.0f} Cr" for x in srcs] + [f"{x}  ₹{net.get(x, 0):+,.0f} Cr" for x in dsts]
+    pal = ["#ff6b6b", "#ffa94d", "#ffd43b", "#a9e34b", "#69db7c", "#38d9a9", "#3bc9db", "#4dabf7", "#748ffc", "#9775fa",
+           "#da77f2", "#f783ac", "#e599f7", "#66d9e8"]
+    col = {x: pal[i % len(pal)] for i, x in enumerate(srcs)}          # each sector losing money gets its own colour
+
+    def rgba(h, al):
+        return f"rgba({int(h[1:3], 16)},{int(h[3:5], 16)},{int(h[5:7], 16)},{al})"
     fig = go.Figure(go.Sankey(
         arrangement="snap",
-        node=dict(label=labels, pad=14, thickness=16, line=dict(width=0),
-                  color=["rgba(239,83,80,.85)"] * len(srcs) + ["rgba(38,166,154,.85)"] * len(dsts)),
+        node=dict(label=labels, pad=14, thickness=18, line=dict(width=0),
+                  color=[col[x] for x in srcs] + ["rgba(38,166,154,.95)"] * len(dsts)),
         link=dict(source=[srcs.index(a) for a, _, _ in links], target=[len(srcs) + dsts.index(b) for _, b, _ in links],
-                  value=[v for _, _, v in links], color="rgba(38,166,154,.22)",
+                  value=[v for _, _, v in links], color=[rgba(col[a], .55) for a, _, _ in links],
                   hovertemplate="%{source.label} → %{target.label}: ₹%{value:,.0f} Cr<extra></extra>")))
     fig.update_layout(template=plot_template(), height=height, margin=dict(l=10, r=10, t=10, b=10),
                       font=dict(size=12))
@@ -6777,9 +6848,15 @@ def market_view_body(svc, t: pd.DataFrame):
                  (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"), ("FINNIFTY", "Fin Nifty"), ("SENSEX", "Sensex"))]
     chains, chain_px = [], []
     _tc = time.time()
-    for k, sid in (("NIFTY", 13), ("BANKNIFTY", 25)):
+    for k, sid in (("NIFTY", 13), ("BANKNIFTY", 25), ("FINNIFTY", 27), ("MIDCPNIFTY", 442), ("SENSEX", 51)):
         try:
-            spot, ch, mp = _mv_chain(sid, "IDX_I")
+            if k in ("NIFTY", "BANKNIFTY"):
+                spot, ch, mp = _mv_chain(sid, "IDX_I")
+            else:
+                _rc = _recorder_chain(sid)
+                if _rc is None or _rc[1].empty:
+                    raise ValueError("no recorded chain")
+                spot, ch, mp = _rc
             chains.append(MV.chain_read(TREND_NAMES.get(k, k), spot, ch, mp))
             chain_px.append((spot, mp))
         except Exception:
@@ -6876,8 +6953,18 @@ def market_view_body(svc, t: pd.DataFrame):
     # the old engines' signals are collected on Paper & Data)
     st.markdown("<div class='mx-hero'>" + MX.gauge(verdict.get("score"), verdict.get("label", "Waiting for data"),
                                                    bull, bear, len(every) - bull - bear) + "</div>", unsafe_allow_html=True)
-    st.markdown("<div class='mx-quiet' style='margin:4px 0 10px'>Trade signals: tested setups only, on the <b>Desk</b>. "
-                "Paper setups and the old engines' signals: <b>Desk → Paper &amp; Data</b>.</div>", unsafe_allow_html=True)
+    _mb = [r for r in bot_rows if r["Signal"].startswith("Master bot") and r["Status"] in ("● SIGNAL", "Good odds")]
+    st.markdown(MX.section("Master bot signals", "confirmed (tested rule + balance agree) and good-odds only · watch "
+                           "ideas are not shown until they qualify"), unsafe_allow_html=True)
+    if _mb:
+        st.dataframe(pd.DataFrame(_mb).reindex(columns=["Time", "Signal", "Status", "Evidence", "Details"]), hide_index=True,
+                     width="stretch", height=min(42 + 35 * len(_mb), 320), key="mv_master",
+                     column_config={"Details": st.column_config.TextColumn(width="large")})
+    else:
+        st.markdown("<div class='mx-quiet'>No confirmed or good-odds master bot signal right now.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='mx-quiet' style='margin:4px 0 10px'>Master bot live paper record so far: confirmed -0.06R, "
+                "good odds -0.24R a trade (5-6 Nov) - still being judged. Tested setups: <b>Desk</b>. All paper setups: "
+                "<b>Desk → Paper &amp; Data</b>.</div>", unsafe_allow_html=True)
     _old = _NullBox()
     if any(moms.values()):
         _old.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
@@ -6920,8 +7007,13 @@ def market_view_body(svc, t: pd.DataFrame):
             _old.markdown(MX.section("Momentum Funnel picks (untested)", "all 5 steps · ranked by score · details on Momentum Funnel")
                           + MX.watch_cards(fp[:4], show_why=True), unsafe_allow_html=True)
         if ev:
-            st.markdown(MX.section("Sudden changes", f"radar bot · updated {bs2.get('updated', '')[11:16]} · full list on Bots")
-                        + MX.event_cards(ev, 6), unsafe_allow_html=True)
+            ev6 = []
+            for _e in ev[:6]:
+                _t0, _p0 = _first_seen(f"Radar: {_e['stock']}", _e.get("price"))
+                ev6.append({**_e, "plan": None, "first_t": _t0, "first_px": _p0})
+            st.markdown(MX.section("Sudden changes", f"radar bot · updated {bs2.get('updated', '')[11:16]} · first seen = when "
+                                   "it first showed today · information, not a trade signal") + MX.event_cards(ev6, 6),
+                        unsafe_allow_html=True)
     except Exception:
         pass
 
@@ -6964,10 +7056,18 @@ def market_view_body(svc, t: pd.DataFrame):
     if heat:
         st.markdown(MX.section("Sector money", f"as of {asof} · size = turnover · colour = net money in / out") + heat,
                     unsafe_allow_html=True)
-        rot = money_rotation_fig(secflow, 300 if MOBILE else 340)
+        rot = money_rotation_fig(secflow, 360 if MOBILE else 420)
         if rot is not None:
-            with st.expander("Money path: from which sectors to which", icon=":material/swap_horiz:"):
-                st.plotly_chart(rot, width="stretch", key="mv_rotation", config={"displayModeBar": False})
+            st.markdown(MX.section("Money path", "from the sectors losing money (left, each its own colour) to the sectors "
+                                   "receiving it (right) · live"), unsafe_allow_html=True)
+            st.plotly_chart(rot, width="stretch", key="mv_rotation", config={"displayModeBar": False})
+        _sector_drill(flow, R)
+        _idx_cols = st.columns(1 if MOBILE else 2)
+        for _c, (_ik, _nm) in zip(_idx_cols * 2, (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"))):
+            with _c:
+                _f = index_flow_tree(flow, (index_defs().get(_ik) or {}).get("w", {}), _nm, f"mv_tree_{_ik}")
+                if _f is None:
+                    st.caption(f"{_nm}: no flow yet.")
     _tn = time.time()
     nf_today, nf_cross, nf_read = MV.flow_macd(idx_b.get("NIFTY"), MV.index_flow(per, (index_defs().get("NIFTY") or {})
                                                                                    .get("w", {})))
