@@ -473,3 +473,15 @@ Same entries, 6 stops x 6 targets x 6 trails, on the 120 picks and on all 2,313 
   (49% vs 53%); differences 0.02-0.03% a trade.
 - Live rule +0.268% (picks) / +0.055% (all); with a 3R target instead of the next swing level +0.278% / +0.076%:
   better on both samples, so adopted (superbot.RULES target_r = 3); stop and profit lock unchanged.
+
+## Why Super Bot trades lose (7 Nov 2026)
+- Losers vs winners at entry: almost identical (volume, money, sector rank, move so far, score, risk) - the loss is
+  not visible at entry with the data we have.
+- What decides it is the market after entry: Nifty against the trade by > 0.3% after entry -> 79% of picks lose
+  (-0.91% avg), 76% of all candidates; Nifty with the trade by > 0.3% -> 20-24% lose (+0.89%).
+- 46% of losing picks were +0.5% or more first, then reversed (the profit lock starts at +1R, ~1.5%).
+- Reacting does not help: exiting when Nifty turns 0.2 / 0.3 / 0.5% against lowers the result on both samples
+  (+0.278 -> +0.11 / +0.23 / +0.21% picks; +0.076 -> +0.02 / +0.05 / +0.06% all) because dips often recover; locking
+  profit from +0.5R raises wins (69%) but cuts the winners (+0.10% picks, +0.01% all). The current exits stay.
+- Losses are the cost of the setup: control them by size (the same rupee risk per trade, 1R = the stop distance)
+  and the 3-a-day / 1-per-sector limits, not by more exit rules.
