@@ -803,13 +803,6 @@ def get_feed(sig: tuple, version=None, day=None):
                 old.thread.join(timeout=6)
         except Exception:
             pass
-        # older feed code closed its relay without waiting, leaving the listening socket bound: close it from here
-        srv = getattr(old, "_server", None)
-        for s_ in list(getattr(srv, "sockets", None) or []):
-            try:
-                os.close(s_.fileno())
-            except Exception:
-                pass
     F.INSTANCES.clear()
     f = F.DhanFeed(DCFG["client_id"], DCFG["access_token"])
     F.INSTANCES.append(f)
