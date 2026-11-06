@@ -29,8 +29,11 @@ RULES = {
 }
 
 # sources the Filter lets through (tested or small-edge setups); everything else is logged as rejected
-TRADE_SOURCES = ("Index momentum bot", "Gap & go", "Bank Nifty failed-break fade", "Index funnel", "Momentum funnel",
-                 "Master bot (passed)")
+# Only tested setups (setup_registry: "account": True). The old engines (index funnel, index momentum bot, momentum
+# funnel, master bot, gap & go) lost on paper (index funnel -0.36R, momentum funnel -0.26R, 5-6 Nov) and never passed a
+# backtest: they are logged as "untested source" and not traded.
+import setup_registry as _REG
+TRADE_SOURCES = _REG.account_setups()
 INDEXES = ("NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX")
 
 AGENTS = [("Scanner", "scans every F&O stock and index every 5 minutes"),

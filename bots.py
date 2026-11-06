@@ -1022,6 +1022,32 @@ def _auto_account() -> dict:
         return {"start": AT.RULES["capital"], "equity": AT.RULES["capital"], "history": [], "rules": AT.RULES}
 
 
+def _account_records(day: str) -> list[dict]:
+    """Today's trades of the setups the paper account may trade (setup_registry "account": the V3 early pick and the
+    Nifty ORB break), in the Auto Trader's record format. Their own exit rules decide the result (r); the targets
+    passed here (1R / 2R) only satisfy the analyst's checks."""
+    import setup_registry as REG
+    out = []
+    want = REG.account_setups()
+    for f in (V3_FILE, MOM_FILE):
+        try:
+            rows = json.loads(f.read_text())
+        except Exception:
+            continue
+        for x in rows:
+            fam = REG.family(x.get("setup", ""))
+            if x.get("day") != day or fam not in want or x.get("entry") is None or x.get("sl") is None:
+                continue
+            e, sl, sd = float(x["entry"]), float(x["sl"]), int(x["side"])
+            risk = abs(e - sl)
+            done = str(x.get("result", "")).startswith(("stop", "target", "time", "Closed", "Stopped", "Trailed"))
+            out.append({"source": fam, "symbol": x.get("symbol"), "side": sd, "time": x.get("signal_at"), "entry": e, "sl": sl,
+                        "tp1": e + sd * risk, "tp2": e + sd * 2 * risk, "status": "closed" if done else "open",
+                        "r": x.get("r"), "r_now": x.get("r"), "m_r": x.get("r") if done else None,
+                        "m_exit": x.get("exit_at") if done else None, "ltp": x.get("exit_px")})
+    return out
+
+
 def auto_step(mkt: "Market", now: datetime, scanned: int, final: bool = False) -> dict:
     """The six agents on today's signal records: new signals decided once (filter, analyst, risk, paper order),
     positions marked to the managed results; <data>/autotrader/<day>.json and Supabase auto_trades."""
@@ -1036,7 +1062,7 @@ def auto_step(mkt: "Market", now: datetime, scanned: int, final: bool = False) -
         prior = [h for h in acc.get("history", []) if h["day"] < day]
         book = {"day": day, "equity_start": prior[-1]["equity"] if prior else acc.get("start", AT.RULES["capital"]),
                 "decisions": {}}
-    book = AT.step(book, mkt.trades, float(book["equity_start"]), now.strftime("%H:%M"), scanned)
+    book = AT.step(book, mkt.trades + _account_records(day), float(book["equity_start"]), now.strftime("%H:%M"), scanned)
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(_clean(book), default=str))
     os.replace(tmp, f)

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 SETUPS = [
     # ------------------------------------------------------------------ stocks
-    {"prefix": "V3 early pick", "market": "Stocks", "status": "core", "window": "09:30-10:00",
+    {"prefix": "V3 early pick", "market": "Stocks", "status": "core", "account": True, "window": "09:30-10:00",
      "look": "Top-10 mover at 9:30 (ATR, volume, range); no block deal; not a 0-1% gap its way",
      "entry": "First 3-min close beyond the 9:15-9:30 range (9:30 candle closes 9:33; 9:33-9:45 candles need 1.5x volume)",
      "stop": "0.5 ATR", "exit": "1 hour after entry: below -0.25% -> exit, else hold (trail 1 ATR, out 15:20)",
@@ -47,7 +47,7 @@ SETUPS = [
      "entry": "Next candle's open", "stop": "0.4 ATR", "exit": "Target 1.5 ATR or 15:20",
      "bt": "+0.13% a trade", "bt_win": "40%", "bt_n": "172 trades", "note": ""},
     # ------------------------------------------------------------------ index
-    {"prefix": "Nifty ORB break", "market": "Index", "status": "testing", "window": "09:30-14:30",
+    {"prefix": "Nifty ORB break", "market": "Index", "status": "testing", "account": True, "window": "09:30-14:30",
      "look": "Nifty's first 5-min close beyond the 9:15-9:30 range", "entry": "Next candle's open",
      "stop": "Breakout candle's far end (0.1-0.5 ATR, ~40 pts)", "exit": "15:20",
      "bt": "+1.31R a trade", "bt_win": "41%", "bt_n": "22 days", "note": "4 trend days made it; 3-year hourly version ~0R."},
@@ -86,6 +86,11 @@ SETUPS = [
 
 REJECTED = [
     # (idea, market, what was tested, result)
+    ("Index funnel (old Market View index cards)", "Index", "Live paper 5-6 Nov; stop 0.3-0.6 ATR (~0.7%)",
+     "-0.36R a trade, 20% win: retired, not traded"),
+    ("Index momentum bot", "Index", "Live paper 5-6 Nov; 3-year hourly +0.03% a trade", "-0.21R live: retired"),
+    ("Momentum funnel (stocks)", "Stocks", "Live paper 72 trades 5-6 Nov", "-0.26R a trade, 31% win: retired"),
+    ("Master bot (odds / watch)", "Stocks", "Live paper 5-6 Nov", "-0.06R to -0.24R: retired"),
     ("Stock setups with a small stop (13 kinds)", "Stocks", "PDH break / sweep, ORB break / fade, first-hour break / fade, "
      "day-extreme break / sweep, VWAP cross, gap go / fill, ignition / fade; 45 days", "All negative after costs (0.12% = 0.3R)"),
     ("Opposite side of failed breakouts", "Stocks", "Sweeps and fades vs breakouts", "Mirror images: both lose after costs"),
@@ -111,6 +116,11 @@ REJECTED = [
 ]
 
 STATUS_LABEL = {"core": "CORE", "testing": "TESTING", "rejected": "REJECTED"}
+
+
+def account_setups() -> tuple:
+    """Setups the paper Auto Trader may trade: the core stock setup and the one small-stop index setup."""
+    return tuple(x["prefix"] for x in SETUPS if x.get("account"))
 
 
 def family(setup_name: str) -> str | None:

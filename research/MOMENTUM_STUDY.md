@@ -401,3 +401,11 @@ after each candle closes. V3 on 3-minute candles (Yahoo 1-min, 80 stocks, 7 days
 hour 1 -> rest of day -0.30% (no recovery); 0 to +0.5% -> +0.31%; above +1% -> +0.48% (winners keep running). Rule
 "exit at 1 hour if below -0.25%, else hold to 15:20": +0.233% a trade (halves +0.29 / +0.18) vs hold-all +0.139%.
 Desk V3 watchlist now shows entry, each hour's move with its high / low, now %, and the hour-1 call.
+
+## Old signal engines retired (6 Nov 2026)
+Live paper 5-6 Nov: index funnel 5 trades -0.36R (20% win, stops ~0.7% = 130-400 index points), index momentum bot
+-0.21R, momentum funnel 72 trades -0.26R (31% win), master bot -0.06R / -0.24R. None ever passed a backtest; their
+stop rule (beyond the last 30 minutes' swing, 0.3-0.6 daily ATR) is far too wide for an index. 6 Nov: Nifty / Sensex
+long 10:30 and Bank Nifty short 9:30 all stopped at -1R within an hour, while the tested Nifty ORB break (stop 48
+points, 0.2%) was +1.35R. Now: the Auto Trader trades only setup_registry "account" setups (V3 early pick + Nifty ORB
+break); the old cards sit in a collapsed "Untested signals - not traded" box on Market View.

@@ -6878,12 +6878,16 @@ def market_view_body(svc, t: pd.DataFrame):
     for _k, (_dt, _gg) in gaps.items():
         if _dt and (_dt["trend_day"] or (_gg or {}).get("signal") or abs(_dt.get("gap_atr") or 0) >= 0.3):
             st.markdown(MX.trend_banner(IF.INDEXES[_k], _dt, _gg, _k), unsafe_allow_html=True)
+    _old = st.expander("Untested signals (old engines) - not traded", icon=":material/block:", expanded=False)
+    _old.caption("Index funnel, index momentum bot and momentum funnel: never passed a backtest and lost on paper "
+                 "(index funnel -0.36R, momentum funnel -0.26R a trade). Shown for reference only; the Auto Trader "
+                 "trades only tested setups (Research Lab → Scoreboard).")
     if any(moms.values()):
-        st.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
-        st.markdown(MX.section("Index momentum bot", "price + money + breadth + ATR rising together · trap = price against "
+        _old.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
+        _old.markdown(MX.section("Index momentum bot", "price + money + breadth + ATR rising together · trap = price against "
                                "money and breadth · details on Bots"), unsafe_allow_html=True)
-        st.markdown("<div class='wl'>" + "".join(MX.momentum_card(k, v) for k, v in moms.items() if v) + "</div>",
-                    unsafe_allow_html=True)
+        _old.markdown("<div class='wl'>" + "".join(MX.momentum_card(k, v) for k, v in moms.items() if v) + "</div>",
+                      unsafe_allow_html=True)
     # ---- index setups: the funnel for each index + the Bank Nifty fade
     if ix_rows:
         fb_txt = ""
@@ -6894,9 +6898,9 @@ def market_view_body(svc, t: pd.DataFrame):
                       + (f" · stop {pl['sl']:,.0f} · targets {pl['tp1']:,.0f} / {pl['tp2']:,.0f}" if pl else "")
                       + MX.live_html(g.get("live")) if g else
                       f"Bank Nifty failed-break fade: waiting (yesterday {bn_fb['pdl']:,.0f} – {bn_fb['pdh']:,.0f})")
-        st.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
-        st.markdown(MX.DESK_CSS, unsafe_allow_html=True)
-        st.markdown(MX.section("Index setups", "funnel steps per index · details on "
+        _old.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
+        _old.markdown(MX.DESK_CSS, unsafe_allow_html=True)
+        _old.markdown(MX.section("Index setups (untested)", "funnel steps per index · details on "
                     "Momentum Funnel → Indices") + "<div class='wl'>" + "".join(
                         MX.index_card(r, weak=r["key"] == "BANKNIFTY") for r in ix_rows) + "</div>"
                     + (f"<div class='mx-quiet' style='margin-top:8px;color:var(--om-text-3)'>{fb_txt}</div>" if fb_txt else ""),
@@ -6915,9 +6919,9 @@ def market_view_body(svc, t: pd.DataFrame):
                 if _t:
                     _f.update({k: _t[k] for k in ("entry", "sl", "tp1", "tp2", "risk_pct")})
                     _f["live"] = _sig_live(_f["Stock"], _t["side"], _plan_of(_t), _t["time"], svc) or _rec_live(_t)
-            st.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
-            st.markdown(MX.section("Momentum Funnel picks", "all 5 steps · ranked by score · details on Momentum Funnel")
-                        + MX.watch_cards(fp[:4], show_why=True), unsafe_allow_html=True)
+            _old.markdown(MX.FUNNEL_CSS, unsafe_allow_html=True)
+            _old.markdown(MX.section("Momentum Funnel picks (untested)", "all 5 steps · ranked by score · details on Momentum Funnel")
+                          + MX.watch_cards(fp[:4], show_why=True), unsafe_allow_html=True)
         if ev:
             st.markdown(MX.section("Sudden changes", f"radar bot · updated {bs2.get('updated', '')[11:16]} · full list on Bots")
                         + MX.event_cards(ev, 6), unsafe_allow_html=True)
