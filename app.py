@@ -8292,8 +8292,8 @@ def _desk_body():
                            "else hold to 15:20 - +0.23% a trade vs +0.14% holding all.")
             if early:
                 st.markdown(f"<div class='dk-now' style='--c:{UP}'><b>V3 early pick: {MX._e(str(early.get('Stock')))}</b> · "
-                            f"{MX._e(str(early.get('Side')))} · signal {MX._e(str(early.get('Signal')))} · entry {early.get('Entry')} · "
-                            f"stop {early.get('Stop')}</div>", unsafe_allow_html=True)
+                            f"{MX._e(str(early.get('Side')))} · signal {MX._e(str(early.get('Signal')))} · entry {float(early.get('Entry') or 0):,.2f} · "
+                            f"stop {float(early.get('Stop') or 0):,.2f}</div>", unsafe_allow_html=True)
         else:
             st.caption("Waiting for today's candles.")
     except Exception as e:

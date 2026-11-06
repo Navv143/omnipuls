@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 
 IST = timezone(timedelta(hours=5, minutes=30))
-TF = int(os.environ.get("OMNI_TF", 3))
+TF = int(os.environ.get("OMNI_TF", 5))   # 3 from the 6 Nov close (switched after market hours)
 NATIVE = (1, 5, 15, 25, 60)
 
 
