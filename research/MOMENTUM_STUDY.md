@@ -463,3 +463,13 @@ the best result, and taking it out of the full set drops it to +0.03%. Not overe
 removed a trade; stronger than Nifty and unusual candle alone did nothing; sector leader helped the first half only;
 volume 2x and unusual candle on top of the market rule gave the same result. Adopted in the live Super Bot (paper):
 with the market, 3 a day, 1 per sector. Still to confirm on the server's 6 months (Saturday back-test).
+
+## Super Bot exits (7 Nov 2026, research/superbot_exits.py)
+Same entries, 6 stops x 6 targets x 6 trails, on the 120 picks and on all 2,313 market-aligned candidates (40 days):
+- Stop: the live swing stop (last 6 candles, 0.3-1.0 daily ATR) is best on both (+0.22% / +0.045% averaged over the
+  other choices); tight stops (0.5%, 1-1.5x the 5-min ATR) are near zero or negative: noise stops them out.
+- Target: farther is better on both (1R worst; no target / 3R best).
+- Trail: lock 50% after 1R is best on the picks; on all candidates no trail averages more (+0.10%) but wins less
+  (49% vs 53%); differences 0.02-0.03% a trade.
+- Live rule +0.268% (picks) / +0.055% (all); with a 3R target instead of the next swing level +0.278% / +0.076%:
+  better on both samples, so adopted (superbot.RULES target_r = 3); stop and profit lock unchanged.
