@@ -8276,7 +8276,7 @@ def _market_strip():
     """Index, VIX, breadth and money flow in one row (Dhan)."""
     if not DHAN_DATA:
         st.caption("Connect Dhan for the live market strip.")
-        return None, None
+        return None, pd.DataFrame(), pd.DataFrame()
     svc = get_scan_service("dhan", _dhan_sig(), SS.VERSION)
     idx = index_defs()
     svc.set_universe(tuple(sorted(set(scan_universe("All F&O stocks")) | {m for d in idx.values() for m in d["w"]})))
@@ -8306,7 +8306,7 @@ def _market_strip():
         parts.append(MX.kpi("Net money flow", f"₹{tin - tout:+,.0f} Cr", f"{tin / max(tin + tout, 1) * 100:.1f}% buying",
                             MX.tone_color(tin - tout)))
     st.markdown(MX.kpis(parts), unsafe_allow_html=True)
-    return svc, R
+    return svc, R, flow
 
 
 def _blotter(d: pd.DataFrame, key: str, height: int = 360):
@@ -8333,43 +8333,162 @@ def _blotter(d: pd.DataFrame, key: str, height: int = 360):
 
 
 @st.fragment(run_every=LIVE_EVERY)
+def _ltp_map(svc) -> dict:
+    """Last closed-candle price of every loaded stock and index (for the trades table)."""
+    out = {}
+    if svc is None:
+        return out
+    try:
+        bars, nifty_df = svc.bars()
+        for k, df in (bars or {}).items():
+            if df is not None and len(df):
+                out[k] = float(df["Close"].iloc[-1])
+        for k, df in svc.idx_bars().items():
+            if df is not None and len(df):
+                out[k] = float(df["Close"].iloc[-1])
+        if nifty_df is not None and len(nifty_df):
+            out.setdefault("NIFTY", float(nifty_df["Close"].iloc[-1]))
+    except Exception:
+        pass
+    return out
+
+
+def _trade_monitor(d: pd.DataFrame, ltp: dict, now: datetime, key: str):
+    """Tested setups' trades with the price now, P&L, R, distance to the stop and time in the trade."""
+    if d.empty:
+        st.markdown("<div class='mx-quiet'>No trade from the tested setups yet today. V3 looks from 9:33 (first 3-min close "
+                    "beyond the 9:15-9:30 range); Nifty ORB from 9:30.</div>", unsafe_allow_html=True)
+        return
+    rows = []
+    for _, r in d.sort_values("signal_at").iterrows():
+        sd = 1 if r["side"] > 0 else -1
+        e, sl = r.get("entry"), r.get("sl")
+        live = ltp.get(str(r["symbol"]))
+        pr = float(r["exit_px"]) if r["done"] and pd.notna(r.get("exit_px")) else (live if live else r.get("exit_px"))
+        pnl = sd * (pr / e - 1) * 100 if pr and e else None
+        risk = abs(e - sl) if pd.notna(sl) and e else None
+        try:
+            mins = int((pd.Timestamp(now.replace(tzinfo=None)).normalize() + pd.Timedelta(hours=int(str(r["entry_at"])[:2]),
+                       minutes=int(str(r["entry_at"])[3:5])) - pd.Timestamp(now.replace(tzinfo=None))).total_seconds() // -60)
+        except Exception:
+            mins = None
+        rows.append({"Setup": r["family"], "Symbol": r["symbol"], "Side": "BUY" if sd > 0 else "SELL", "Entry at": r.get("entry_at"),
+                     "Entry": e, "Stop": sl, "Now": pr, "P&L %": pnl,
+                     "R": sd * (pr - e) / risk if risk and pr else None,
+                     "To stop %": (sd * (pr - sl) / pr * 100) if pr and pd.notna(sl) else None,
+                     "In trade": (f"{mins // 60}h {mins % 60:02d}m" if mins is not None and mins >= 0 and not r["done"] else ""),
+                     "Status": (str(r["result"]).split(" ")[0].capitalize() + (f" {r['exit_at']}" if r.get("exit_at") else ""))
+                     if r["done"] else "Open"})
+    t = pd.DataFrame(rows)
+    st.dataframe(t, hide_index=True, width="stretch", height=_h(len(t), 300), key=key, column_config={
+        "Entry": st.column_config.NumberColumn(format="%.2f"), "Stop": st.column_config.NumberColumn(format="%.2f"),
+        "Now": st.column_config.NumberColumn(format="%.2f"), "P&L %": st.column_config.NumberColumn(format="%+.2f"),
+        "R": st.column_config.NumberColumn(format="%+.2f"), "To stop %": st.column_config.NumberColumn(format="%.2f")})
+
+
+def _index_levels(svc) -> pd.DataFrame:
+    """Nifty / Bank Nifty / Fin Nifty: price, yesterday's high / low, the 9:15-9:30 range, today's high / low, where now."""
+    rows = []
+    if svc is None:
+        return pd.DataFrame()
+    ib = svc.idx_bars()
+    for k, nm in (("NIFTY", "Nifty 50"), ("BANKNIFTY", "Bank Nifty"), ("FINNIFTY", "Fin Nifty"), ("MIDCPNIFTY", "Midcap Sel")):
+        df = ib.get(k)
+        if df is None or df.empty:
+            continue
+        d = SC.clean(df)
+        days = sorted(set(d.index.normalize()))
+        if len(days) < 2:
+            continue
+        t, y = d[d.index.normalize() == days[-1]], d[d.index.normalize() == days[-2]]
+        if t.empty:
+            continue
+        orb = t[t.index.strftime("%H:%M") < "09:30"]
+        pr = float(t["Close"].iloc[-1])
+        pc = float(y["Close"].iloc[-1])
+        orh, orl = (float(orb["High"].max()), float(orb["Low"].min())) if len(orb) else (np.nan, np.nan)
+        where = ("above range" if pr > orh else "below range" if pr < orl else "inside range") if np.isfinite(orh) else ""
+        rows.append({"Index": nm, "Now": pr, "Chg %": (pr / pc - 1) * 100, "Yday H": float(y["High"].max()),
+                     "Yday L": float(y["Low"].min()), "9:15-9:30 H": orh, "9:15-9:30 L": orl, "Day H": float(t["High"].max()),
+                     "Day L": float(t["Low"].min()), "Now vs range": where})
+    return pd.DataFrame(rows)
+
+
+def _gap_group(g) -> str:
+    a = abs(g)
+    return "0-0.5%" if a < 0.5 else "0.5-1%" if a < 1 else "1-3%" if a < 3 else ">3%"
+
+
+@st.fragment(run_every=LIVE_EVERY)
 def _desk_body():
     now = datetime.now(IST)
     _desk_css()
     st.markdown(f"<div class='dk-h'><h2>Desk</h2><span>{now:%a %d %b %Y · %H:%M} IST</span></div>", unsafe_allow_html=True)
-    svc, R = _market_strip()
+    svc, R, flow = _market_strip()
     today = now.strftime("%Y-%m-%d")
     allp = _paper_rows(today)
     tp = allp[allp["day"].astype(str) == today] if not allp.empty else allp
-    left, right = st.columns([2.2, 1], gap="medium")
-    with left:
-        acct = set(REG.account_setups())
-        core = tp[tp["family"].isin(acct)] if not tp.empty else tp
-        st.markdown(MX.section("Tested setups · today's trades", "V3 early pick (core) · Nifty ORB break (index, small stop)"),
-                    unsafe_allow_html=True)
-        _blotter(core, "dk_core", 300)
-        n_test = int((~tp["family"].isin(acct)).sum()) if not tp.empty else 0
-        st.markdown(f"<div class='mx-quiet'>{n_test} more paper trades from setups still in testing: "
-                    "<b>Desk → Paper &amp; Data</b>.</div>", unsafe_allow_html=True)
-    with right:
+    acct = set(REG.account_setups())
+    core = tp[tp["family"].isin(acct)] if not tp.empty else tp
+    ltp = _ltp_map(svc)
+    # ---- 1. the tested trades, live
+    n_test = int((~tp["family"].isin(acct)).sum()) if not tp.empty else 0
+    st.markdown(MX.section("Tested setups · open and closed today", f"V3 early pick · Nifty ORB break · price now from the last "
+                           f"closed candle · {n_test} testing-setup trades on Paper & Data"), unsafe_allow_html=True)
+    _trade_monitor(core, ltp, now, "dk_mon")
+    # ---- 2. playbook now + sector money, then index levels full width
+    c1, c3 = st.columns([1.3, 1], gap="medium")
+    with c1:
         win = _window_now(now)
-        st.markdown("<div class='dk-card'><h4>Playbook · now</h4>" + "".join(
-            f"<div class='dk-now' style='--c:{GOLD if k == win else 'rgba(255,255,255,.12)'};opacity:{1 if k == win else .55}'>"
-            f"<b>{MX._e(t)}</b>{'<span class=dk-tag style=--c:' + GOLD + '>NOW</span>' if k == win else ''}<br>{MX._e(x)}</div>"
-            for k, t, x in _PLAYBOOK) + "</div>", unsafe_allow_html=True)
-        tpc = tp[tp["family"].isin(set(REG.account_setups()))] if not tp.empty else tp
-        if not tpc.empty:
-            dn = tpc[tpc["done"]]
-            op = tpc[~tpc["done"]]
-            tp = tpc
-            st.markdown("<div class='dk-card'><h4>Tested setups today</h4>" + MX.kpis([
-                MX.kpi("Open", str(len(op)), f"{op['pct'].mean():+.2f}% avg" if len(op) else ""),
-                MX.kpi("Closed", str(len(dn)), f"{(dn['pct'] > 0).mean() * 100:.0f}% won" if len(dn) else ""),
-                MX.kpi("Avg P&L", f"{tp['pct'].mean():+.2f}%", "per trade, all setups", MX.tone_color(tp["pct"].mean())),
-            ]) + "</div>", unsafe_allow_html=True)
-    # V3 watchlist: which stocks are set up and which have broken out, with the time
-    st.markdown(MX.section("V3 watchlist · who breaks and when", "top-10 movers at 9:30 · entry = first 3-min close beyond the 9:15-9:30 range"),
-                unsafe_allow_html=True)
+        keys = [k for k, _, _ in _PLAYBOOK]
+        i = keys.index(win) if win in keys else len(keys) - 1
+        cur = _PLAYBOOK[i] if win in keys else ("closed", "After 15:20", "Market closed: review the day in the Research Lab.")
+        nxt = _PLAYBOOK[i + 1] if win in keys and i + 1 < len(_PLAYBOOK) else None
+        st.markdown(MX.section("Playbook · now", "what the desk does in this window")
+                    + f"<div class='dk-now' style='--c:{GOLD}'><b>{MX._e(cur[1])}</b><span class=dk-tag style=--c:{GOLD}>NOW</span>"
+                    f"<br>{MX._e(cur[2])}</div>"
+                    + (f"<div class='dk-now' style='--c:rgba(255,255,255,.15);opacity:.65'><b>Next · {MX._e(nxt[1])}</b><br>"
+                       f"{MX._e(nxt[2])}</div>" if nxt else ""), unsafe_allow_html=True)
+    with c3:
+        st.markdown(MX.section("Sector money", "top 3 in · top 3 out"), unsafe_allow_html=True)
+        if flow is not None and not flow.empty:
+            f = flow.assign(Sector=flow["Stock"].map(U.FNO_SECTOR_OF).fillna("Other"))
+            sec = f.groupby("Sector")["Net Flow Cr"].sum().sort_values()
+            rows = [{"Sector": s, "Net ₹ Cr": v} for s, v in list(sec.iloc[::-1].head(3).items()) + list(sec.head(3).items())]
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", height=_h(6, 260), key="dk_sec",
+                         column_config={"Net ₹ Cr": st.column_config.NumberColumn(format="%+,.0f")})
+        else:
+            st.caption("Loading flow…")
+    st.markdown(MX.section("Index levels", "yesterday's high / low · 9:15-9:30 range · today's high / low"), unsafe_allow_html=True)
+    lv = _index_levels(svc)
+    if lv.empty:
+        st.caption("Needs Dhan.")
+    else:
+        st.dataframe(lv, hide_index=True, width="stretch", height=_h(len(lv), 200), key="dk_lv", column_config={
+            c: st.column_config.NumberColumn(format="%.1f") for c in ("Now", "Yday H", "Yday L", "9:15-9:30 H", "9:15-9:30 L",
+                                                                      "Day H", "Day L")} | {
+            "Chg %": st.column_config.NumberColumn(format="%+.2f")})
+    # ---- 3. finding trades: movers with their gap group, and the gap groups of the day
+    if R is not None and not R.empty and "Chg %" in R:
+        z = R.copy()
+        if "Gap %" in z:
+            z["Gap group"] = z["Gap %"].map(_gap_group)
+        cols = [c for c in ("Stock", "Sector", "Price", "Chg %", "Gap %", "Gap group", "Vol x (time)", "Smart", "Buildup") if c in z]
+        g1, g2 = st.columns(2, gap="medium")
+        for col, title, d in ((g1, "Top gainers now", z.nlargest(8, "Chg %")), (g2, "Top losers now", z.nsmallest(8, "Chg %"))):
+            with col:
+                st.markdown(MX.section(title, "F&O · gap group tells when the move usually comes"), unsafe_allow_html=True)
+                st.dataframe(d[cols], hide_index=True, width="stretch", height=_h(len(d), 330), key=f"dk_{title}", column_config={
+                    "Chg %": st.column_config.NumberColumn(format="%+.2f"), "Gap %": st.column_config.NumberColumn(format="%+.2f"),
+                    "Vol x (time)": st.column_config.NumberColumn(format="%.1f"), "Price": st.column_config.NumberColumn(format="%.2f")})
+        if "Gap group" in z:
+            cnt = z["Gap group"].value_counts()
+            st.markdown(MX.kpis([MX.kpi(f"Gap {g_}", str(int(cnt.get(g_, 0))), note) for g_, note in (
+                ("0-0.5%", "44% of toppers · move comes 9:45-10:30"), ("0.5-1%", "half done ~9:55"),
+                ("1-3%", "gap-with = trap; against = +0.38%"), (">3%", "breakout of range +1.6%"))]), unsafe_allow_html=True)
+    # ---- 4. V3 watchlist with prices hour by hour
+    st.markdown(MX.section("V3 watchlist · who breaks and when", "top-10 movers at 9:30 · entry = first 3-min close beyond the "
+                           "9:15-9:30 range · prices each hour after entry"), unsafe_allow_html=True)
     if svc is None:
         st.caption("Needs Dhan.")
         return
@@ -8381,22 +8500,22 @@ def _desk_body():
             diag, early = SC.v3_diagnose(S, N if N.ok else None)
             if diag is not None and not diag.empty:
                 diag = _v3_hourly(diag, S, datetime.now(IST))
-                cols = ["Rank", "Stock", "Breakout", "Side", "Entry at", "Entry", "Now %", "1h", "2h", "3h", "4h", "5h",
+                cols = ["Rank", "Stock", "Breakout", "Side", "Entry at", "Entry", "Now", "Now %", "1h", "2h", "3h", "4h", "5h",
                         "Hour-1 call", "Volume x", "Gap %", "Why"]
                 st.dataframe(diag.reindex(columns=[c for c in cols if c in diag.columns]), hide_index=True, width="stretch",
                              height=_h(len(diag), 420), key="dk_v3",
-                             column_config={"Now %": st.column_config.NumberColumn(format="%+.2f")})
-                st.caption("Each hour after entry: move at the hour's end (H = best, L = worst inside that hour). "
-                           "Hour-1 call from 276 past breakouts: below -0.25% after 1 hour = exit (losers don't recover), "
-                           "else hold to 15:20 - +0.23% a trade vs +0.14% holding all.")
+                             column_config={"Now %": st.column_config.NumberColumn(format="%+.2f"),
+                                            "Now": st.column_config.NumberColumn(format="%.2f")})
+                st.caption("Each hour after entry: price at the hour's end (H = high, L = low inside that hour). Hour-1 call "
+                           "from 276 past breakouts: below -0.25% after 1 hour = exit, else hold to 15:20.")
             if early:
                 st.markdown(f"<div class='dk-now' style='--c:{UP}'><b>V3 early pick: {MX._e(str(early.get('Stock')))}</b> · "
                             f"{MX._e(str(early.get('Side')))} · signal {MX._e(str(early.get('Signal')))} · entry {float(early.get('Entry') or 0):,.2f} · "
                             f"stop {float(early.get('Stop') or 0):,.2f}</div>", unsafe_allow_html=True)
         else:
             st.caption("Waiting for today's candles.")
-    except Exception as e:
-        st.caption(f"V3 watchlist unavailable: {e}")
+    except Exception as ex:
+        st.caption(f"V3 watchlist unavailable: {ex}")
 
 
 def _v3_hourly(diag: pd.DataFrame, S: dict, now: datetime) -> pd.DataFrame:
@@ -8404,7 +8523,7 @@ def _v3_hourly(diag: pd.DataFrame, S: dict, now: datetime) -> pd.DataFrame:
     hour's end with the best / worst inside that hour, the move now, and the hour-1 call (research/breakout_hourly.py:
     below -0.25% after the first hour -> exit, else hold to 15:20: +0.23% vs +0.14% a trade, both halves better)."""
     out = diag.copy()
-    for c in ("Entry at", "Entry", "Now %", "1h", "2h", "3h", "4h", "5h", "Hour-1 call"):
+    for c in ("Entry at", "Entry", "Now", "Now %", "1h", "2h", "3h", "4h", "5h", "Hour-1 call"):
         out[c] = None
     for i, r in out.iterrows():
         bt = str(r.get("Breakout") or "")
@@ -8422,6 +8541,7 @@ def _v3_hourly(diag: pd.DataFrame, S: dict, now: datetime) -> pd.DataFrame:
         post = t.iloc[k[0] + 1:]
         out.at[i, "Entry at"], out.at[i, "Entry"] = e_ts.strftime("%H:%M"), round(e, 2)
         out.at[i, "Now %"] = round(side * (float(post["Close"].iloc[-1]) / e - 1) * 100, 2)
+        out.at[i, "Now"] = round(float(post["Close"].iloc[-1]), 2)
         h1 = None
         for h in range(1, 6):
             w = post[(post.index >= e_ts + pd.Timedelta(hours=h - 1)) & (post.index < e_ts + pd.Timedelta(hours=h))]
@@ -8431,7 +8551,8 @@ def _v3_hourly(diag: pd.DataFrame, S: dict, now: datetime) -> pd.DataFrame:
             best = (side * ((w["High"] if side > 0 else w["Low"]) / e - 1) * 100).max()
             worst = (side * ((w["Low"] if side > 0 else w["High"]) / e - 1) * 100).min()
             done = w.index[-1] + pd.Timedelta(minutes=C.TF) >= e_ts + pd.Timedelta(hours=h)
-            out.at[i, f"{h}h"] = f"{mv:+.2f}%  (H {best:+.2f} / L {worst:+.2f})" + ("" if done else " …")
+            out.at[i, f"{h}h"] = (f"{float(w['Close'].iloc[-1]):,.2f}  (H {float(w['High'].max()):,.2f} / "
+                                  f"L {float(w['Low'].min()):,.2f})" + ("" if done else " …"))
             if h == 1 and done:
                 h1 = mv
         if h1 is None:
