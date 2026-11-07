@@ -616,3 +616,17 @@ they are not independent; Nov: both down. Needs the 6-month check (morning_lagga
   sign both years: at 08:00 UTC (London open) buy the 3 worst / sell the 3 best of the last 24h, hold 4h: net +0.02%
   (year 1) / +0.12% (year 2, t 2.3, PF 1.5); weak in year 1 -> paper-track only.
 The Indian 'weak stocks stay weak' effect does not appear in crypto, commodities or forex.
+
+## ADX-gated setups (research/adx_setups.py; 13 setups x with / without ADX >= 25 rising + DI agreeing; 10 markets)
+
+Markets: Nifty / Bank Nifty 5m (60 d) and 1h (3 y), BTC and gold 15m (3.5 y), crude / gas / silver / EURUSD 1h (2 y).
+Same exits for all (1.5 ATR stop, 2R, 24 candles; India 9:30-14:30, out 15:15); costs included.
+- Alone, every setup loses on average in every group (crypto & gold -0.20 to -0.41R; India / commodities ~ -0.01 to
+  -0.15R).
+- The ADX gate improved 13 of 39 group cells and made things worse in the rest. Its 'big help' cells (India RSI 50 cross
+  +0.27R, EMA 9/21 +0.20R, commodities CHoCH +0.38R) come from 1-20 trades: crossovers happen when trends turn, so they
+  almost never coincide with a rising ADX.
+- 4 of 364 combinations pass (EURUSD 1h Bollinger squeeze alone, Nifty 5m BOS alone, Nifty 1h BOS with ADX, Nifty 1h
+  Bollinger 20/2 alone), each t 0.7-1.2: about what chance gives.
+Verdict: the ADX regime filter does not turn indicator / SMC setups (BOS, CHoCH, order blocks, liquidity sweeps) into
+an edge after costs.

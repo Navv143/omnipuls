@@ -26,8 +26,10 @@ def prep(df, tz):
     if isinstance(d.columns, pd.MultiIndex):
         d = d.droplevel(1, axis=1)
     idx = pd.DatetimeIndex(d.index)
-    idx = idx.tz_localize("UTC") if idx.tz is None else idx
-    d.index = idx.tz_convert(tz).tz_localize(None)
+    if idx.tz is None:            # naive timestamps are already in the market's own time (IST for Indian data, UTC else)
+        d.index = idx
+    else:
+        d.index = idx.tz_convert(tz).tz_localize(None)
     d = d[(d.index.second == 0)]
     return d[~d.index.duplicated(keep="last")].sort_index().dropna(subset=["Close"])
 
@@ -187,6 +189,9 @@ def main(argv):
         ("Silver 1h (2y)", prep(pdd[("SILVER", "1h")], "UTC"), 0.03, False, 60, "Commodities & FX"),
         ("EUR/USD 1h (2y)", prep(pdd[("EURUSD", "1h")], "UTC"), 0.01, False, 60, "Commodities & FX"),
     ]
+    if "--only" in argv:
+        key = argv[argv.index("--only") + 1]
+        markets = [m for m in markets if key.lower() in m[5].lower()]
     rows, pooled = [], {}
     for name, d, cost, india, tf, grp in markets:
         if india:
@@ -201,7 +206,7 @@ def main(argv):
                 pooled.setdefault((grp, k, tag), []).append(x)
         print(f"{name} done", flush=True)
     res = pd.DataFrame(rows)
-    res.to_csv(S / "adx_setups.csv", index=False)
+    res.to_csv(S / ("adx_setups.csv" if "--only" not in argv else "adx_setups_only.csv"), index=False)
     pd.set_option("display.width", 250)
     pd.set_option("display.max_rows", 400)
     print("\nDOES THE ADX GATE HELP? average R per trade (after costs), pooled by group:")
