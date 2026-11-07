@@ -1589,6 +1589,9 @@ def run_research():
             sb = subprocess.run([sys.executable, str(paths.HERE / "research" / "superbot_backtest.py"), "--server"],
                                 cwd=str(paths.HERE), timeout=3 * 3600)
             log(f"super bot back-test: finished (exit {sb.returncode})")
+            nr = subprocess.run([sys.executable, str(paths.HERE / "research" / "superbot_newrules.py"), "--server"],
+                                cwd=str(paths.HERE), timeout=5 * 3600)
+            log(f"super bot new rules vs live (6 months): finished (exit {nr.returncode})")
     except Exception as e:
         log(f"momentum study: {e}")
     if r.returncode != 0 and not (B.BOT_DIR / "latest.json").exists():

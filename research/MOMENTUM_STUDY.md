@@ -491,3 +491,95 @@ Every market-aligned candidate by entry window (40 days): 9:30-10 +0.19% (56% wi
 -0.01%, 11-12 +0.13% (59%), 12-13 +0.03%, 13-14:30 -0.01%. With 3 a day: from 9:30 (fills in the first half hour)
 +0.27% but September -0.6%; 11:00-12:00 only +0.20%, 62% wins, t 2.17, Sep +4.4 / Oct +14.8 / Nov +4.4%, halves
 +0.20 / +0.19; opening only +0.16% with September -9.5% (33% wins). Adopted (paper): entries 11:00-12:00.
+
+## Super Bot in time windows (40 days, with the market, 1 per sector / stock, research/superbot_windows.py)
+
+| Plan | Trades/day | Win | Avg | t | Halves | Sep / Oct / Nov | Worst day |
+|---|---|---|---|---|---|---|---|
+| Live: 11:00-12:00, max 3 | 3.0 | 62% | +0.20% | 2.17 | +0.20 / +0.19 | +4.4 / +14.8 / +4.4 | -2.7% |
+| 9:30 1 + 10:00 2 + 12:00 2 | 4.5 | 66% | +0.20% | 2.34 | +0.25 / +0.15 | +11.6 / +13.9 / +10.3 | -5.6% |
+| 9:30 2 + 10:00 2 + 12:00 2 | 5.2 | 63% | +0.18% | 2.20 | +0.22 / +0.14 | +9.1 / +16.9 / +11.5 | -7.0% |
+| 10:00 2 + 12:00 2 (no 9:30) | 3.6 | 66% | +0.24% | 2.53 | +0.36 / +0.12 | +19.9 / +10.9 / +3.9 | -5.3% |
+| 10:00 2 + 11:00-12:00 2 | 3.9 | 68% | +0.27% | 2.94 | +0.35 / +0.18 | +19.0 / +13.8 / +8.4 | -6.1% |
+
+- By window: 9:30-10:00 is weak (+0.06%, -0.07% as the first of 1; Sep -5.7% alone); 10:00-10:30 (+0.25%), 11:00-12:00
+  (+0.28%) and 12:00-12:30 (+0.23-0.27%) carry the result.
+- Day rules (P&L at the window's start = closed + open trades at that moment's price) made every split worse:
+  "trade later only if flat / losing" 1+1+2: +5.0% total vs +20.6% always; "only if winning": +4.0%. Later windows are
+  about as good after a winning morning as after a losing one, so stopping or chasing removes good trades.
+- 10:00-10:30 was weak for ALL candidates (+0.04%) but good for the top-2 by score: the ranking matters there.
+- 40 days, five plans compared: the best-looking row is partly luck. More trades a day = bigger worst day.
+
+### Shifted 15 minutes later: 9:45 / 10:45 / 12:45 (same rules, no stock repeated in a day: checked, 0 overlaps)
+
+| Plan | Trades/day | Win | Avg | t | Total | Sep / Oct / Nov | Worst day |
+|---|---|---|---|---|---|---|---|
+| 30-min windows 2+2+2 | 5.7 | 56% | +0.13% | 1.66 | +28.8% | +3.4 / +12.1 / +13.2 | -9.0% |
+| 30-min windows 1+2+2 | 4.8 | 53% | +0.04% | 0.57 | +8.1% | -1.0 / +4.6 / +4.5 | -6.1% |
+| 15-min windows 2+2+2 | 4.6 | 55% | +0.03% | 0.32 | +4.8% | -6.1 / +1.9 / +9.0 | -9.0% |
+| 10:45 + 12:45 only | 3.8 | 52% | -0.06% | -0.80 | -8.8% | -7.8 / -0.4 / -0.6 | -4.4% |
+
+By window: 9:45-10:15 +0.35% a trade; 10:45-11:15 -0.04% (worst); 12:45-13:15 +0.07%. "Trade later only if flat /
+losing" again worse (+20.0%). A 15-minute shift turns 10:00-10:30 / 12:00-12:30 (+0.25%) into 10:45 / 12:45 (~0%):
+the window edge is fragile, so the exact time slots are mostly noise on 40 days. Wait for the 6-month server test.
+
+### Fixed runs: the bot run once at a set time, top N of everything passing (research/superbot_fixed_runs.py)
+
+9:45 top 3 + 11:00 top 3 + 13:30 top 2: 6.7 trades a day, win 55%, +0.06% a trade, t 0.86, Sep -6.5%, worst day -8.8%.
+By run: 9:45 +0.24%, 11:00 +0.06%, 13:30 -0.12%. Alone: 9:45 x3 +0.24% (Sep 0.0), 10:30 x3 +0.16%, 12:00 x3 +0.12%,
+11:00 x3 -0.15% (Sep -13.8%), 13:30 x3 -0.03%.
+A fixed run takes stocks that have been on the list for a while (late); the live bot takes a stock when it FIRST passes
+all six stages. Same 11:00-12:00 hour: first arrivals +0.20% a trade, a fixed 11:00 run -0.15%. Freshness matters more
+than the clock time; keep the live 'first arrival' design.
+
+## Weak points of the 3-window plan (10:00-10:30 x2, 11:00-12:00 x2, 12:00-12:30 x2) - research/superbot_weakpoints.py, superbot_fixes.py
+
+Base (40 days): 223 trades, 5.6 a day, win 66%, +0.254% a trade, t 3.49, halves +0.34 / +0.17, worst day -6.1%.
+- Main loss driver: Nifty turning against the trade after entry. Nifty with the trade by > 0.3%: 66 trades +0.82% each
+  (the whole profit); against by > 0.3%: 29 trades -0.27%. Not visible at entry (exiting on a market turn was tested
+  earlier and made it worse).
+- Chasing: stocks that already moved > 1.0 day-ATR earn +0.006% (top third), > 2.64% on the day +0.04%, > 2.17%
+  stronger than Nifty +0.10%. On all candidates the 1.0-2.0 ATR band is negative but > 2 ATR is positive again: not clean.
+- Bad days cluster (all trades go with the market, so they are one bet): 22 Oct -6.1%, 3 Nov -3.3%.
+- 1st trade of the day (10:00 window) +0.12%, 6th trade +0.08%; 2nd-5th +0.24 to +0.42%.
+
+Fixes (skipped stocks replaced by the next best, as live):
+| Version | Trades/day | Avg | t | Halves | Worst day |
+|---|---|---|---|---|---|
+| Base | 5.6 | +0.254% | 3.49 | +0.34 / +0.17 | -6.1% |
+| Skip moved > 1.0 day-ATR | 5.2 | +0.265% | 4.16 | +0.28 / +0.25 | -4.3% |
+| Skip > 2.5% stronger than Nifty | 5.4 | +0.290% | 4.82 | +0.38 / +0.20 | -3.8% |
+| Day loss cap 1.5% | 5.1 | +0.264% | 3.42 | +0.34 / +0.17 | -5.3% |
+| Max 5 a day | 5.0 | +0.277% | 3.47 | +0.35 / +0.20 | -5.8% |
+| Moved <= 1.0 ATR + loss cap 1.5% | 4.7 | +0.285% | 4.23 | +0.28 / +0.30 | -3.4% |
+The fixes add little to the average (+0.01 to +0.04%) but cut the worst day; on the live 11-12 rule the ATR cut does
+nothing. The bigger step is the 3 windows themselves. Confirm on the 6-month server data before going live.
+
+## Target: 70%+ wins with profit factor > 1.5 (research/superbot_winrate.py, 420 exit combinations)
+
+As now: 3 windows win 66% PF 1.83; + 'moved <= 1.0 ATR' win 65% PF 2.03; live 11-12 x3 win 62% PF 1.64.
+- 12 exit combinations pass win >= 70% and PF > 1.5 in BOTH halves; all use 'stop to cost after +0.5R' (no target):
+  3 windows + moved <= 1.0 ATR: win 74.2%, PF 2.55, +0.32% a trade (h1 78% / 2.49, h2 71% / 2.59).
+- But 86 of its 155 wins are scratches (+0.0 to +0.1% after costs). With 0.05% slippage on stop fills the win rate falls
+  to 42% (PF 2.47): a 70% win rate here is only on paper.
+- Real profit locks (move the stop to +0.4..0.8% after a +0.8..1.5% move), 0.05% slippage: win 61-64%, PF 1.9-2.25 in
+  both halves, +0.23..0.36% a trade. E.g. after +1.2% lock +0.6%: win 63%, PF 2.19 (h1 2.22 / h2 2.15), +0.33%.
+Conclusion: PF > 1.5 is met comfortably (about 2.0-2.3, steady); a REAL 70% win rate is not reached by exits or by the
+filters tested so far (the profit comes from ~18% of trades that make > 1%).
+
+## ORB / yesterday's levels, and sector vs Nifty direction (superbot_orb_sector.py, sector_independence.py)
+
+Sector independence (daily, 3 years, sector indices): least tied to Nifty = IT (corr 0.51), Pharma (0.52, up on 28% of
+Nifty down days), FMCG (0.59); then PSU Bank, PSE, Metal, Realty (~0.7). BankNifty / Fin Service / Infra move with Nifty
+(0.87-0.89, opposite on only 16-19% of days). Intraday 60 days (F&O stocks): Pharma (5-min corr 0.38), Telecom, Chemicals,
+IT, Capital Goods (~0.5) most independent; Chemicals and Capital Goods closed opposite to Nifty on 42% of days.
+
+Direction rule (40 days, all candidates): against Nifty but with the sector = 683 trades, -0.12% each (PF 0.76); in
+independent sectors -0.11%, Nifty-linked -0.13%. 3-window plan: with Nifty +0.254% (PF 1.83); with sector instead
++0.073% (PF 1.17); Nifty OR sector +0.116%; independent sectors following their sector +0.161%; the added trades alone
+-0.20% (PF 0.66). So the skipped 'against Nifty' moves lose on average, even in Pharma / IT: keep the Nifty rule.
+
+Breakouts (market-aligned candidates): 94% are already beyond the 15-min opening range; the 6% that are not lose
+(-0.14%, PF 0.73). Beyond the 30-min range or yesterday's high / low makes no real difference. In the 3-window plan:
++ beyond 15-min range +0.268% (PF 1.88, worst day -5.2%), + beyond 30-min range +0.281% (PF 1.92), + beyond yesterday's
+high / low +0.227% (worse). Small gains; the 15-min range rule is a cheap safety filter.
