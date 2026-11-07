@@ -41,7 +41,7 @@ def breaks(m5: pd.DataFrame, tf: int, session_start: str, exit_after: str | int,
     rows = []
     off = pd.Timedelta(hours=int(session_start[:2]), minutes=int(session_start[3:]))
     for day, z in m5.groupby(m5.index.normalize()):
-        if len(z) < 12:
+        if len(z) < 5:
             continue
         ref = z.resample(f"{tf}min", origin=day + off).agg(AGG).dropna(subset=["Close"])
         ref = ref[ref.index >= day + off]

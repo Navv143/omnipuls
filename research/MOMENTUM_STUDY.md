@@ -630,3 +630,19 @@ Same exits for all (1.5 ATR stop, 2R, 24 candles; India 9:30-14:30, out 15:15); 
   Bollinger 20/2 alone), each t 0.7-1.2: about what chance gives.
 Verdict: the ADX regime filter does not turn indicator / SMC setups (BOS, CHoCH, order blocks, liquidity sweeps) into
 an edge after costs.
+
+## Candle-breakout map (research/candle_breakouts.py): every 5 / 15 / 30 / 60-min candle, break of its high / low
+
+Entry at the candle's high / low (stop order), stop at its other side, target 2x its range, out 15:15 (night: 4h).
+- 1,156 cells (5 indices x 4 timeframes x every candle time x side, 60 days 5-min; gold / BTC night 3.5 y): only 5
+  pass (t >= 2, both halves +) - all LOW breaks (Nifty 15m 10:00, Sensex 5m 10:10 / 13:05, Sensex 15m 12:15, FinNifty
+  5m 09:50) - about chance. Average net R: HIGH breaks -0.18, LOW breaks -0.08; ~60% of breaks fail back to the other
+  side. Gold and BTC night candles: every cell negative (gold -0.12 to -0.28R, BTC -0.13 to -0.88R).
+- Nifty / Bank Nifty hourly candles over 3 years (hourly bars, coarse): Nifty LOW breaks of the 10:15-13:15 candles
+  +0.12 to +0.17R (t 2-3.4), but the same candles on exact 5-min data (60 d) are mostly negative, and 'first hourly low
+  break of the day' is only +0.07R (t 1.7; 2025 flat); highs ~0.
+- Most consistent: the FIRST HOUR (9:15) candle's LOW break -> short to 15:15: +0.18-0.27R on all five indices (60 d,
+  5-min) and +0.09R on Nifty 3 y (t 1.8, both halves +0.09 / +0.08). Mild lead; downside breaks follow through more than
+  upside ones.
+ADX inside the Super Bot (research/superbot_adx.py): 5-min ADX >= 20 PF 1.83 -> 1.90 (+0.01% a trade, noise); daily
+DI agreeing makes it worse (picks against the daily trend did better). Keep the Super Bot as is.
