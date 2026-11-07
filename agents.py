@@ -9,6 +9,7 @@ import os
 import time
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 import requests
 
@@ -165,6 +166,87 @@ def save(state: dict):
     os.replace(tmp, OUT / "state.json")
 
 
+# ---------------------------------------------------------------- AI Desk - Intraday (desk_intraday.py)
+
+INTRA_EVERY = int(os.environ.get("AGENTS_INTRA_EVERY", 300))
+INTRA_RISK_PCT = float(os.environ.get("AGENTS_INTRA_RISK_PCT", 0.5))
+
+
+def load_intraday() -> tuple[dict, dict]:
+    import desk_intraday as DI
+    syms = list(DI.CLASS_OF) + list(DI.MACRO)
+    m15 = _download(syms, "10d", "15m")
+    h1 = _download(syms, "60d", "1h")
+    try:  # crypto: Crypto.com when Yahoo has nothing
+        import cryptocom as CC
+        for s in DI.UNIVERSE["Crypto"]:
+            if s not in m15:
+                d = CC.candles(s, "15m", 300)
+                if d is not None and not d.empty:
+                    m15[s] = d
+            if s not in h1:
+                d = CC.candles(s, "1h", 300)
+                if d is not None and not d.empty:
+                    h1[s] = d
+    except Exception as e:
+        log(f"crypto.com intraday: {e}")
+    return m15, h1
+
+
+def _intra_calls() -> list:
+    try:
+        return json.loads((OUT / "intraday_calls.json").read_text())
+    except Exception:
+        return []
+
+
+def track_intraday(state: dict, m15: dict):
+    """New intraday TRADE calls join the paper record (one open call per symbol); open calls are scored on 15-min
+    candles (8-hour / daily-close time-out)."""
+    import desk_intraday as DI
+    calls = _intra_calls()
+    open_syms = {c["symbol"] for c in calls if not c.get("result")}
+    for r in state["rows"]:
+        if r["nova"]["call"] == "TRADE" and r["symbol"] not in open_syms:
+            t = r["titan"]
+            calls.append({"time": state["updated"], "symbol": r["symbol"], "name": r["name"], "class": r["class"],
+                          "session": state["atlas"]["session"], "side": t["side"], "entry": round(t["entry"], 6),
+                          "stop": round(t["stop"], 6), "target": round(t["target"], 6), "rr": t["rr"], "setup": r["setup"]})
+            log(f"intraday desk: TRADE {r['name']} {'LONG' if t['side'] > 0 else 'SHORT'} {t['entry']:.6g} "
+                f"stop {t['stop']:.6g} target {t['target']:.6g}")
+    DI.score_calls(calls, m15)
+    calls = calls[-1000:]
+    (OUT / "intraday_calls.json").write_text(json.dumps(calls, default=str))
+    try:
+        _cloud().upsert_rows("desk_intraday_calls", [{**c, "side": int(c["side"])} for c in calls[-50:]], "time,symbol")
+    except Exception as e:
+        log(f"Supabase intraday: {e}")
+    done = [c for c in calls if c.get("result")]
+    state["record"] = {"calls": len(calls), "open": sum(1 for c in calls if not c.get("result")), "closed": len(done),
+                       "wins": sum(1 for c in done if c["result"] == "win"),
+                       "avg_r": round(float(sum(c.get("r", 0) for c in done) / len(done)), 2) if done else None,
+                       "by_class": {k: {"closed": len(z), "avg_r": round(float(np.mean([c.get("r", 0) for c in z])), 2)}
+                                    for k in {c["class"] for c in done} for z in [[c for c in done if c["class"] == k]]}}
+    state["recent_calls"] = calls[-40:][::-1]
+
+
+def intraday_cycle() -> dict:
+    import desk_intraday as DI
+    t0 = time.time()
+    m15, h1 = load_intraday()
+    if len(m15) < 5:
+        raise RuntimeError(f"only {len(m15)} intraday markets loaded (Yahoo down?)")
+    state = DI.run_desk(m15, h1, news, fear_greed(), CAPITAL, INTRA_RISK_PCT)
+    track_intraday(state, m15)
+    state["seconds"] = round(time.time() - t0)
+    state["loaded"] = {"15m": len(m15), "1h": len(h1)}
+    OUT.mkdir(parents=True, exist_ok=True)
+    tmp = OUT / "intraday_state.json.tmp"
+    tmp.write_text(json.dumps(state, default=lambda o: o.item() if hasattr(o, "item") else str(o)))
+    os.replace(tmp, OUT / "intraday_state.json")
+    return state
+
+
 CP_DIR = paths.DATA / "crypto_paper"
 
 
@@ -299,8 +381,15 @@ def crash_tick():
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    last = 0.0
+    last = last_intra = 0.0
     while True:
+        if time.time() - last_intra >= INTRA_EVERY:
+            last_intra = time.time()
+            try:
+                si = intraday_cycle()
+                log(f"intraday desk: {len(si['rows'])} markets ({si['atlas']['session']}), calls {si['calls']} in {si['seconds']}s")
+            except Exception as e:
+                log(f"intraday desk error: {e}")
         if time.time() - last >= EVERY:
             last = time.time()
             try:

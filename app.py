@@ -29,7 +29,7 @@ def _reload_changed_modules():
     if first:
         seen = bootstrap._mtimes = {}
     base = os.path.dirname(os.path.abspath(__file__))
-    for name in ("mv_ui", "funnel", "index_funnel", "index_levels", "desk_agents", "agents", "market_view", "bot",
+    for name in ("mv_ui", "funnel", "index_funnel", "index_levels", "desk_agents", "desk_intraday", "agents", "market_view", "bot",
                  "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex", "autotrader", "closing", "btc_sniper", "crash_buy", "bn_ebp"):
         try:
             m = os.stat(os.path.join(base, name + ".py")).st_mtime
@@ -7599,6 +7599,145 @@ def page_agents():
          "4 agents agreeing, none against and TITAN passing.")
 
 
+# ---------------------------------------------------------------- AI Desk - Intraday: crypto, gold, energy, forex
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _intra_live() -> dict:
+    """The intraday desk computed here when the server's agents.py has no fresh result."""
+    import agents as AG
+    import desk_intraday as DI
+    m15, h1 = AG.load_intraday()
+    if len(m15) < 5:
+        raise RuntimeError("market data unavailable right now (Yahoo)")
+    s = DI.run_desk(m15, h1, AG.news, AG.fear_greed())
+    return json.loads(json.dumps(s, default=lambda o: o.item() if hasattr(o, "item") else str(o)))
+
+
+def _intra_state() -> dict | None:
+    try:
+        s = json.loads((PATHS.DATA / "agents" / "intraday_state.json").read_text())
+        if (datetime.now(IST) - datetime.fromisoformat(s["updated"])).total_seconds() < 1200:
+            return s
+    except Exception:
+        pass
+    try:
+        with st.spinner("The intraday desk is reading crypto, gold, energy and forex…"):
+            return _intra_live()
+    except Exception as e:
+        st.warning(f"Intraday desk: {e}")
+        return None
+
+
+def page_agents_intraday():
+    import desk_intraday as DI
+    status_strip()
+    st.header("Global Intraday Desk")
+    for _c in (MX.CSS, MX.DESK_CSS, MX.FUNNEL_CSS):
+        st.markdown(_c, unsafe_allow_html=True)
+    s = _intra_state()
+    if not s:
+        return
+    rows, a = s.get("rows", []), s.get("atlas", {})
+    by = lambda call: [r for r in rows if r["nova"]["call"] == call]  # noqa: E731
+    setups = [r for r in rows if r["side"]]
+    clean = [r for r in rows if r["status"] == "SETUP"]
+    tit = [r for r in rows if r.get("titan")]
+    passed = [r for r in tit if r["titan"]["pass"]]
+    hi = [r for r in rows if r.get("orion") and r["orion"].get("high_impact")]
+    hype = [r for r in rows if r["luna"]["hype"]]
+    fng = s.get("fng") or {}
+    st.caption(f"Six agents, layer by layer, on {len(rows)} markets: crypto (BTC, ETH, SOL), gold (XAU), silver, copper, "
+               f"crude, natural gas and forex. 15-minute setups in the 1-hour trend. Updated {s.get('updated', '')[11:16]} IST · "
+               "paper calls only, not back-tested setups.")
+    st.markdown(MX.section("Layer by layer", "each agent does one job; NOVA concludes")
+                + MX.funnel([("1 · ATLAS · markets read", len(rows), a.get("regime", "")),
+                             ("2 · VEGA · chart setups", len(setups), f"{len(clean)} with the 1h trend and not stretched"),
+                             ("3-4 · ORION + LUNA · news & crowd", len(setups) - len([r for r in setups if r['luna']['hype']]),
+                              f"{len(hi)} high-impact news · {len(hype)} crowded"),
+                             ("5 · TITAN · risk passed", len(passed), f"{len(tit) - len(passed)} rejected on risk"),
+                             ("6 · NOVA · TRADE", len(by("TRADE")), f"{len(by('WAIT'))} wait · {len(by('REJECT'))} reject")]),
+                unsafe_allow_html=True)
+    st.markdown(MX.agent_cards({
+        "ATLAS": (a.get("session", "—"), " · ".join(a.get("notes", [])[1:3])),
+        "VEGA": (f"{len(clean)} clean setups", (clean[0]["name"] + ": " + clean[0]["setup"]) if clean else "No clean setup now."),
+        "ORION": (f"{len(hi)} high-impact", (hi[0]["orion"]["high_impact"][0]["title"][:90]) if hi else "No high-impact catalyst on the setups."),
+        "LUNA": (f"{len(hype)} crowded / hype", f"Crypto fear & greed {fng.get('value')} ({fng.get('label')})" if fng else "Crowd readings per market."),
+        "TITAN": (f"{len(tit) - len(passed)} rejected · {len(passed)} passed", "Session, max loss, correlation, exposure (1 per class), R/R, volatility."),
+        "NOVA": (f"{len(by('TRADE'))} TRADE", "3 of 4 agree, none against, TITAN passed. No consensus, no trade."),
+    }) + MX.nova_counts(s.get("calls", {})), unsafe_allow_html=True)
+    st.markdown(MX.section("NOVA: trade now", "entry, stop, target and every agent's vote")
+                + MX.decision_cards(by("TRADE")), unsafe_allow_html=True)
+    c1, c2 = st.columns(2) if not MOBILE else (st.container(), st.container())
+    with c1:
+        st.markdown(MX.section("Wait: signals conflict") + MX.decision_cards(by("WAIT"), risk=False, limit=8), unsafe_allow_html=True)
+    with c2:
+        st.markdown(MX.section("Rejected", "no trade is also a decision") + MX.decision_cards(by("REJECT"), limit=8), unsafe_allow_html=True)
+
+    st.markdown(MX.section("Every market, every layer", "what each agent says right now"), unsafe_allow_html=True)
+    vote = lambda x: "✓ with" if x > 0 else "✗ against" if x < 0 else "–"  # noqa: E731
+    tabs = st.tabs(list(DI.UNIVERSE))
+    for tab, cls in zip(tabs, DI.UNIVERSE):
+        with tab:
+            xs = [r for r in rows if r["class"] == cls]
+            st.caption(f"ATLAS bias for {cls.lower()}: {['bearish', 'neutral', 'bullish'][a.get('bias', {}).get(cls, 0) + 1]}"
+                       + (" · closed for the weekend" if a.get("session") == "Weekend" and cls != "Crypto" else ""))
+            if not xs:
+                st.caption("No data right now.")
+                continue
+            st.dataframe(pd.DataFrame([{
+                "Market": r["name"], "Price": r["price"], "Today %": r["chg_1d"], "1h %": r.get("chg_1h"), "4h %": r.get("chg_4h"),
+                "Last 16h": r.get("spark") or [], "1h trend": r.get("trend_txt"), "VEGA setup": r["setup"] or "—",
+                "ATLAS": vote(r["atlas"] * (r["side"] or 1)) if r["side"] else "–",
+                "ORION": vote((r.get("orion") or {}).get("score", 0) * (r["side"] or 1)) if r["side"] else "–",
+                "LUNA": r["luna"]["label"], "TITAN": ("PASS" if r["titan"]["pass"] else "FAIL") if r.get("titan") else "–",
+                "NOVA": r["nova"]["call"], "Move / day ATR": r.get("move_datr"), "RSI 15m": r["rsi"], "VWAP": r.get("vwap"),
+                "TradingView": MX.tv_url(r["symbol"], "15")} for r in xs]),
+                hide_index=True, width="stretch", column_config={
+                    "Price": st.column_config.NumberColumn(format="%.5g"), "VWAP": st.column_config.NumberColumn(format="%.5g"),
+                    "Today %": st.column_config.NumberColumn(format="%+.2f"), "1h %": st.column_config.NumberColumn(format="%+.2f"),
+                    "4h %": st.column_config.NumberColumn(format="%+.2f"), "Move / day ATR": st.column_config.NumberColumn(format="%+.2f"),
+                    "RSI 15m": st.column_config.NumberColumn(format="%.0f"),
+                    "Last 16h": st.column_config.LineChartColumn(width="small"),
+                    "VEGA setup": st.column_config.TextColumn(width="medium"),
+                    "TradingView": st.column_config.LinkColumn("TradingView", display_text="Open ↗")})
+
+    rec = s.get("record") or {}
+    st.markdown(MX.section("Paper record", "every TRADE: target first = win, stop first = loss, 8 hours / daily close = time-out"),
+                unsafe_allow_html=True)
+    if rec:
+        st.markdown(MX.kpis([
+            MX.kpi("Calls", f"{rec.get('calls', 0)}", f"{rec.get('open', 0)} open"),
+            MX.kpi("Closed", f"{rec.get('closed', 0)}", "scored"),
+            MX.kpi("Wins", f"{rec.get('wins', 0)}", f"{(rec['wins'] / rec['closed'] * 100):.0f}% of closed" if rec.get("closed") else "—", MX.UP),
+            MX.kpi("Average", f"{rec['avg_r']:+.2f}R" if rec.get("avg_r") is not None else "—", "per closed call",
+                   MX.tone_color(rec.get("avg_r") or 0)),
+        ]), unsafe_allow_html=True)
+        if rec.get("by_class"):
+            st.dataframe(pd.DataFrame([{"Class": k, "Closed": v["closed"], "Avg R": v["avg_r"]} for k, v in rec["by_class"].items()]),
+                         hide_index=True, width="stretch", column_config={"Avg R": st.column_config.NumberColumn(format="%+.2f")})
+        rc = s.get("recent_calls") or []
+        if rc:
+            st.dataframe(pd.DataFrame([{"Time (IST)": c["time"][:16].replace("T", " "), "Market": c["name"], "Session": c.get("session"),
+                                        "Side": "LONG" if c["side"] > 0 else "SHORT", "Entry": c["entry"], "Stop": c["stop"],
+                                        "Target": c["target"], "R/R": c["rr"], "Setup": c["setup"],
+                                        "Result": c.get("result") or "open", "R": c.get("r"), "Exit (UTC)": (c.get("exit_at") or "")[:16]}
+                                       for c in rc]), hide_index=True, width="stretch",
+                         column_config={"R": st.column_config.NumberColumn(format="%+.2f"),
+                                        "Setup": st.column_config.TextColumn(width="medium")})
+    else:
+        st.caption("The record starts with the first TRADE call on the server.")
+    note("1 ATLAS: live session (Asia / London / overlap / New York / quiet; weekend = crypto only), dollar index 1h trend, "
+         "Bitcoin 1h + 4h trend → bias per class (crypto with Bitcoin; gold, metals, energy against the dollar; forex with / "
+         "against it). 2 VEGA: 1h trend (EMA 20/50) + 15-min setup: 4-hour range break with volume, pullback to the 15-min "
+         "EMA 20, VWAP reclaim / loss; a move already > 1.2 daily ATR from the open is 'stretched' and not traded. "
+         "3 ORION: headline words, high-impact catalysts. 4 LUNA: 15-min RSI extremes, 4-hour move z-score, crypto Fear & "
+         "Greed. 5 TITAN: 0.5% risk per trade, stop beyond the 15-min swing (1-2.5 ATR), target 2R or the next level, "
+         "R/R ≥ 1.5, ATR ≤ 2x normal, correlation ≤ 0.75, max 4 trades / 1 per class, only in the class's active sessions, "
+         "no new non-crypto trade after 20:00 UTC. 6 NOVA: TRADE needs a clean VEGA setup, 3 of 4 agents agreeing, none "
+         "against and TITAN passing.")
+
+
 # ---------------------------------------------------------------- Momentum funnel: simple step-by-step watchlist
 
 
@@ -9662,6 +9801,7 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("view", page_view, "Market View", ":material/dashboard_customize:"),
     ("funnel", page_funnel, "Momentum Funnel", ":material/filter_alt:"),
     ("agents", page_agents, "AI Desk", ":material/groups:"),
+    ("intraday_desk", page_agents_intraday, "Global Intraday Desk", ":material/currency_bitcoin:"),
     ("closing", page_closing, "Closing Picks", ":material/nightlight:"),
     ("auto", page_auto, "Auto Trader", ":material/robot_2:"),
     ("bot", page_bot, "Bots", ":material/smart_toy:"),
@@ -9693,7 +9833,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "desk"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({  # institutional desk: the few screens that matter first, everything else under More
-    "Desk": [P["desk"], P["superbot"], P["research_bot"], P["flow"], P["options"], P["lab"], P["paper"]],
+    "Desk": [P["desk"], P["superbot"], P["research_bot"], P["intraday_desk"], P["flow"], P["options"], P["lab"], P["paper"]],
     "Markets": [P["view"], P["indices"], P["sectors"], P["fno"], P["oi"], P["chart"], P["global"], P["mcx"], P["cdsfut"]],
     "Old tools (untested)": [P["auto"], P["scanners"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["bot"], P["smart"], P["apex"],
              P["odds"], P["screener"], P["watchlist"]],

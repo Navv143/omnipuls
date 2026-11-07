@@ -94,6 +94,17 @@ create table if not exists public.desk_calls (
 );
 alter table public.desk_calls enable row level security;
 
+-- AI Desk - Intraday paper calls (agents.py / desk_intraday.py, every 5 minutes): crypto, gold, energy, forex.
+create table if not exists public.desk_intraday_calls (
+  id bigint generated always as identity primary key,
+  time text not null, symbol text not null, name text, class text, session text, side smallint,
+  entry double precision, stop double precision, target double precision, rr double precision, setup text,
+  result text, exit double precision, exit_at text, r double precision, pct double precision,
+  updated_at timestamptz not null default now(),
+  unique (time, symbol)
+);
+alter table public.desk_intraday_calls enable row level security;
+
 -- Momentum Funnel snapshots (bots.py, every 5 minutes): stocks that pass step 1, with each step's reading.
 create table if not exists public.funnel_log (
   id bigint generated always as identity primary key,

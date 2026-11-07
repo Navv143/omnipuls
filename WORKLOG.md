@@ -610,3 +610,14 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - Scanners → Breakout (V3): V3 unchanged; new "★ V3 early pick" table and the top-10 "why" table.
 - bots.v3_step records V3 (top 2, filters) and the V3 early pick every cycle: <data>/bots/v3_record.json and Supabase
   crypto_paper; both appear in the Auto Trader page's per-setup record.
+
+## Global Intraday Desk (7 Nov 2026)
+- `desk_intraday.py`: the six AI Desk agents re-tuned for intraday crypto (BTC, ETH, SOL), gold (XAU), silver, copper,
+  crude, natural gas and forex (EUR, GBP, JPY, AUD, INR vs USD). Layers: 1 ATLAS session & regime (session, dollar
+  1h trend, Bitcoin 1h/4h → bias per class), 2 VEGA 1h trend + 15-min setup (4h range break with volume, pullback to
+  15-min EMA 20, VWAP reclaim/loss; skips moves > 1.2 daily ATR from the open), 3 ORION news, 4 LUNA crowd (15-min RSI,
+  4h z-score, crypto Fear & Greed), 5 TITAN risk (stop 1-2.5x 15-min ATR beyond the swing, 2R, R/R ≥ 1.5, 0.5% risk,
+  max 4 trades / 1 per class, active sessions only, ATR ≤ 2x, correlation ≤ 0.75), 6 NOVA final call.
+- `agents.py` runs it every 5 minutes (24/7; weekend = crypto only), writes <data>/agents/intraday_state.json and paper
+  calls to intraday_calls.json + Supabase `desk_intraday_calls` (8-hour / 21:00 UTC time-out).
+- App: Desk → Global Intraday Desk (layer funnel, agent cards, TRADE / WAIT / REJECT, every market per layer, record).
