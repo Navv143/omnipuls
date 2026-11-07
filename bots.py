@@ -1682,6 +1682,8 @@ def run_research():
                        [str(paths.HERE / "research" / "superbot_backtest.py"), "--server"], 3 * 3600, steps)
         _research_step("super bot new rules vs live (6 months)",
                        [str(paths.HERE / "research" / "superbot_newrules.py"), "--server"], 5 * 3600, steps)
+        _research_step("morning laggards (6 months)",
+                       [str(paths.HERE / "research" / "morning_laggards.py"), "--server"], 3600, steps)
     _research_step("momentum study", [str(paths.HERE / "momentum_study.py")], 3 * 3600, steps)
     _research_step("index funnel back-test", [str(paths.HERE / "index_funnel.py")], 3600, steps)
     _research_step("noise band research", [str(paths.HERE / "noise_research.py")], 3600, steps)

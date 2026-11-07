@@ -583,3 +583,15 @@ Breakouts (market-aligned candidates): 94% are already beyond the 15-min opening
 (-0.14%, PF 0.73). Beyond the 30-min range or yesterday's high / low makes no real difference. In the 3-window plan:
 + beyond 15-min range +0.268% (PF 1.88, worst day -5.2%), + beyond 30-min range +0.281% (PF 1.92), + beyond yesterday's
 high / low +0.227% (worse). Small gains; the 15-min range rule is a cheap safety filter.
+
+## Out-of-the-box ideas (research/novel_ideas.py; gross = no costs, then net; train vs test)
+
+Holds in both periods but too small for costs: gold +0.023% in the hour after the 10:30 London fix (t 3.2; net -0.007%
+at 0.03% cost); Nifty's 9:15-10:15 hour drifts down -0.036% (t -2.7, 2023-2026); heavyweights' last-15-min lead over
+the index predicts the next 15 min (+0.013%, t 3.1); big 30-min index moves continue (+0.02-0.03% in 30 min) - fading
+them in 'choppy' variance-ratio regimes loses. No edge: hour-of-day for BTC, crypto funding hours, London -> NY
+reversal (gold, BTC, EUR, GBP), BTC weekend -> Monday (train +1.3%, test +0.04%: decayed), narrow-breadth fade, quiet
+first hour breaks.
+Morning laggards (research/morning_laggards.py, 58 days): short the weakest 3 / 5 / 10 stocks vs Nifty at 10:15, cover
+15:15: net +0.29 / +0.20 / +0.07% a trade; only on days Nifty is down at 10:15: +0.51 / +0.40 / +0.20% (PF 2.8, no
+losing month, both halves +). Longs on the leaders lose. 6-month server check runs Saturday night.
