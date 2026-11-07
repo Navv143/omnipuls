@@ -1448,6 +1448,75 @@ def momentum_step(mkt: "Market", now: datetime):
             log(f"momentum record: {e}")
 
 
+INDEX_DESK_FILE = OUT / "index_desk.json"
+
+
+def index_desk_step(mkt: "Market", now: datetime):
+    """Index Desk (index_desk.py): seven layered bots on the five indices every closed 3-min candle. Readings and the
+    day's paper trades to <data>/bots/index_desk.json; trades to Supabase index_desk_trades. Each TRADE enters at the
+    next candle's open and is managed with the desk's exits (stop, TP1 half + stop to cost, two-candle trail, TP2 at
+    the OI wall, 30-min time stop, 15:15)."""
+    import index_desk as ID
+    import index_funnel as IF
+    import index_levels as LV
+    day, hm = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
+    try:
+        st_ = json.loads(INDEX_DESK_FILE.read_text())
+    except Exception:
+        st_ = {}
+    if st_.get("day") != day:
+        st_ = {"day": day, "trades": [], "readings": []}
+    stocks, vix = mkt.stock_bars(), mkt.bars("INDIAVIX")
+    trades = st_["trades"]
+    for tr in trades:                              # open trades first, so 'busy' is current
+        b = mkt.bars(tr["index"])
+        ID.manage(tr, b[b.index.normalize() == pd.Timestamp(day)])
+    readings = []
+    for k in ID.INDEXES:
+        ix = mkt.bars(k)
+        if ix is None or ix.empty or str(ix.index.max().date()) != day:
+            continue
+        t = IF.index_table(ix, stocks, mkt.weights.get(k, {}), vix, today_only=True)
+        row = t.iloc[-1] if not t.empty else None
+        fut = mkt.fut.get(k)
+        fo = LV.futures_oi(fut) if fut is not None and not fut.empty else {}
+        spot, ch = _latest_chain(k, day)
+        co = LV.chain_oi(ch, spot or float(ix["Close"].iloc[-1])) if not ch.empty else {}
+        co.pop("near", None)
+        busy_idx = any(x["index"] == k and x.get("status") in ("waiting", "open") for x in trades)
+        busy_grp = any(ID.GROUP.get(x["index"]) == ID.GROUP[k] and x["index"] != k and x.get("status") in ("waiting", "open")
+                       for x in trades)
+        n_today = sum(1 for x in trades if x["index"] == k)
+        r = ID.read_index(k, ix, fut, co, fo, row, stocks, mkt.weights.get(k, {}), hm, n_today, busy_grp, busy_idx)
+        if not r:
+            continue
+        readings.append(r)
+        if r["oracle"]["call"] == "TRADE":
+            sh = r["shield"]
+            sig_ts = str(ix.index.max())
+            if not any(x["index"] == k and x["signal_ts"] == sig_ts for x in trades):
+                tr = {"day": day, "index": k, "name": r["name"], "side": sh["side"], "signal_at": r["as_of"], "signal_ts": sig_ts,
+                      "plan_entry": sh["entry"], "stop": sh["stop"], "tp1": sh["tp1"], "tp2": sh["tp2"], "entry": None,
+                      "status": "waiting", "trigger": ", ".join(p["name"] for p in r["prism"]["patterns"] if p["fresh"]),
+                      "votes": r["oracle"]["votes"], "wall": sh["wall"]}
+                trades.append(tr)
+                log(f"index desk: {k} {'LONG' if sh['side'] > 0 else 'SHORT'} at {r['as_of']} stop {sh['stop']:.1f} "
+                    f"TP1 {sh['tp1']:.1f} TP2 {sh['tp2']:.1f} ({tr['trigger']})")
+    st_.update(updated=now.isoformat(timespec="seconds"), readings=readings, trades=trades)
+    tmp = INDEX_DESK_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(st_, default=lambda o: o.item() if hasattr(o, "item") else str(o)))
+    os.replace(tmp, INDEX_DESK_FILE)
+    try:
+        rows = [{k_: (round(v, 4) if isinstance(v, float) else v) for k_, v in x.items()
+                 if k_ in ("day", "index", "signal_at", "side", "status", "trigger", "plan_entry", "entry", "entry_at",
+                           "stop", "tp1", "tp2", "wall", "half_done", "half_at", "exit_px", "exit_at", "result",
+                           "points", "r", "pct")} for x in trades]
+        if rows:
+            _cloud().upsert_rows("index_desk_trades", _clean(rows), "day,index,signal_at")
+    except Exception as e:
+        log(f"index_desk_trades: {e}")
+
+
 def plan_for(mkt: "Market", stock: str, side: int) -> dict | None:
     """Entry / stop / targets for a stock idea, the same plan as the Momentum Funnel (funnel.trade_plan)."""
     import funnel as FN
@@ -1528,6 +1597,10 @@ def cycle(mkt: Market) -> dict:
         superbot_step(mkt, now)
     except Exception as e:
         log(f"super bot: {e}")
+    try:
+        index_desk_step(mkt, now)
+    except Exception as e:
+        log(f"index desk: {e}")
     try:
         import ironfly as IFY
         fly = IFY.step(now)

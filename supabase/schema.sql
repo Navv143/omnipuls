@@ -191,3 +191,15 @@ alter table public.crypto_paper enable row level security;
 alter table public.funnel_log add column if not exists quality smallint, add column if not exists q_mkt boolean,
   add column if not exists q_gap boolean, add column if not exists q_calm boolean,
   add column if not exists gap_atr double precision, add column if not exists mkt_prev double precision;
+
+-- Index Desk paper trades (bots.py / index_desk.py, every 3-min candle): Nifty, Bank Nifty, Fin Nifty, Sensex, Midcap.
+create table if not exists public.index_desk_trades (
+  id bigint generated always as identity primary key,
+  day date not null, index text not null, signal_at text not null, side smallint, status text, trigger text,
+  plan_entry double precision, entry double precision, entry_at text, stop double precision, tp1 double precision,
+  tp2 double precision, wall double precision, half_done boolean, half_at text, exit_px double precision, exit_at text,
+  result text, points double precision, r double precision, pct double precision,
+  updated_at timestamptz not null default now(),
+  unique (day, index, signal_at)
+);
+alter table public.index_desk_trades enable row level security;
