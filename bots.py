@@ -1448,6 +1448,100 @@ def momentum_step(mkt: "Market", now: datetime):
             log(f"momentum record: {e}")
 
 
+FH_POINTS = {"NIFTY": (30.0, 30.0, 3.0), "BANKNIFTY": (70.0, 70.0, 6.0)}   # target, stop, cost (index points)
+FH_SETUP = "First-hour break pts"
+
+
+def firsthour_row(today: pd.DataFrame, key: str, now: datetime) -> dict | None:
+    """First break of the 9:15-10:15 high / low (entries 10:15-14:45): entry at the level (a gap fills at the candle's
+    open), fixed target / stop in points, out after 60 minutes or at 15:15; a candle touching both sides is skipped.
+    research/scalp_points.py: Bank Nifty 70 / 70 +8 pts (2-min, 31 d) and +2.8 pts (5-min, 60 d); Nifty 30 / 30 negative."""
+    if today is None or today.empty:
+        return None
+    tgt, stp, cost = FH_POINTS[key]
+    hm = today.index.strftime("%H:%M")
+    fh = today[hm < "10:15"]
+    if fh.empty or (hm >= "10:15").sum() == 0 or fh.index[0].strftime("%H:%M") > "09:20":
+        return None
+    hi, lo = float(fh["High"].max()), float(fh["Low"].min())
+    after = today[(hm >= "10:15")]
+    ah = after.index.strftime("%H:%M")
+    k = None
+    for i in range(len(after)):
+        if ah[i] > "14:45":
+            return None
+        up, dn = after["High"].iloc[i] > hi, after["Low"].iloc[i] < lo
+        if up and dn:
+            return None
+        if up or dn:
+            k, side = i, (1 if up else -1)
+            break
+    if k is None:
+        return None
+    o = float(after["Open"].iloc[k])
+    e = max(o, hi) if side > 0 else min(o, lo)
+    st, tg = e - side * stp, e + side * tgt
+    t0 = after.index[k]
+    status, x, t_exit = "open", None, None
+    for j in range(k, len(after)):
+        ts, b = after.index[j], after.iloc[j]
+        if ts >= t0 + pd.Timedelta(minutes=60) or ah[j] >= "15:15":
+            status, x, t_exit = "time", float(b["Open"]), ts
+            break
+        if (b["Low"] <= st) if side > 0 else (b["High"] >= st):
+            status, x, t_exit = "stop", st, ts
+            break
+        if (b["High"] >= tg) if side > 0 else (b["Low"] <= tg):
+            status, x, t_exit = "target", tg, ts
+            break
+    last = float(after["Close"].iloc[-1])
+    pts = side * ((x if x is not None else last) - e) - (cost if x is not None else 0)
+    return {"day": now.strftime("%Y-%m-%d"), "setup": f"{FH_SETUP} {key}", "symbol": key, "side": side,
+            "signal_at": ah[k], "entry_at": ah[k], "entry_at_ist": ah[k], "entry": round(e, 2), "sl": round(st, 2),
+            "tp": round(tg, 2), "stop_pct": round(stp / e * 100, 3), "result": status,
+            "exit_at": t_exit.strftime("%H:%M") if t_exit is not None else None,
+            "exit_px": round(x, 2) if x is not None else None, "r": round(pts / stp, 2),
+            "pct": round(pts / e * 100, 3), "points": round(pts, 1)}
+
+
+def firsthour_step(mkt: "Market", now: datetime):
+    """Paper test (not the Super Bot): first-hour break with fixed points on Nifty (30 / 30) and Bank Nifty (70 / 70);
+    rows to <data>/bots/momentum_record.json and Supabase crypto_paper."""
+    if now.strftime("%H:%M") < "10:18":
+        return
+    day = now.strftime("%Y-%m-%d")
+    try:
+        rec = json.loads(MOM_FILE.read_text())
+    except Exception:
+        rec = []
+    have = {(x["day"], x["setup"]): x for x in rec}
+    new = []
+    for key in FH_POINTS:
+        b = mkt.bars(key)
+        if b is None or b.empty:
+            continue
+        today = b[b.index.normalize() == pd.Timestamp(day)]
+        row = firsthour_row(today, key, now)
+        if not row:
+            continue
+        old = have.get((row["day"], row["setup"]))
+        if old is not None and old.get("result") != "open":
+            continue
+        if old != row:
+            if old is None:
+                log(f"{row['setup']}: {'BUY' if row['side'] > 0 else 'SELL'} {row['entry']} stop {row['sl']} target {row['tp']}")
+            have[(row["day"], row["setup"])] = row
+            new.append({k: v for k, v in row.items() if k != "points"})
+    if new:
+        tmp = MOM_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(list(have.values()), default=str))
+        os.replace(tmp, MOM_FILE)
+        try:
+            _cloud().upsert_rows("crypto_paper", _clean(new), "day,setup")
+        except Exception as e:
+            log(f"first-hour points: {e}")
+
+
 INDEX_DESK_FILE = OUT / "index_desk.json"
 
 
@@ -1601,6 +1695,10 @@ def cycle(mkt: Market) -> dict:
         index_desk_step(mkt, now)
     except Exception as e:
         log(f"index desk: {e}")
+    try:
+        firsthour_step(mkt, now)
+    except Exception as e:
+        log(f"first-hour points: {e}")
     try:
         import ironfly as IFY
         fly = IFY.step(now)

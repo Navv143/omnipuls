@@ -616,3 +616,43 @@ they are not independent; Nov: both down. Needs the 6-month check (morning_lagga
   sign both years: at 08:00 UTC (London open) buy the 3 worst / sell the 3 best of the last 24h, hold 4h: net +0.02%
   (year 1) / +0.12% (year 2, t 2.3, PF 1.5); weak in year 1 -> paper-track only.
 The Indian 'weak stocks stay weak' effect does not appear in crypto, commodities or forex.
+
+## ADX-gated setups (research/adx_setups.py; 13 setups x with / without ADX >= 25 rising + DI agreeing; 10 markets)
+
+Markets: Nifty / Bank Nifty 5m (60 d) and 1h (3 y), BTC and gold 15m (3.5 y), crude / gas / silver / EURUSD 1h (2 y).
+Same exits for all (1.5 ATR stop, 2R, 24 candles; India 9:30-14:30, out 15:15); costs included.
+- Alone, every setup loses on average in every group (crypto & gold -0.20 to -0.41R; India / commodities ~ -0.01 to
+  -0.15R).
+- The ADX gate improved 13 of 39 group cells and made things worse in the rest. Its 'big help' cells (India RSI 50 cross
+  +0.27R, EMA 9/21 +0.20R, commodities CHoCH +0.38R) come from 1-20 trades: crossovers happen when trends turn, so they
+  almost never coincide with a rising ADX.
+- 4 of 364 combinations pass (EURUSD 1h Bollinger squeeze alone, Nifty 5m BOS alone, Nifty 1h BOS with ADX, Nifty 1h
+  Bollinger 20/2 alone), each t 0.7-1.2: about what chance gives.
+Verdict: the ADX regime filter does not turn indicator / SMC setups (BOS, CHoCH, order blocks, liquidity sweeps) into
+an edge after costs.
+
+## Candle-breakout map (research/candle_breakouts.py): every 5 / 15 / 30 / 60-min candle, break of its high / low
+
+Entry at the candle's high / low (stop order), stop at its other side, target 2x its range, out 15:15 (night: 4h).
+- 1,156 cells (5 indices x 4 timeframes x every candle time x side, 60 days 5-min; gold / BTC night 3.5 y): only 5
+  pass (t >= 2, both halves +) - all LOW breaks (Nifty 15m 10:00, Sensex 5m 10:10 / 13:05, Sensex 15m 12:15, FinNifty
+  5m 09:50) - about chance. Average net R: HIGH breaks -0.18, LOW breaks -0.08; ~60% of breaks fail back to the other
+  side. Gold and BTC night candles: every cell negative (gold -0.12 to -0.28R, BTC -0.13 to -0.88R).
+- Nifty / Bank Nifty hourly candles over 3 years (hourly bars, coarse): Nifty LOW breaks of the 10:15-13:15 candles
+  +0.12 to +0.17R (t 2-3.4), but the same candles on exact 5-min data (60 d) are mostly negative, and 'first hourly low
+  break of the day' is only +0.07R (t 1.7; 2025 flat); highs ~0.
+- Most consistent: the FIRST HOUR (9:15) candle's LOW break -> short to 15:15: +0.18-0.27R on all five indices (60 d,
+  5-min) and +0.09R on Nifty 3 y (t 1.8, both halves +0.09 / +0.08). Mild lead; downside breaks follow through more than
+  upside ones.
+ADX inside the Super Bot (research/superbot_adx.py): 5-min ADX >= 20 PF 1.83 -> 1.90 (+0.01% a trade, noise); daily
+DI agreeing makes it worse (picks against the daily trend did better). Keep the Super Bot as is.
+
+## Small fixed-point momentum trades (research/scalp_points.py)
+Targets Nifty 25 / 30, Bank Nifty 50 / 70, BTC 400 / 500, gold $6 / 7; stops 0.6x or 1x the target; costs counted.
+Nifty / Bank Nifty 2-min (31 d) and 5-min (60 d); BTC / gold 5-min (3.5 y). Six triggers (opening range, previous
+15-min candle on the VWAP side, momentum burst, VWAP reclaim, first-hour break, EMA 9/21 pullback).
+- Nothing passes. Tight stops (0.6x) are worse everywhere. BTC: every setup -17 to -39 pts a trade; gold -$0.7 to -1.0;
+  win rates 44-46% at 1:1 even before costs.
+- Nifty opening-range 30 / 30: +7.3 pts on 2-min (31 d) but -2.7 on 5-min (60 d): not robust.
+- Bank Nifty first-hour break 70 / 70: +8 pts (2-min), +2.8 pts (5-min), +4.0 pts on a 3-min replay - the only one
+  positive everywhere, small -> paper test 'First-hour break pts' (Nifty 30 / 30 recorded for comparison: -6.4 pts).
