@@ -606,3 +606,13 @@ Longs on the strongest stocks: ~0 in every variant. Opening gap: no edge.
 Portfolio (38 days, equal size per trade): Super Bot 3 windows 71% winning days, PF 3.4; weak-stock shorts family 58%,
 PF 2.6; together 74% winning days, PF 3.65, worst day -6.6% - but correlation 0.65 (both lean short on weak days), so
 they are not independent; Nov: both down. Needs the 6-month check (morning_laggards.py runs Saturday night).
+
+## Cross-sectional scan, crypto / commodities / forex (research/cross_section_global.py, 2 years of 1h, train year 1 / test year 2)
+
+- Crypto (28 coins, 96 rules): nothing holds; best gross +0.13% (13:00 UTC long the day's leaders, 8h) is negative in
+  year 2. Costs 0.10% eat every variant.
+- Forex (10 pairs, 72 rules): gross effects <= 0.02%; nothing.
+- Commodities (16, 72 rules): '13:00 long the 4h leaders' passed year 1 (t 2.1) then 0 in year 2. Only consistent
+  sign both years: at 08:00 UTC (London open) buy the 3 worst / sell the 3 best of the last 24h, hold 4h: net +0.02%
+  (year 1) / +0.12% (year 2, t 2.3, PF 1.5); weak in year 1 -> paper-track only.
+The Indian 'weak stocks stay weak' effect does not appear in crypto, commodities or forex.
