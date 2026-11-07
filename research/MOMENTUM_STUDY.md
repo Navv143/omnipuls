@@ -595,3 +595,24 @@ first hour breaks.
 Morning laggards (research/morning_laggards.py, 58 days): short the weakest 3 / 5 / 10 stocks vs Nifty at 10:15, cover
 15:15: net +0.29 / +0.20 / +0.07% a trade; only on days Nifty is down at 10:15: +0.51 / +0.40 / +0.20% (PF 2.8, no
 losing month, both halves +). Longs on the leaders lose. 6-month server check runs Saturday night.
+
+## Cross-sectional scan (research/cross_section_scan.py, 58 days, 160 rules fixed in advance, train / test halves)
+
+No rule reached t >= 2 on the train half alone (29 days is short). But the 16 rules positive after costs in BOTH halves
+are ALL one family: SHORT the weakest 5 stocks (by move vs Nifty, vs sector, below VWAP, or weak on high volume) at
+10:15 / 11:15 / 12:15, cover 15:15: +0.2-0.34% gross, +0.1-0.26% net a trade. Hedged with Nifty it stays positive but
+small (+0.04-0.09% net): weak stocks keep underperforming into the close, and part of the gain is the market falling.
+Longs on the strongest stocks: ~0 in every variant. Opening gap: no edge.
+Portfolio (38 days, equal size per trade): Super Bot 3 windows 71% winning days, PF 3.4; weak-stock shorts family 58%,
+PF 2.6; together 74% winning days, PF 3.65, worst day -6.6% - but correlation 0.65 (both lean short on weak days), so
+they are not independent; Nov: both down. Needs the 6-month check (morning_laggards.py runs Saturday night).
+
+## Cross-sectional scan, crypto / commodities / forex (research/cross_section_global.py, 2 years of 1h, train year 1 / test year 2)
+
+- Crypto (28 coins, 96 rules): nothing holds; best gross +0.13% (13:00 UTC long the day's leaders, 8h) is negative in
+  year 2. Costs 0.10% eat every variant.
+- Forex (10 pairs, 72 rules): gross effects <= 0.02%; nothing.
+- Commodities (16, 72 rules): '13:00 long the 4h leaders' passed year 1 (t 2.1) then 0 in year 2. Only consistent
+  sign both years: at 08:00 UTC (London open) buy the 3 worst / sell the 3 best of the last 24h, hold 4h: net +0.02%
+  (year 1) / +0.12% (year 2, t 2.3, PF 1.5); weak in year 1 -> paper-track only.
+The Indian 'weak stocks stay weak' effect does not appear in crypto, commodities or forex.

@@ -49,3 +49,14 @@ hours, which favours option sellers only if premiums keep the full day's decay t
 Next: the recorder now saves MCX crude oil and natural gas option chains every minute (09:00-23:30, nearest expiry,
 15 strikes each side, LTP / bid / ask / OI / IV / greeks) to <data>/mcx_option_chain/. After 3-4 weeks (12-16 reports)
 the report straddle, the post-report fade with options and the quiet-hours premium sale can be tested on real premiums.
+
+## Night (IST evening) event setups (research/night_sessions.py, 7 Nov 2026)
+Gold and BTC 2023-2026 (5-min), crude / gas Jun 2024 - Nov 2026 (1h); ET times; gross and net; train / test halves.
+- US 08:30 ET data candle (18:00 / 19:00 IST), big (>= 2x usual): gold FADE 1h +0.043% gross, +0.013% net (both
+  halves barely +); BTC no edge. 10:00 ET candle: gold none; BTC FOLLOW 2h +0.31% (year 1) then -0.10% (year 2): decayed.
+- US stock open, London close (trend fade / follow), COMEX settlement: no edge on gold or BTC (net -0.01 to -0.11%).
+- Weekly reports: crude FOLLOW the Wednesday report hour for 2h: +0.06% net (train +0.04 / test +0.09, 120 reports,
+  t 1.0) = weak lead; natural gas flips between halves (no).
+Verdict: no strong night setup on futures / spot prices; the night moves are news-driven and do not repeat after costs.
+Next: MCX option chains (recorder, collecting since 7 Nov) -> event straddles / premium in 3-4 weeks.
+Paper test started: commodity London-open reversal (agents.commodity_reversal_tick, 08:00-12:00 UTC).

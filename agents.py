@@ -379,6 +379,89 @@ def crash_tick():
     os.replace(tmp, CP_DIR / "crash_state.json")
 
 
+COMMOD = {"GC=F": "Gold", "SI=F": "Silver", "PL=F": "Platinum", "PA=F": "Palladium", "HG=F": "Copper", "CL=F": "Crude",
+          "BZ=F": "Brent", "NG=F": "Natural gas", "RB=F": "Gasoline", "HO=F": "Heating oil", "ZC=F": "Corn",
+          "ZW=F": "Wheat", "ZS=F": "Soybeans", "KC=F": "Coffee", "SB=F": "Sugar", "CC=F": "Cocoa"}
+
+
+def commodity_reversal_tick():
+    """Commodity London-open reversal (research/cross_section_global.py lead), paper: weekdays at 08:00 UTC rank 16
+    commodity futures by their last-24h move, buy the 3 worst and sell the 3 best at the 08:00 hour's open, close at
+    12:00 UTC (cost 0.03%). Trades to record.json and Supabase crypto_paper (setup 'Commodity London reversal ...')."""
+    now = pd.Timestamp.utcnow().tz_localize(None)
+    if now.dayofweek >= 5 or not (8 <= now.hour < 13):
+        return
+    day = now.strftime("%Y-%m-%d")
+    f = CP_DIR / "commodity_reversal.json"
+    try:
+        st = json.loads(f.read_text())
+    except Exception:
+        st = {}
+    if st.get("day") == day and st.get("closed"):
+        return
+    h = _download(list(COMMOD), "5d", "1h")
+    closes, opens = {}, {}
+    for s, d in h.items():
+        d = d.dropna(subset=["Close"])
+        idx = pd.DatetimeIndex(d.index)
+        d.index = idx.tz_convert("UTC").tz_localize(None) if idx.tz is not None else idx
+        closes[s], opens[s] = d["Close"], d["Open"]
+    t8 = now.normalize() + pd.Timedelta(hours=8)
+    if st.get("day") != day:
+        if now.hour >= 9:                       # missed the 08:00 window: no trade today
+            return
+        mv = {}
+        for s, c in closes.items():
+            prev = c[c.index <= t8 - pd.Timedelta(hours=24)]
+            last = c[c.index < t8]
+            o = opens[s]
+            if len(prev) and len(last) and (o.index == t8).any():
+                mv[s] = (float(last.iloc[-1]) / float(prev.iloc[-1]) - 1) * 100
+        if len(mv) < 8:
+            return
+        srt = sorted(mv, key=mv.get)
+        legs = [(s, 1) for s in srt[:3]] + [(s, -1) for s in srt[-3:]]
+        st = {"day": day, "closed": False,
+              "legs": [{"symbol": s, "side": sd, "move_24h": round(mv[s], 3), "entry": float(opens[s][opens[s].index == t8].iloc[0])}
+                       for s, sd in legs]}
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(st))
+        log("commodity reversal: " + ", ".join(f"{'BUY' if x['side'] > 0 else 'SELL'} {COMMOD[x['symbol']]}" for x in st["legs"]))
+        return
+    if now.hour < 12:
+        return
+    t12 = now.normalize() + pd.Timedelta(hours=12)
+    rows = []
+    for x in st["legs"]:
+        c = closes.get(x["symbol"])
+        if c is None:
+            continue
+        w = c[c.index < t12]
+        if w.empty:
+            continue
+        ex = float(w.iloc[-1])
+        pct = x["side"] * (ex / x["entry"] - 1) * 100 - 0.03
+        rows.append({"day": day, "setup": f"Commodity London reversal {COMMOD[x['symbol']]}", "symbol": x["symbol"],
+                     "side": x["side"], "signal_at": "08:00 UTC", "entry_at": "13:30 IST", "entry": x["entry"], "sl": None,
+                     "tp": None, "stop_pct": None, "result": "time", "exit_at": "17:30 IST", "exit_px": ex, "r": None,
+                     "pct": round(pct, 3)})
+    st["closed"] = True
+    f.write_text(json.dumps(st))
+    if rows:
+        fr = CP_DIR / "record.json"
+        try:
+            rec = json.loads(fr.read_text())
+        except Exception:
+            rec = []
+        rec += rows
+        fr.write_text(json.dumps(rec, default=str))
+        try:
+            _cloud().upsert_rows("crypto_paper", rows, "day,setup")
+        except Exception as e:
+            log(f"crypto_paper: {e}")
+        log(f"commodity reversal closed: {np.mean([r['pct'] for r in rows]):+.3f}% average")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     last = last_intra = 0.0
@@ -406,6 +489,10 @@ def main():
             crash_tick()
         except Exception as e:
             log(f"crash buy: {e}")
+        try:
+            commodity_reversal_tick()
+        except Exception as e:
+            log(f"commodity reversal: {e}")
         time.sleep(60)
 
 
