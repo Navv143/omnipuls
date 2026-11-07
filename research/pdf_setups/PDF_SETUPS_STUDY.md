@@ -65,3 +65,15 @@ Exact rules at the top of `ma_setups.py`. Markets / timeframes as above (Nifty, 
   At most worth paper-tracking on Nifty only (about 2 trades a week, ~6 hours a trade).
 
 Verdict: neither setup is a tradable edge after costs on Indian stocks, BankNifty or commodities intraday.
+
+## 4. Our own desks on past data (research/index_desk_backtest.py, research/global_desk_backtest.py, 7 Nov 2026)
+
+Index Desk (all 7 layers, exact trade management; 5-min candles, 60 days, 5 indices; VAULT neutral - no OI history):
+235 trades (4.3 a day), win 50%, PF 0.96, -0.02R a trade after 0.02% costs, halves -0.18 / +0.12R; Aug -10R, Sep -10R,
+Oct +16R. Bank Nifty worst (-0.18R), Midcap / Sensex slightly + (+0.07 / +0.04R); after 14:00 -0.21R. No edge.
+
+Global Intraday Desk (ATLAS, VEGA, LUNA, TITAN, NOVA at every 15-min close; ORION neutral - no news history):
+- 60 days, 13 markets: 262 trades, win 35%, PF 0.70, -0.20R a trade (t -2.6), both halves negative, every month
+  negative. Only gold (+0.57R, 18 trades), ETH (+0.12R, 21) and AUD/USD (+0.19R, 13) positive - small samples.
+- 2023-2026, BTC + gold (PAXG): 1,682 trades, win 38%, PF 0.87, -0.08R a trade (t -2.6); gold alone +0.02R (296 trades).
+Verdict: the global desk's rules lose; its calls are not trade signals. Both desks stay paper-only with a warning.
