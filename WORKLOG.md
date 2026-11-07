@@ -621,3 +621,17 @@ cloud's shared CPU). Trading Desk, Scanners and Smart Money all hit this.
 - `agents.py` runs it every 5 minutes (24/7; weekend = crypto only), writes <data>/agents/intraday_state.json and paper
   calls to intraday_calls.json + Supabase `desk_intraday_calls` (8-hour / 21:00 UTC time-out).
 - App: Desk → Global Intraday Desk (layer funnel, agent cards, TRADE / WAIT / REJECT, every market per layer, record).
+
+## Index Desk (7 Nov 2026)
+- `index_desk.py`: seven layered bots on Nifty 50, Bank Nifty, Fin Nifty, Sensex and Midcap Select, every closed
+  3-min candle: PULSE trend (EMA 9/21 3-min, EMA 20 15-min, futures-volume VWAP), DRIVE momentum (RSI 14, MACD
+  12/26/9 histogram, ATR activity), PRISM micro patterns (15-min ORB, inside bar, NR7, engulfing, hammer / shooting star at
+  OI levels, three strong candles, swing structure, VWAP reclaim / loss, failed break of yesterday's high / low; fresh =
+  trigger), VAULT OI (put / call OI walls, writing near the money, PCR, futures build-up), RIVER flow (weighted net
+  money of the index's stocks, buying share, breadth, top-5 heavyweights), SHIELD risk (stop beyond the 5-candle swing
+  0.8-2 ATR, TP1 1R half + stop to cost, two-candle trail, TP2 at the OI wall 1.5-3R, 30-min time stop, 15:15, 9:30-14:30,
+  room to wall >= 1R, max 2 a day per index, 1 open per group), ORACLE (fresh trigger + 4/5 agree + VAULT / RIVER not
+  against + SHIELD).
+- bots.py `index_desk_step` each cycle: readings + paper trades to <data>/bots/index_desk.json and Supabase
+  `index_desk_trades`. App: Desk → Index Desk. Replay on 5 days of Yahoo 1-min (3 indices, no OI offline): 17 trades,
+  47% win, +0.07R a trade (functional check only).

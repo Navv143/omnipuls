@@ -589,9 +589,13 @@ def sector_grid(cards: list[str]) -> str:
 # ---------------------------------------------------------------- AI Desk (six agents)
 
 AGENT_COLOR = {"ATLAS": "#3B82F6", "VEGA": "#A855F7", "ORION": "#F97316", "LUNA": "#22D3EE", "TITAN": "#F59E0B",
-               "NOVA": "#FACC15"}
+               "NOVA": "#FACC15", "PULSE": "#3B82F6", "DRIVE": "#A855F7", "PRISM": "#EC4899", "VAULT": "#F97316",
+               "RIVER": "#22D3EE", "SHIELD": "#F59E0B", "ORACLE": "#FACC15"}
+AGENT_ROLE = {"ATLAS": "Market", "VEGA": "Charts", "ORION": "News", "LUNA": "Crowd", "TITAN": "Risk", "NOVA": "Final call",
+              "PULSE": "Trend", "DRIVE": "Momentum", "PRISM": "Micro patterns", "VAULT": "OI & option chain",
+              "RIVER": "Flow & breadth", "SHIELD": "Risk", "ORACLE": "Final call"}
 DESK_CSS = """<style>
-.dk6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:6px 0 4px}
+.dk6{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0 4px}
 @media (max-width:1100px){.dk6{grid-template-columns:repeat(3,1fr)}}
 @media (max-width:640px){.dk6{grid-template-columns:repeat(2,1fr)}}
 .ag{position:relative;border:1px solid color-mix(in srgb,var(--a) 55%,transparent);border-radius:14px;padding:11px 12px 12px;
@@ -636,11 +640,12 @@ CALL_COLOR = {"TRADE": UP, "WAIT": "#FACC15", "REJECT": DOWN, "NO SETUP": NEUTRA
 
 
 def agent_cards(cards: dict) -> str:
-    """cards: {agent: (status line, detail)}"""
+    """cards: {agent: (status line, detail) or (status line, detail, role)}"""
     out = []
-    for k, (stt, tx) in cards.items():
-        role = {"ATLAS": "Market", "VEGA": "Charts", "ORION": "News", "LUNA": "Crowd", "TITAN": "Risk", "NOVA": "Final call"}[k]
-        out.append(f"<div class='ag' style='--a:{AGENT_COLOR[k]}'><span class='live'></span><div class='nm'>{k}</div>"
+    for k, v in cards.items():
+        stt, tx = v[0], v[1]
+        role = v[2] if len(v) > 2 else AGENT_ROLE.get(k, "")
+        out.append(f"<div class='ag' style='--a:{AGENT_COLOR.get(k, '#3B82F6')}'><span class='live'></span><div class='nm'>{k}</div>"
                    f"<div class='rl'>{role}</div><div class='st'>{_e(stt)}</div><div class='tx'>{_e(tx)}</div></div>")
     return "<div class='dk6'>" + "".join(out) + "</div>"
 

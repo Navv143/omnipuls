@@ -29,7 +29,7 @@ def _reload_changed_modules():
     if first:
         seen = bootstrap._mtimes = {}
     base = os.path.dirname(os.path.abspath(__file__))
-    for name in ("mv_ui", "funnel", "index_funnel", "index_levels", "desk_agents", "desk_intraday", "agents", "market_view", "bot",
+    for name in ("mv_ui", "funnel", "index_funnel", "index_levels", "desk_agents", "desk_intraday", "index_desk", "agents", "market_view", "bot",
                  "desk", "activity", "indicators", "momentum_study", "five_star", "trend_alert", "setups", "apex", "autotrader", "closing", "btc_sniper", "crash_buy", "bn_ebp"):
         try:
             m = os.stat(os.path.join(base, name + ".py")).st_mtime
@@ -7738,6 +7738,130 @@ def page_agents_intraday():
          "against and TITAN passing.")
 
 
+# ---------------------------------------------------------------- Index Desk: seven layered bots on the five indices
+
+
+def page_index_desk():
+    import index_desk as ID
+    status_strip()
+    st.header("Index Desk")
+    for _c in (MX.CSS, MX.DESK_CSS):
+        st.markdown(_c, unsafe_allow_html=True)
+    st.caption("Seven bots, layer by layer, on Nifty 50, Bank Nifty, Fin Nifty, Sensex and Midcap Select, every closed "
+               "3-minute candle on the server. Paper trades only, not back-tested rules.")
+    try:
+        s = json.loads((PATHS.DATA / "bots" / "index_desk.json").read_text())
+    except Exception:
+        s = None
+    if not s or not s.get("readings"):
+        st.info("The Index Desk runs on the server in market hours (9:15-15:30) with live Dhan candles, futures OI and "
+                "option chains. Its readings appear here after the first 3-minute candle of the day.", icon=":material/schedule:")
+    rd, trades = (s or {}).get("readings", []), (s or {}).get("trades", [])
+
+    def _cnt(key):
+        v = [r[key]["vote"] for r in rd]
+        return f"{sum(1 for x in v if x > 0)} up · {sum(1 for x in v if x < 0)} down" if v else "waiting for the market"
+    calls = pd.Series([r["oracle"]["call"] for r in rd]).value_counts().to_dict() if rd else {}
+    st.markdown(MX.agent_cards({
+        "PULSE": (_cnt("pulse"), ID.BOTS["PULSE"][1]), "DRIVE": (_cnt("drive"), ID.BOTS["DRIVE"][1]),
+        "PRISM": (f"{sum(1 for r in rd if r['prism']['trigger'])} fresh triggers" if rd else "waiting", ID.BOTS["PRISM"][1]),
+        "VAULT": (_cnt("vault"), ID.BOTS["VAULT"][1]), "RIVER": (_cnt("river"), ID.BOTS["RIVER"][1]),
+        "SHIELD": (f"{sum(1 for r in rd if r.get('shield') and r['shield']['pass'])} passed" if rd else "waiting", ID.BOTS["SHIELD"][1]),
+        "ORACLE": (f"{calls.get('TRADE', 0)} TRADE · {calls.get('WAIT', 0)} WAIT" if rd else "waiting", ID.BOTS["ORACLE"][1]),
+    }), unsafe_allow_html=True)
+    if not s:
+        return
+    st.caption(f"Day {s.get('day')} · updated {str(s.get('updated', ''))[11:16]} IST")
+    mark = lambda v, side: ("✓" if v == side else "✗" if v == -side else "–") if side else ("▲" if v > 0 else "▼" if v < 0 else "–")  # noqa: E731
+    if rd:
+        st.markdown(MX.section("Every index, every layer", "what each bot says on the last closed 3-min candle"), unsafe_allow_html=True)
+        st.dataframe(pd.DataFrame([{
+            "Index": r["name"], "Price": r["price"], "Move %": r["move_pct"], "Last 3 hours": r.get("spark") or [],
+            "PULSE trend": mark(r["pulse"]["vote"], 0), "DRIVE momentum": mark(r["drive"]["vote"], 0),
+            "PRISM patterns": mark(r["prism"]["vote"], 0) + (" ⚡" if r["prism"]["trigger"] else ""),
+            "VAULT OI": mark(r["vault"]["vote"], 0), "RIVER flow": mark(r["river"]["vote"], 0),
+            "SHIELD": ("PASS" if r["shield"]["pass"] else "FAIL") if r.get("shield") else "–",
+            "ORACLE": r["oracle"]["call"] + (f" {'LONG' if r['oracle']['side'] > 0 else 'SHORT'}" if r["oracle"].get("side") else ""),
+            "Support (OI)": r["vault"].get("support"), "Resistance (OI)": r["vault"].get("resistance"),
+            "PCR": r["vault"].get("pcr"), "RSI": r["drive"]["rsi"], "VWAP": r["pulse"]["vwap"]} for r in rd]),
+            hide_index=True, width="stretch", column_config={
+                "Price": st.column_config.NumberColumn(format="%.2f"), "Move %": st.column_config.NumberColumn(format="%+.2f"),
+                "Last 3 hours": st.column_config.LineChartColumn(width="small"),
+                "Support (OI)": st.column_config.NumberColumn(format="%.0f"), "Resistance (OI)": st.column_config.NumberColumn(format="%.0f"),
+                "PCR": st.column_config.NumberColumn(format="%.2f"), "RSI": st.column_config.NumberColumn(format="%.0f"),
+                "VWAP": st.column_config.NumberColumn(format="%.2f")})
+        for r in rd:
+            o = r["oracle"]
+            with st.expander(f"{r['name']} · {o['call']}" + (f" {'LONG' if o.get('side', 0) > 0 else 'SHORT'}" if o.get("side") else "")
+                             + f" · {r['price']:,.2f} ({r['move_pct']:+.2f}%)", expanded=o["call"] == "TRADE"):
+                side = o.get("side", 0)
+                rows = [("1 · PULSE · trend", r["pulse"]["vote"], r["pulse"]["text"]),
+                        ("2 · DRIVE · momentum", r["drive"]["vote"], r["drive"]["text"]),
+                        ("3 · PRISM · micro patterns", r["prism"]["vote"], r["prism"]["text"]),
+                        ("4 · VAULT · OI & option chain", r["vault"]["vote"], r["vault"]["text"]),
+                        ("5 · RIVER · flow & breadth", r["river"]["vote"], r["river"]["text"])]
+                st.dataframe(pd.DataFrame([{"Layer": a, "Vote": mark(v, side), "Reading": t} for a, v, t in rows]),
+                             hide_index=True, width="stretch", column_config={"Reading": st.column_config.TextColumn(width="large")})
+                if r["river"].get("heavy"):
+                    st.caption("Heavyweights: " + " · ".join(f"{h['stock']} {h['move']:+.2f}% (w {h['weight']:.0f})" for h in r["river"]["heavy"]))
+                sh = r.get("shield")
+                if sh:
+                    st.markdown(MX.kpis([
+                        MX.kpi("Entry", f"{sh['entry']:,.2f}", "next candle's open"),
+                        MX.kpi("Stop", f"{sh['stop']:,.2f}", f"{sh['risk_pts']:.1f} pts", MX.DOWN),
+                        MX.kpi("TP1 (half)", f"{sh['tp1']:,.2f}", "1R · then stop to cost", MX.UP),
+                        MX.kpi("TP2", f"{sh['tp2']:,.2f}", f"{sh['rr']:.1f}R" + (f" · OI wall {sh['wall']:g}" if sh.get("wall") else ""), MX.UP)]),
+                        unsafe_allow_html=True)
+                    st.caption("Trail: " + sh["trail"])
+                    st.dataframe(pd.DataFrame([{"SHIELD check": c["name"], "Pass": "PASS" if c["pass"] else "FAIL", "Detail": c["text"]}
+                                               for c in sh["checks"]]), hide_index=True, width="stretch")
+                st.markdown(f"**7 · ORACLE:** {o['call']} — {o['why']}")
+    st.markdown(MX.section("Today's paper trades", "entry at the next candle's open; exits by the SHIELD rules"), unsafe_allow_html=True)
+    if trades:
+        st.dataframe(pd.DataFrame([{"Index": t.get("name", t["index"]), "Side": "LONG" if t["side"] > 0 else "SHORT",
+                                    "Signal": t["signal_at"], "Trigger": t.get("trigger"), "Entry": t.get("entry"),
+                                    "Entry at": t.get("entry_at"), "Stop": t["stop"], "TP1": t["tp1"], "TP2": t["tp2"],
+                                    "Half booked": t.get("half_at") or "—", "Status": t.get("status"),
+                                    "R now": t.get("now_r") if t.get("status") != "closed" else None,
+                                    "Exit": t.get("exit_at"), "Result": t.get("result"), "Points": t.get("points"), "R": t.get("r")}
+                                   for t in trades]), hide_index=True, width="stretch",
+                     column_config={k: st.column_config.NumberColumn(format="%.2f") for k in ("Entry", "Stop", "TP1", "TP2", "Points")}
+                     | {"R": st.column_config.NumberColumn(format="%+.2f"), "R now": st.column_config.NumberColumn(format="%+.2f"),
+                        "Trigger": st.column_config.TextColumn(width="medium")})
+        done = [t for t in trades if t.get("status") == "closed" and t.get("r") is not None]
+        if done:
+            st.markdown(MX.kpis([MX.kpi("Closed", str(len(done))),
+                                 MX.kpi("Wins", str(sum(1 for t in done if t["r"] > 0)), f"{sum(1 for t in done if t['r'] > 0) / len(done) * 100:.0f}%", MX.UP),
+                                 MX.kpi("Total", f"{sum(t['r'] for t in done):+.2f}R", "today", MX.tone_color(sum(t['r'] for t in done)))]),
+                        unsafe_allow_html=True)
+    else:
+        st.caption("No trade yet today.")
+    try:
+        import cloudstore
+        hist = (cloudstore.select_rows("index_desk_trades", {"order": "day.desc"}, max_rows=2000) or []) if cloudstore.enabled() else []
+    except Exception:
+        hist = []
+    if hist:
+        h = pd.DataFrame(hist)
+        h = h[h["status"] == "closed"]
+        if not h.empty:
+            st.markdown(MX.section("Record by index", "all closed paper trades"), unsafe_allow_html=True)
+            st.dataframe(h.groupby("index").agg(Trades=("r", "size"), Win=("r", lambda x: (x > 0).mean() * 100),
+                                                AvgR=("r", "mean"), TotalR=("r", "sum")).reset_index(),
+                         hide_index=True, width="stretch", column_config={"Win": st.column_config.NumberColumn("Win %", format="%.0f"),
+                                                                          "AvgR": st.column_config.NumberColumn("Avg R", format="%+.2f"),
+                                                                          "TotalR": st.column_config.NumberColumn("Total R", format="%+.1f")})
+    note("PULSE: EMA 9/21 (3-min), EMA 20 (15-min), VWAP from index-futures volume. DRIVE: RSI 14 (≥55 / ≤45), MACD "
+         "12/26/9 histogram side and slope, ATR today vs usual (quiet market = no vote). PRISM: 15-min opening range "
+         "break, inside-bar and NR7 breaks, engulfing, hammer / shooting star at OI levels, three strong candles, swing "
+         "structure, VWAP reclaim / loss, failed break of yesterday's high / low; a pattern on the last two candles is the "
+         "trigger. VAULT: biggest put OI below = support, biggest call OI above = resistance, writing near the money, PCR, "
+         "futures build-up. RIVER: the index's stocks weighted: net money and its growth, buying share, breadth, top-5 "
+         "heavyweights. SHIELD: stop beyond the 5-candle swing (0.8-2 ATR), TP1 1R (half, stop to cost), TP2 at the OI "
+         "wall (1.5-3R), two-candle trail, 30-min time stop, 15:15 exit, 9:30-14:30, room to the wall ≥ 1R, max 2 a day "
+         "per index, 1 open per group. ORACLE: fresh trigger + 4 of 5 agree + OI and flow not against + SHIELD = TRADE.")
+
+
 # ---------------------------------------------------------------- Momentum funnel: simple step-by-step watchlist
 
 
@@ -9802,6 +9926,7 @@ PAGE_DEFS = [  # (url, function, menu title, icon)
     ("funnel", page_funnel, "Momentum Funnel", ":material/filter_alt:"),
     ("agents", page_agents, "AI Desk", ":material/groups:"),
     ("intraday_desk", page_agents_intraday, "Global Intraday Desk", ":material/currency_bitcoin:"),
+    ("index_desk", page_index_desk, "Index Desk", ":material/query_stats:"),
     ("closing", page_closing, "Closing Picks", ":material/nightlight:"),
     ("auto", page_auto, "Auto Trader", ":material/robot_2:"),
     ("bot", page_bot, "Bots", ":material/smart_toy:"),
@@ -9833,7 +9958,7 @@ if _start not in {d[0] for d in PAGE_DEFS}:
     _start = "desk"
 P = {u: st.Page(f, title=t, icon=i, url_path=u, default=(u == _start)) for u, f, t, i in PAGE_DEFS}
 nav = st.navigation({  # institutional desk: the few screens that matter first, everything else under More
-    "Desk": [P["desk"], P["superbot"], P["research_bot"], P["intraday_desk"], P["flow"], P["options"], P["lab"], P["paper"]],
+    "Desk": [P["desk"], P["superbot"], P["research_bot"], P["index_desk"], P["intraday_desk"], P["flow"], P["options"], P["lab"], P["paper"]],
     "Markets": [P["view"], P["indices"], P["sectors"], P["fno"], P["oi"], P["chart"], P["global"], P["mcx"], P["cdsfut"]],
     "Old tools (untested)": [P["auto"], P["scanners"], P["funnel"], P["closing"], P["agents"], P["dashboard"], P["bot"], P["smart"], P["apex"],
              P["odds"], P["screener"], P["watchlist"]],
