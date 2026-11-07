@@ -1642,32 +1642,52 @@ def research_due(now: datetime) -> bool:
     return now.strftime("%H:%M") >= RESEARCH_AFTER and last != now.strftime("%Y-%m-%d")
 
 
+def _research_step(name: str, args: list, timeout: int, steps: list) -> int | None:
+    """One nightly step in its own process; a failure or time-out never stops the steps after it. The exit code,
+    minutes and the last lines of its output go to the step list (saved to Supabase bot_results 'research_log ...')."""
+    t0 = time.time()
+    code, tail = None, ""
+    try:
+        r = subprocess.run([sys.executable] + args, cwd=str(paths.HERE), timeout=timeout, capture_output=True, text=True)
+        code = r.returncode
+        out = (r.stdout or "") + (r.stderr or "")
+        sys.stdout.write(out[-20000:])
+        tail = out.strip()[-600:]
+    except subprocess.TimeoutExpired as e:
+        code, tail = "timeout", (str(e.stdout or "")[-400:] if e.stdout else f"no result after {timeout // 60} min")
+    except Exception as e:
+        code, tail = "error", str(e)[:400]
+    mins = round((time.time() - t0) / 60, 1)
+    log(f"{name}: finished (exit {code}, {mins} min)")
+    steps.append({"step": name, "exit": code, "minutes": mins, "tail": tail if code not in (0,) else ""})
+    try:
+        _cloud().upsert_rows("bot_results", [{"run_at": f"research_log {STEPS_DAY[0]}",
+                                              "result": {"steps": steps, "updated": datetime.now(IST).isoformat(timespec="seconds")}}], "run_at")
+    except Exception as e:
+        log(f"research log: {e}")
+    return code if isinstance(code, int) else None
+
+
+STEPS_DAY = [""]
+
+
 def run_research():
     REQUEST.unlink(missing_ok=True)
+    STEPS_DAY[0] = datetime.now(IST).strftime("%Y-%m-%d")
+    steps: list = []
     log("Setup Finder research: starting")
-    r = subprocess.run([sys.executable, str(paths.HERE / "bot.py")], cwd=str(paths.HERE), timeout=4 * 3600)
-    log(f"Setup Finder research: finished (exit {r.returncode})")
-    try:  # then the momentum study on the same cached year of candles
-        m = subprocess.run([sys.executable, str(paths.HERE / "momentum_study.py")], cwd=str(paths.HERE), timeout=3 * 3600)
-        log(f"momentum study: finished (exit {m.returncode})")
-        x = subprocess.run([sys.executable, str(paths.HERE / "index_funnel.py")], cwd=str(paths.HERE), timeout=3600)
-        log(f"index funnel backtest: finished (exit {x.returncode})")
-        nz = subprocess.run([sys.executable, str(paths.HERE / "noise_research.py")], cwd=str(paths.HERE), timeout=3600)
-        log(f"noise band research: finished (exit {nz.returncode})")
-        cs = subprocess.run([sys.executable, str(paths.HERE / "candle_study.py")], cwd=str(paths.HERE), timeout=3 * 3600)
-        log(f"candle study (6 months, 3 / 5 / 15 min): finished (exit {cs.returncode})")
-        rb = subprocess.run([sys.executable, str(paths.HERE / "research_bot_backtest.py")], cwd=str(paths.HERE), timeout=2 * 3600)
-        log(f"research bot back-test: finished (exit {rb.returncode})")
-        if datetime.now(IST).weekday() == 5:   # Saturdays: the Super Bot replayed on the server's 6 months
-            sb = subprocess.run([sys.executable, str(paths.HERE / "research" / "superbot_backtest.py"), "--server"],
-                                cwd=str(paths.HERE), timeout=3 * 3600)
-            log(f"super bot back-test: finished (exit {sb.returncode})")
-            nr = subprocess.run([sys.executable, str(paths.HERE / "research" / "superbot_newrules.py"), "--server"],
-                                cwd=str(paths.HERE), timeout=5 * 3600)
-            log(f"super bot new rules vs live (6 months): finished (exit {nr.returncode})")
-    except Exception as e:
-        log(f"momentum study: {e}")
-    if r.returncode != 0 and not (B.BOT_DIR / "latest.json").exists():
+    rc = _research_step("Setup Finder research (bot.py)", [str(paths.HERE / "bot.py")], 4 * 3600, steps)
+    if datetime.now(IST).weekday() == 5:   # Saturdays first: the Super Bot replayed on the server's 6 months
+        _research_step("super bot back-test (6 months, live rules)",
+                       [str(paths.HERE / "research" / "superbot_backtest.py"), "--server"], 3 * 3600, steps)
+        _research_step("super bot new rules vs live (6 months)",
+                       [str(paths.HERE / "research" / "superbot_newrules.py"), "--server"], 5 * 3600, steps)
+    _research_step("momentum study", [str(paths.HERE / "momentum_study.py")], 3 * 3600, steps)
+    _research_step("index funnel back-test", [str(paths.HERE / "index_funnel.py")], 3600, steps)
+    _research_step("noise band research", [str(paths.HERE / "noise_research.py")], 3600, steps)
+    _research_step("candle study (6 months, 3 / 5 / 15 min)", [str(paths.HERE / "candle_study.py")], 3 * 3600, steps)
+    _research_step("research bot back-test", [str(paths.HERE / "research_bot_backtest.py")], 2 * 3600, steps)
+    if rc != 0 and not (B.BOT_DIR / "latest.json").exists():
         B.BOT_DIR.mkdir(parents=True, exist_ok=True)
         (B.BOT_DIR / "latest.json").write_text(json.dumps({"run_at": datetime.now(IST).isoformat(timespec="seconds"),
                                                            "error": "research run failed"}))
