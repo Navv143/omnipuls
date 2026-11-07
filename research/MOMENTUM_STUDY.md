@@ -646,3 +646,13 @@ Entry at the candle's high / low (stop order), stop at its other side, target 2x
   upside ones.
 ADX inside the Super Bot (research/superbot_adx.py): 5-min ADX >= 20 PF 1.83 -> 1.90 (+0.01% a trade, noise); daily
 DI agreeing makes it worse (picks against the daily trend did better). Keep the Super Bot as is.
+
+## Small fixed-point momentum trades (research/scalp_points.py)
+Targets Nifty 25 / 30, Bank Nifty 50 / 70, BTC 400 / 500, gold $6 / 7; stops 0.6x or 1x the target; costs counted.
+Nifty / Bank Nifty 2-min (31 d) and 5-min (60 d); BTC / gold 5-min (3.5 y). Six triggers (opening range, previous
+15-min candle on the VWAP side, momentum burst, VWAP reclaim, first-hour break, EMA 9/21 pullback).
+- Nothing passes. Tight stops (0.6x) are worse everywhere. BTC: every setup -17 to -39 pts a trade; gold -$0.7 to -1.0;
+  win rates 44-46% at 1:1 even before costs.
+- Nifty opening-range 30 / 30: +7.3 pts on 2-min (31 d) but -2.7 on 5-min (60 d): not robust.
+- Bank Nifty first-hour break 70 / 70: +8 pts (2-min), +2.8 pts (5-min), +4.0 pts on a 3-min replay - the only one
+  positive everywhere, small -> paper test 'First-hour break pts' (Nifty 30 / 30 recorded for comparison: -6.4 pts).

@@ -183,7 +183,7 @@ def simulate(d, sigs, target, stop, cost, india, limit_min, tf):
             j += 1
         if x is None:
             x, j = c[-1], len(d) - 1
-        c_pts = cost if cost >= 1 else e * cost / 100
+        c_pts = cost[1] if isinstance(cost, tuple) else (cost if cost >= 1 else e * cost / 100)
         out.append((idx[i], s * (x - e) - c_pts))
         busy = j
         per_day[day[i]] = per_day.get(day[i], 0) + 1
@@ -202,9 +202,11 @@ def main(argv):
           ("Nifty 5m (60 d)", prep(idx5["NIFTY"]), True, 5, (25, 30), 3.0),
           ("Bank Nifty 5m (60 d)", prep(idx5["BANKNIFTY"]), True, 5, (50, 70), 6.0),
           ("BTC 5m (3.5 y)", btc, False, 5, (400, 500), 0.05),
-          ("Gold 5m (3.5 y)", gold, False, 5, (6, 7), 0.5)]
+          ("Gold 5m (3.5 y)", gold, False, 5, (6, 7), ("pts", 0.5))]
     names = {"A": "opening-range break", "B": "prev 15-min candle break, VWAP side", "C": "momentum burst candle",
              "D": "VWAP reclaim / loss, strong body", "E": "first-hour high / low break", "F": "EMA 9/21 pullback break"}
+    if "--only" in argv:
+        mk = [m for m in mk if argv[argv.index("--only") + 1].lower() in m[0].lower()]
     rows = []
     for name, d, india, tf, targets, cost in mk:
         if india:
