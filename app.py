@@ -7635,6 +7635,9 @@ def page_agents_intraday():
     st.header("Global Intraday Desk")
     for _c in (MX.CSS, MX.DESK_CSS, MX.FUNNEL_CSS):
         st.markdown(_c, unsafe_allow_html=True)
+    st.warning("Back-tested on 7 Nov 2026: these rules LOST on past data (60 days, 13 markets: 262 trades, 35% wins, "
+               "profit factor 0.70; BTC + gold 2023-2026: 1,682 trades, profit factor 0.87). Paper tracking only, not "
+               "trade signals.", icon=":material/warning:")
     s = _intra_state()
     if not s:
         return
@@ -7748,7 +7751,10 @@ def page_index_desk():
     for _c in (MX.CSS, MX.DESK_CSS):
         st.markdown(_c, unsafe_allow_html=True)
     st.caption("Seven bots, layer by layer, on Nifty 50, Bank Nifty, Fin Nifty, Sensex and Midcap Select, every closed "
-               "3-minute candle on the server. Paper trades only, not back-tested rules.")
+               "3-minute candle on the server. Paper trades only.")
+    st.warning("Back-tested on 7 Nov 2026 (60 days, 5 indices, 5-min candles, no OI history): 235 trades, 50% wins, "
+               "profit factor 0.96, about break-even after costs. No proven edge yet: paper tracking only.",
+               icon=":material/warning:")
     try:
         s = json.loads((PATHS.DATA / "bots" / "index_desk.json").read_text())
     except Exception:
